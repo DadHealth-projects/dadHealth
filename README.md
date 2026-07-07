@@ -1,44 +1,99 @@
 # Dad Health
 
-Built for dads, by dads. Kill the old version of you. Be the stronger dad — mentally, physically and as a parent.
+Dad Health is a web application designed to help dads improve their physical health, mental wellbeing, and family life. It brings together fitness, mindfulness, parenting tools, and a supportive community in one place.
 
-## About
+## Tech Stack
 
-Dad Health helps dads take control of their fitness, mental health and family bonds. The platform covers:
+* Next.js 14
+* React 18
+* TypeScript
+* Tailwind CSS
+* Supabase
+* Stripe
+* OneSignal
+* PostHog
+* Vercel
 
-- **Fitness** — Workouts, meal planner, progress tracking
-- **Mind** — Mental health check-ins, breathing exercises, journal, therapist directory
-- **Bond** — Present Dad Mode, dad dates, milestones, conversation starters
-- **Community** — Dad feed, circles, expert Q&A
-- **Progress** — Dad Health Score, report cards, badges, sleep tracker
-- **Pricing** — Free tier + Pro subscription
+## Getting Started
 
-## Tech stack
+Clone the project:
 
-- Next.js (App Router)
-- React
-- Tailwind CSS
-- shadcn/ui components
+```bash
+git clone https://github.com/khushi0433/dadHealth
+cd dadhealth
+```
 
-## Getting started
+Install dependencies:
 
 ```bash
 npm install
+```
+
+Create your environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+Start the development server:
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:8080](http://localhost:8080).
+The app will be available at:
 
-## Scripts
+```
+http://localhost:3000
+```
 
-- `npm run dev` — Start Next.js dev server (port 8080)
-- `npm run build` — Production build
-- `npm run start` — Start production server
-- `npm run dev:vite` — Legacy Vite dev server
-- `npm run build:vite` — Legacy Vite build
-- `npm run lint` — Run ESLint
-- `npm run test` — Run Vitest
+## Environment Variables
 
-## Contact
+Add the required environment variables to `.env.local`:
 
-hello@dadhealth.co.uk
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
+NEXT_PUBLIC_ONESIGNAL_APP_ID=
+NEXT_PUBLIC_POSTHOG_KEY=
+NEXT_PUBLIC_POSTHOG_HOST=
+
+STRIPE_SECRET_KEY=
+RESEND_API_KEY=
+NEXTAUTH_SECRET=
+NEXTAUTH_URL=
+```
+
+## Project Structure
+
+```
+app/
+components/
+lib/
+public/
+styles/
+```
+
+## Useful Commands
+
+```bash
+npm run dev      # Development
+npm run build    # Production build
+npm run start    # Start production
+npm run lint     # Lint project
+```
+
+## Deployment
+
+The project is deployed on Vercel.
+
+Any changes pushed to the `main` branch will automatically trigger a new deployment.
+
+## Support
+
+If you're taking over this project, refer to the handover document for deployment details, third-party services, and account access.
+
+---
+
+Developed by **Khushbu Baloch** for **Dad Health**.
