@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,21 +20,37 @@ interface AuthModalProps {
   onSuccess?: () => void;
 }
 
+type AuthMode = "login" | "signup" | "forgot";
+
 const OAUTH_PROVIDERS: { provider: Provider; label: string }[] = [
   { provider: "google", label: "Continue with Google" },
   { provider: "apple", label: "Continue with Apple" },
 ];
 
 export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const reset = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
     setEmail("");
     setPassword("");
     setError(null);
@@ -72,6 +88,11 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
     }
   };
 
+  const getRedirectUrl = (path: string) => {
+    if (typeof window === "undefined") return undefined;
+    return `${window.location.origin}${path.startsWith("/") ? path : `/${path}`}`;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -90,7 +111,17 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
           method: "password",
         });
         setMessage("Check your email to confirm your account.");
-        setTimeout(handleClose, 2000);
+        closeTimerRef.current = window.setTimeout(() => {
+          handleClose();
+        }, 2000);
+      } else if (mode === "forgot") {
+        const redirectTo = getRedirectUrl("/auth/reset-password");
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo,
+        });
+        if (resetError) throw resetError;
+        setMessage("Check your inbox for a password reset link.");
+        setPassword("");
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -112,10 +143,14 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-heading text-xl font-extrabold uppercase tracking-wide">
-            {mode === "login" ? "SIGN IN" : "CREATE ACCOUNT"}
+            {mode === "login" ? "SIGN IN" : mode === "forgot" ? "RESET PASSWORD" : "CREATE ACCOUNT"}
           </DialogTitle>
           <DialogDescription className="sr-only">
-            {mode === "login" ? "Sign in with email or a provider." : "Create an account with email or a provider."}
+            {mode === "login"
+              ? "Sign in with email or a provider."
+              : mode === "forgot"
+                ? "Send a password reset email."
+                : "Create an account with email or a provider."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 mt-4">
@@ -181,36 +216,65 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
               className="font-heading"
             />
           </div>
-          <div>
-            <label className="text-xs font-heading font-bold tracking-wider uppercase text-muted-foreground block mb-1.5">
-              Password
-            </label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              minLength={6}
-              className="font-heading"
-            />
-          </div>
+          {mode !== "forgot" && (
+            <div>
+              <label className="text-xs font-heading font-bold tracking-wider uppercase text-muted-foreground block mb-1.5">
+                Password
+              </label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                minLength={6}
+                className="font-heading"
+              />
+            </div>
+          )}
           {error && <p className="text-xs text-destructive">{error}</p>}
           {message && <p className="text-xs text-primary">{message}</p>}
           <LimeButton type="submit" full disabled={loading}>
-            {loading ? "..." : mode === "login" ? "SIGN IN" : "SIGN UP"}
+            {loading ? "..." : mode === "login" ? "SIGN IN" : mode === "forgot" ? "SEND RESET LINK" : "SIGN UP"}
           </LimeButton>
-          <button
-            type="button"
-            onClick={() => {
-              setMode(mode === "login" ? "signup" : "login");
-              setError(null);
-              setMessage(null);
-            }}
-            className="w-full text-center font-heading text-[11px] font-bold tracking-wider uppercase text-muted-foreground hover:text-primary transition-colors"
-          >
-            {mode === "login" ? "Need an account? Create one" : "Already have an account? Sign in"}
-          </button>
+          {mode === "forgot" ? (
+            <button
+              type="button"
+              onClick={() => {
+                setMode("login");
+                setError(null);
+                setMessage(null);
+              }}
+              className="w-full text-center font-heading text-[11px] font-bold tracking-wider uppercase text-muted-foreground hover:text-primary transition-colors"
+            >
+              Back to sign in
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("forgot");
+                  setError(null);
+                  setMessage(null);
+                }}
+                className="w-full text-center font-heading text-[11px] font-bold tracking-wider uppercase text-muted-foreground hover:text-primary transition-colors"
+              >
+                Forgot password?
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(mode === "login" ? "signup" : "login");
+                  setError(null);
+                  setMessage(null);
+                }}
+                className="w-full text-center font-heading text-[11px] font-bold tracking-wider uppercase text-muted-foreground hover:text-primary transition-colors"
+              >
+                {mode === "login" ? "Need an account? Create one" : "Already have an account? Sign in"}
+              </button>
+            </>
+          )}
         </form>
       </DialogContent>
     </Dialog>
