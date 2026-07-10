@@ -115,7 +115,7 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
           handleClose();
         }, 2000);
       } else if (mode === "forgot") {
-        const redirectTo = getRedirectUrl("/auth/reset-password");
+        const redirectTo = getRedirectUrl("/auth/callback?next=/auth/reset-password");
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo,
         });

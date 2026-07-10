@@ -52,11 +52,12 @@ export default function ResetPasswordPage() {
         }
 
         if (!session) {
-          setError("The reset link is invalid or has expired. Please request a new one.");
+          setError("This password reset link could not be completed. Please request a new password reset email.");
         }
       } catch (err) {
         if (!isMounted) return;
-        setError(err instanceof Error ? err.message : "Unable to initialize the reset session.");
+        console.error("Password reset init failed", err);
+        setError("This password reset link could not be completed. Please request a new password reset email.");
       }
     };
 
@@ -78,6 +79,16 @@ export default function ResetPasswordPage() {
     setLoading(true);
 
     try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
+      if (!session) {
+        throw new Error("Your reset session is no longer available. Please request a new password reset email.");
+      }
+
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 

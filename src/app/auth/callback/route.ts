@@ -8,9 +8,9 @@ export async function GET(request: Request) {
   
   const url = new URL(request.url);
   const origin =
-  process.env.NODE_ENV === "development"
-    ? `${url.protocol}//${url.host}`
-    : process.env.NEXTAUTH_URL!;
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXTAUTH_URL ||
+    `${url.protocol}//${url.host}`;
 
   if (!code) {
     return NextResponse.redirect(`${origin}/?error=auth_callback_error`);
