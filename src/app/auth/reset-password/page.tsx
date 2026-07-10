@@ -12,30 +12,55 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const redirectTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    const checkSession = async () => {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
+    const initializeRecoverySession = async () => {
+      if (typeof window === "undefined") return;
 
-      if (!isMounted) return;
+      const searchParams = new URLSearchParams(window.location.search);
+      const code = searchParams.get("code");
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
 
-      if (error) {
-        setError(error.message);
-        return;
-      }
+      try {
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!isMounted) return;
+          if (error) throw error;
+        } else if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (!isMounted) return;
+          if (error) throw error;
+        }
 
-      if (!session) {
-        setError("The reset link is invalid or has expired. Please request a new one.");
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (!isMounted) return;
+
+        if (error) {
+          throw error;
+        }
+
+        if (!session) {
+          setError("The reset link is invalid or has expired. Please request a new one.");
+        }
+      } catch (err) {
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : "Unable to initialize the reset session.");
       }
     };
 
-    checkSession();
+    initializeRecoverySession();
 
     return () => {
       isMounted = false;
