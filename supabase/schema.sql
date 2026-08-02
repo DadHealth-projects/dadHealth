@@ -139,6 +139,10 @@ alter table user_profile add column if not exists subscription_status text;
 alter table user_profile add column if not exists parent_type text;
 alter table user_profile add column if not exists pronouns text;
 alter table user_profile add column if not exists custody_arrangement text;
+-- M2.1: new 4-option custody pattern (daily / split / weekends / varies) from the
+-- mobile onboarding flow. The web Phase 1 flow keeps using custody_arrangement;
+-- mobile writes BOTH (this column + a legacy-mapped value) so the two stay in sync.
+alter table user_profile add column if not exists custody_pattern text;
 
 -- arrays kept as jsonb (repo currently uses jsonb for goals/pillar_order)
 alter table user_profile add column if not exists kids_ages jsonb default '[]'::jsonb;
