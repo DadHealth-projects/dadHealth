@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 import { signInviteToken } from "@/lib/coParenting/inviteToken";
 import { sendEmail } from "@/lib/email/resend";
 import { getSiteUrl } from "@/lib/site-url";
@@ -8,7 +9,7 @@ export const runtime = "nodejs";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function inviteEmailHtml(inviteUrl: string): string {
+function inviteEmailHtml(inviteUrl: string, appInviteUrl: string): string {
   return `
     <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 480px; margin: 0 auto;">
       <h2 style="font-weight: 800;">You've been invited to share a parenting calendar</h2>
@@ -17,11 +18,14 @@ function inviteEmailHtml(inviteUrl: string): string {
         including custody dates, handover times and upcoming events. This is a read-only view.
       </p>
       <p style="margin: 28px 0;">
-        <a href="${inviteUrl}"
+        <a href="${appInviteUrl}"
            style="background: #b6e94f; color: #0a0a0a; font-weight: 700; text-decoration: none;
                   padding: 12px 22px; border-radius: 6px; display: inline-block;">
-          Accept invite
+          Open Dad Health app
         </a>
+      </p>
+      <p style="color: #666; font-size: 13px;">
+        App not installed? <a href="${inviteUrl}">Accept on the Dad Health website</a>.
       </p>
       <p style="color: #888; font-size: 13px;">This invite link expires in 7 days.</p>
     </div>
@@ -30,9 +34,10 @@ function inviteEmailHtml(inviteUrl: string): string {
 
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const admin = createAdminSupabaseClient();
+  const bearerToken = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const authResult = bearerToken ? await admin.auth.getUser(bearerToken) : await supabase.auth.getUser();
+  const user = authResult.data.user;
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -49,7 +54,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Ensure the dad has a schedule row (the container the co-parent links to).
-  const { data: existing, error: selectError } = await supabase
+  const dataClient = bearerToken ? admin : supabase;
+  const { data: existing, error: selectError } = await dataClient
     .from("co_parenting_schedules")
     .select("id")
     .eq("user_id", user.id)
@@ -61,7 +67,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!existing) {
-    const { error: insertError } = await supabase
+    const { error: insertError } = await dataClient
       .from("co_parenting_schedules")
       .insert({ user_id: user.id });
     if (insertError) {
@@ -71,12 +77,13 @@ export async function POST(req: NextRequest) {
 
   const token = signInviteToken({ dadUserId: user.id, email });
   const inviteUrl = `${getSiteUrl()}/bond?section=coparenting&token=${encodeURIComponent(token)}`;
+  const appInviteUrl = `dadhealth://shared-calendar?token=${encodeURIComponent(token)}`;
 
   try {
     await sendEmail({
       to: email,
       subject: "You've been invited to share a parenting calendar",
-      html: inviteEmailHtml(inviteUrl),
+      html: inviteEmailHtml(inviteUrl, appInviteUrl),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to send invite email";

@@ -8,10 +8,10 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   // 1. Use server client ONLY for auth
   const supabase = await createServerSupabaseClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const admin = createAdminSupabaseClient();
+  const bearerToken = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const authResult = bearerToken ? await admin.auth.getUser(bearerToken) : await supabase.auth.getUser();
+  const user = authResult.data.user;
 
   if (!user) {
     return NextResponse.json(
@@ -54,8 +54,6 @@ export async function POST(req: NextRequest) {
   }
 
   // 6. Use ADMIN client for cross-user writes (bypasses RLS)
-  const admin = createAdminSupabaseClient();
-
   // Link co-parent in schedule
   const { error: scheduleError } = await admin
     .from("co_parenting_schedules")
