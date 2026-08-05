@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
-import { isProSubscriptionStatus } from '@/lib/stripe/subscription'
+import { isProfilePro } from '@/lib/stripe/subscription'
 import { createServerSupabaseClient } from '@/utils/supabase/server'
 
 const CATEGORY_RULES: Array<{ category: string; keywords: string[] }> = [
@@ -576,24 +576,26 @@ export async function POST(req: Request) {
       )
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
-
+    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
     const authSupabase = await createServerSupabaseClient()
-    const {
-      data: { user },
-    } = await authSupabase.auth.getUser()
+    const bearerToken = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
+    const authResult = bearerToken
+      ? await supabase.auth.getUser(bearerToken)
+      : await authSupabase.auth.getUser()
+    const user = authResult.data.user
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: profile } = await authSupabase
+    const profileClient = bearerToken ? supabase : authSupabase
+    const { data: profile } = await profileClient
       .from('user_profile')
-      .select('subscription_status')
+      .select('is_pro, subscription_status')
       .eq('user_id', user.id)
       .maybeSingle()
 
-    if (!isProSubscriptionStatus((profile as { subscription_status?: string | null } | null)?.subscription_status)) {
+    if (!isProfilePro(profile as { is_pro?: boolean | string | number | null; subscription_status?: string | null } | null)) {
       return NextResponse.json({ error: 'Meal planner is a Pro feature' }, { status: 403 })
     }
 
