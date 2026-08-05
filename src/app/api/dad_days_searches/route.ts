@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import { isProSubscriptionStatus } from '@/lib/stripe/subscription'
+import { createServerSupabaseClient } from '@/utils/supabase/server'
 
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -29,7 +30,7 @@ type Body = {
   budget: Budget
   radius?: number
   childAge: ChildAge
-  userId: string
+  userId?: string
 }
 
 type DadDayResult = {
@@ -230,13 +231,25 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as Partial<Body>
     requestBody = body
 
-    const userId = body.userId
     const budget = body.budget as Budget | undefined
     const childAge = body.childAge as ChildAge | undefined
 
-    if (!userId || !budget || !childAge) {
+    if (!budget || !childAge) {
       return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
     }
+
+    const bearerToken = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
+    const authSupabase = await createServerSupabaseClient()
+    const authResult = bearerToken
+      ? await supabaseAdmin.auth.getUser(bearerToken)
+      : await authSupabase.auth.getUser()
+    const user = authResult.data.user
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const userId = user.id
 
     const radius = coerceNumber(body.radius, 20)
 
