@@ -549,6 +549,7 @@ const buildFallbackMealPlan = (calorieTarget: number, adults: number, dietaryPre
 export const maxDuration = 60
 
 export async function POST(req: Request) {
+  const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID()
   let requestBody: {
     calorieTarget?: number
     preferences?: string
@@ -576,19 +577,19 @@ export async function POST(req: Request) {
       )
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+    const nativeSupabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
     const authSupabase = await createServerSupabaseClient()
     const bearerToken = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
     const authResult = bearerToken
-      ? await supabase.auth.getUser(bearerToken)
+      ? await nativeSupabase.auth.getUser(bearerToken)
       : await authSupabase.auth.getUser()
     const user = authResult.data.user
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized', requestId }, { status: 401 })
     }
 
-    const profileClient = bearerToken ? supabase : authSupabase
+    const profileClient = bearerToken ? nativeSupabase : authSupabase
     const { data: profile } = await profileClient
       .from('user_profile')
       .select('is_pro, subscription_status')
@@ -706,7 +707,7 @@ Return ONLY JSON in this format:
 
     const groceryList = groupIngredients(ingredients)
 
-    const { data, error } = await supabase
+    const { data, error } = await nativeSupabase
       .from('meal_plans')
       .insert({
         user_id: user.id,
