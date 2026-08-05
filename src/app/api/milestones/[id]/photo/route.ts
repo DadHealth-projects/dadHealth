@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
-import { isProSubscriptionStatus } from "@/lib/stripe/subscription";
+import { isProfilePro } from "@/lib/stripe/subscription";
 import {
   MILESTONE_PHOTO_BUCKET,
   MILESTONE_PHOTO_MAX_EDGE,
@@ -13,21 +13,25 @@ export const runtime = "nodejs";
 
 type Params = { id: string };
 
-async function requireProUser() {
+async function requireProUser(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const admin = createAdminSupabaseClient();
+  const bearerToken = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const authResult = bearerToken
+    ? await admin.auth.getUser(bearerToken)
+    : await supabase.auth.getUser();
+  const user = authResult.data.user;
 
   if (!user) return { error: "Not authenticated", status: 401 as const };
 
-  const { data: profile } = await supabase
+  const profileClient = bearerToken ? admin : supabase;
+  const { data: profile } = await profileClient
     .from("user_profile")
-    .select("subscription_status")
+    .select("is_pro,subscription_status")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!isProSubscriptionStatus(profile?.subscription_status)) {
+  if (!isProfilePro(profile)) {
     return { error: "Milestone photos are a Pro feature", status: 403 as const };
   }
 
@@ -50,7 +54,7 @@ export async function POST(
   req: NextRequest,
   context: { params: Promise<Params> }
 ) {
-  const auth = await requireProUser();
+  const auth = await requireProUser(req);
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const { id } = await context.params;
@@ -111,10 +115,10 @@ export async function POST(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<Params> }
 ) {
-  const auth = await requireProUser();
+  const auth = await requireProUser(req);
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const { id } = await context.params;
