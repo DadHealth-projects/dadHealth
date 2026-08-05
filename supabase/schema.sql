@@ -265,6 +265,8 @@ create table if not exists journal_entries (
   created_at timestamptz default now()
 );
 
+alter table journal_entries add column if not exists prompt text;
+
 -- therapists
 create table if not exists therapists (
   id uuid primary key default gen_random_uuid(),
