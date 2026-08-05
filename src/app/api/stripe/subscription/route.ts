@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { getStripe } from "@/lib/stripe/server";
-import { isProSubscriptionStatus } from "@/lib/stripe/subscription";
+import { isProfilePro, isProSubscriptionStatus } from "@/lib/stripe/subscription";
 import { syncUserProfile } from "@/lib/stripe/sync-user-profile";
 
 /** Only treat a Stripe subscription as this user's Pro access if metadata matches or the profile row already references this sub (webhook-linked). */
@@ -45,11 +45,12 @@ export async function GET() {
 
   const { data: profile } = await supabase
     .from("user_profile")
-    .select("subscription_status, stripe_subscription_id, stripe_customer_id")
+    .select("is_pro, subscription_status, stripe_subscription_id, stripe_customer_id")
     .eq("user_id", user.id)
     .maybeSingle();
 
   const p = profile as {
+    is_pro?: boolean | string | number | null;
     subscription_status?: string | null;
     stripe_subscription_id?: string | null;
     stripe_customer_id?: string | null;
@@ -57,11 +58,21 @@ export async function GET() {
 
   let status = p?.subscription_status ?? null;
 
+  // `is_pro` is the explicit admin/manual entitlement and must not require a
+  // matching Stripe subscription.
+  if (p?.is_pro === true || p?.is_pro === "true" || p?.is_pro === 1 || p?.is_pro === "1") {
+    return NextResponse.json({
+      isPro: true,
+      isSubscribed: isProSubscriptionStatus(status),
+      status,
+    });
+  }
+
   // Without Stripe, do not trust DB subscription_status alone (local dev often has stale "active" rows).
   // Set TRUST_CACHED_SUBSCRIPTION_STATUS=true only if you intentionally test Pro UI without Stripe.
   if (!process.env.STRIPE_SECRET_KEY) {
     const trustDb = process.env.TRUST_CACHED_SUBSCRIPTION_STATUS === "true";
-    const active = trustDb && isProSubscriptionStatus(status);
+    const active = trustDb && isProfilePro(p);
     return NextResponse.json({
       isPro: active,
       isSubscribed: active,

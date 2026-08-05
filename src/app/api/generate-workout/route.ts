@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
-import { isProSubscriptionStatus } from "@/lib/stripe/subscription";
+import { isProfilePro } from "@/lib/stripe/subscription";
 import type { WorkoutEquipment, WorkoutExercise, WorkoutFocus } from "@/types/database";
 
 const VALID_DURATIONS = new Set([10, 20, 30, 45]);
@@ -110,11 +110,14 @@ export async function POST(req: Request) {
     const profileClient = bearerToken && nativeSupabase ? nativeSupabase : authSupabase;
     const { data: profile } = await profileClient
       .from("user_profile")
-      .select("subscription_status")
+      .select("is_pro, subscription_status")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (!isProSubscriptionStatus((profile as { subscription_status?: string | null } | null)?.subscription_status)) {
+    if (!isProfilePro(profile as {
+      is_pro?: boolean | string | number | null;
+      subscription_status?: string | null;
+    } | null)) {
       return NextResponse.json({ error: "Workout generator is a Pro feature" }, { status: 403 });
     }
 
