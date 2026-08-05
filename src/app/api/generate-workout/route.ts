@@ -9,32 +9,6 @@ const VALID_DURATIONS = new Set([10, 20, 30, 45]);
 const VALID_EQUIPMENT: WorkoutEquipment[] = ["none", "dumbbells", "full_gym"];
 const VALID_FOCUS: WorkoutFocus[] = ["full_body", "upper", "lower", "core"];
 
-function inspectBearerToken(token: string | undefined) {
-  if (!token) return { present: false };
-  try {
-    const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as {
-      exp?: number;
-      iss?: string;
-    };
-    const expiresAt = typeof payload.exp === "number" ? payload.exp : null;
-    return {
-      present: true,
-      segments: token.split(".").length,
-      length: token.length,
-      expiresAt,
-      expired: expiresAt != null ? expiresAt <= Math.floor(Date.now() / 1000) : null,
-      issuer: payload.iss ?? null,
-    };
-  } catch {
-    return {
-      present: true,
-      segments: token.split(".").length,
-      length: token.length,
-      malformedPayload: true,
-    };
-  }
-}
-
 function parseJson(text: string) {
   const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
   return JSON.parse(cleaned);
@@ -107,15 +81,6 @@ export async function POST(req: Request) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const bearerToken = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-    const tokenDiagnostics = inspectBearerToken(bearerToken);
-    console.info("[generate-workout] request started", {
-      requestId,
-      hasBearerToken: Boolean(bearerToken),
-      durationMins: body.durationMins,
-      equipment: body.equipment,
-      focus: body.focus,
-      tokenDiagnostics,
-    });
     const authSupabase = await createServerSupabaseClient();
     const nativeSupabase = supabaseUrl && serviceRoleKey
       ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
@@ -125,31 +90,8 @@ export async function POST(req: Request) {
       : await authSupabase.auth.getUser();
     const user = authResult.data.user;
     if (!user) {
-      console.warn("[generate-workout] authorization rejected", {
-        requestId,
-        hasBearerToken: Boolean(bearerToken),
-        nativeVerifierAvailable: Boolean(nativeSupabase),
-        supabaseHost: supabaseUrl ? new URL(supabaseUrl).host : null,
-        tokenDiagnostics,
-        errorCode: authResult.error?.code,
-        errorStatus: authResult.error?.status,
-        errorMessage: authResult.error?.message,
-      });
-      return NextResponse.json({
-        error: "Unauthorized",
-        requestId,
-        auth: {
-          method: bearerToken ? "bearer" : "cookie",
-          verifierAvailable: Boolean(nativeSupabase),
-          tokenExpired: "expired" in tokenDiagnostics ? tokenDiagnostics.expired : null,
-          tokenIssuer: "issuer" in tokenDiagnostics ? tokenDiagnostics.issuer : null,
-          code: authResult.error?.code ?? null,
-          status: authResult.error?.status ?? null,
-          message: authResult.error?.message ?? null,
-        },
-      }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized", requestId }, { status: 401 });
     }
-    console.info("[generate-workout] user verified", { requestId, userId: user.id });
 
     const profileClient = bearerToken && nativeSupabase ? nativeSupabase : authSupabase;
     const { data: profile } = await profileClient
