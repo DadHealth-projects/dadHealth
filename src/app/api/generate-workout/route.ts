@@ -60,6 +60,7 @@ function toTitle(focus: WorkoutFocus, durationMins: number, equipment: WorkoutEq
 }
 
 export async function POST(req: Request) {
+  const requestId = req.headers.get("x-request-id") ?? crypto.randomUUID();
   try {
     const body = (await req.json()) as {
       durationMins?: number;
@@ -77,13 +78,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid focus" }, { status: 400 });
     }
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const bearerToken = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+    console.info("[generate-workout] request started", {
+      requestId,
+      hasBearerToken: Boolean(bearerToken),
+      durationMins: body.durationMins,
+      equipment: body.equipment,
+      focus: body.focus,
+    });
     const authSupabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await authSupabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const nativeSupabase = supabaseUrl && serviceRoleKey
+      ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+      : null;
+    const authResult = bearerToken && nativeSupabase
+      ? await nativeSupabase.auth.getUser(bearerToken)
+      : await authSupabase.auth.getUser();
+    const user = authResult.data.user;
+    if (!user) {
+      console.warn("[generate-workout] authorization rejected", {
+        requestId,
+        hasBearerToken: Boolean(bearerToken),
+        nativeVerifierAvailable: Boolean(nativeSupabase),
+        error: authResult.error?.message,
+      });
+      return NextResponse.json({ error: "Unauthorized", requestId }, { status: 401 });
+    }
+    console.info("[generate-workout] user verified", { requestId, userId: user.id });
 
-    const { data: profile } = await authSupabase
+    const profileClient = bearerToken && nativeSupabase ? nativeSupabase : authSupabase;
+    const { data: profile } = await profileClient
       .from("user_profile")
       .select("subscription_status")
       .eq("user_id", user.id)
@@ -94,8 +119,6 @@ export async function POST(req: Request) {
     }
 
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!anthropicKey || !supabaseUrl || !serviceRoleKey) {
       return NextResponse.json({ error: "Server configuration is incomplete" }, { status: 503 });
     }
@@ -154,9 +177,15 @@ Rules:
       .single();
 
     if (error) throw error;
+    console.info("[generate-workout] workout saved", {
+      requestId,
+      userId: user.id,
+      workoutId: data.id,
+      exerciseCount: exercises.length,
+    });
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[generate-workout]", error);
+    console.error("[generate-workout] request failed", { requestId, error });
     return NextResponse.json({ error: "Could not generate workout right now." }, { status: 500 });
   }
 }
