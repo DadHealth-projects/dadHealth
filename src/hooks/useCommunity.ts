@@ -154,6 +154,17 @@ export function useCommunity(userId?: string) {
     enabled: !!userId,
   });
 
+  const anonymousOwnersQuery = useQuery({
+    queryKey: ["anonymous_post_owners", userId],
+    queryFn: async () => {
+      if (!userId) return new Set<string>();
+      const { data, error } = await supabase.from("anonymous_post_owners").select("post_id").eq("user_id", userId);
+      if (error) return new Set<string>();
+      return new Set((data ?? []).map((row: { post_id: unknown }) => String(row.post_id)));
+    },
+    enabled: !!userId,
+  });
+
   const circlesQuery = useQuery({
     queryKey: ["circles"],
     queryFn: async () => {
@@ -263,6 +274,7 @@ export function useCommunity(userId?: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: communityQueryKey(userId) });
       queryClient.invalidateQueries({ queryKey: ["community_stats"] });
+      queryClient.invalidateQueries({ queryKey: ["anonymous_post_owners", userId] });
     },
   });
 
@@ -347,8 +359,8 @@ export function useCommunity(userId?: string) {
   const deletePost = useMutation({
     mutationFn: async (postId: string) => {
       if (!userId) throw new Error("Not authenticated");
-      const { error } = await supabase.from("posts").delete().eq("id", postId).eq("user_id", userId);
-      if (error) throw error;
+      const { data, error } = await supabase.rpc("delete_own_community_post", { p_post_id: postId });
+      if (error || data !== true) throw error ?? new Error("Post could not be deleted");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["community"] });
@@ -383,6 +395,7 @@ export function useCommunity(userId?: string) {
     trendingTags: communityStats?.trendingTags ?? [],
     userLikedIds: userLikesQuery.data ?? new Set<string>(),
     userSavedIds: userSavesQuery.data ?? new Set<string>(),
+    anonymousOwnedIds: anonymousOwnersQuery.data ?? new Set<string>(),
     circles: circlesQuery.data ?? [],
     liveSessions: liveSessionsQuery.data ?? [],
     userCircleIds: userCirclesQuery.data ?? [],

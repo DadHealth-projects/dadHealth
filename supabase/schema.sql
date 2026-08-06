@@ -114,6 +114,7 @@ create table if not exists user_profile (
   pillar_order jsonb default '[]',
   onboarding_complete boolean default false,
   display_name text,
+  avatar_url text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -125,6 +126,7 @@ update user_profile set client_id = '00000000-0000-0000-0000-000000000001'::uuid
 -- For existing DBs: add timezone if missing
 alter table user_profile add column if not exists timezone text default 'UTC';
 alter table user_profile add column if not exists push_notifications_enabled boolean not null default false;
+alter table user_profile add column if not exists avatar_url text;
 
 -- Stripe Billing (synced from webhooks)
 alter table user_profile add column if not exists stripe_customer_id text;
@@ -379,6 +381,48 @@ create table if not exists posts (
   created_at timestamptz default now()
 );
 
+create table if not exists anonymous_post_owners (
+  post_id uuid primary key references posts(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table anonymous_post_owners enable row level security;
+
+create policy "Users can read own anonymous post ownership"
+on anonymous_post_owners for select to authenticated
+using (auth.uid() = user_id);
+
+create or replace function public.capture_anonymous_post_owner()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.anonymous is true and new.user_id is null and auth.uid() is not null then
+    insert into public.anonymous_post_owners (post_id, user_id)
+    values (new.id, auth.uid()) on conflict (post_id) do nothing;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger capture_anonymous_post_owner_on_insert
+after insert on posts for each row execute function public.capture_anonymous_post_owner();
+
+create or replace function public.delete_own_community_post(p_post_id uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare deleted_count integer;
+begin
+  if auth.uid() is null then return false; end if;
+  delete from public.posts p where p.id = p_post_id and (
+    p.user_id = auth.uid() or exists (
+      select 1 from public.anonymous_post_owners apo
+      where apo.post_id = p.id and apo.user_id = auth.uid()
+    )
+  );
+  get diagnostics deleted_count = row_count;
+  return deleted_count > 0;
+end;
+$$;
+
 -- likes
 create table if not exists likes (
   id uuid primary key default gen_random_uuid(),
@@ -424,6 +468,49 @@ create table if not exists user_circles (
   joined_at timestamptz default now(),
   unique(user_id, circle_id)
 );
+
+create or replace function public.sync_circle_member_count()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.circles
+    set members_count = coalesce(members_count, 0) + 1
+    where id = new.circle_id;
+    return new;
+  end if;
+
+  if tg_op = 'DELETE' then
+    update public.circles
+    set members_count = greatest(coalesce(members_count, 0) - 1, 0)
+    where id = old.circle_id;
+    return old;
+  end if;
+
+  if old.circle_id is distinct from new.circle_id then
+    update public.circles
+    set members_count = greatest(coalesce(members_count, 0) - 1, 0)
+    where id = old.circle_id;
+
+    update public.circles
+    set members_count = coalesce(members_count, 0) + 1
+    where id = new.circle_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists sync_circle_member_count_on_membership on public.user_circles;
+
+create trigger sync_circle_member_count_on_membership
+after insert or delete or update of circle_id
+on public.user_circles
+for each row
+execute function public.sync_circle_member_count();
 
 -- badges
 create table if not exists badges (
