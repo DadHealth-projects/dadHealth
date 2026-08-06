@@ -31,6 +31,7 @@ const CommunityPage = () => {
     trendingTags,
     userLikedIds,
     userSavedIds,
+    anonymousOwnedIds,
     circles,
     liveSessions,
     userCircleIds,
@@ -200,6 +201,7 @@ const CommunityPage = () => {
               viewerProfile={profile ?? undefined}
               userLikedIds={userLikedIds}
               userSavedIds={userSavedIds}
+              anonymousOwnedIds={anonymousOwnedIds}
               toggleLike={toggleLike}
               toggleSave={toggleSave}
               deletePost={deletePost}

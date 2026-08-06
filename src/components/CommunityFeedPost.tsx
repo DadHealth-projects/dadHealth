@@ -92,6 +92,7 @@ interface CommunityFeedPostProps {
   user: User | null;
   userLikedIds: Set<string>;
   userSavedIds: Set<string>;
+  anonymousOwnedIds: Set<string>;
   toggleLike: ToggleLikeMutation;
   toggleSave: ToggleSaveMutation;
   deletePost: { mutate: (id: string) => void; isPending: boolean };
@@ -115,6 +116,7 @@ export default function CommunityFeedPost({
   user,
   userLikedIds,
   userSavedIds,
+  anonymousOwnedIds,
   toggleLike,
   toggleSave,
   deletePost,
@@ -154,7 +156,7 @@ export default function CommunityFeedPost({
   const ownerRaw = p.user_id ?? p.author_id;
   const authorUserId =
     ownerRaw != null && ownerRaw !== "" ? safeString(ownerRaw) : null;
-  const isOwner = !!(user?.id && authorUserId && sameUser(authorUserId, user.id));
+  const isOwner = !!(user?.id && ((authorUserId && sameUser(authorUserId, user.id)) || (postId && anonymousOwnedIds.has(postId))));
 
   const storedName = safeString(p.author_name ?? p.name, "").trim();
   const displayTitle = useMemo(() => {
