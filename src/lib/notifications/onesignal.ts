@@ -30,6 +30,7 @@ export async function sendOneSignalToExternalUserId(args: {
       data: {
         type: args.payload.type,
         link: args.payload.link,
+        ...args.payload.data,
       },
     }),
   });
