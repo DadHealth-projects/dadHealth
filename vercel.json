@@ -6,11 +6,5 @@
     "app/api/dad_days_searches/route.ts": {
       "maxDuration": 30
     }
-  },
-  "crons": [
-    {
-      "path": "/api/notifications/dispatch",
-      "schedule": "*/15 * * * *"
-    }
-  ]
+  }
 }

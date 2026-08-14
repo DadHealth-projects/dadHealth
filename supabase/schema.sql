@@ -1371,3 +1371,40 @@ select cron.schedule(
   '0 3 * * *',
   $$select public.invoke_wearable_sync();$$
 );
+
+-- Push notification dispatcher cron. Supabase Cron is used because Vercel
+-- Hobby only permits one cron invocation per day, while notifications need a
+-- 15-minute scheduling window. Set these DB settings in production:
+-- alter database postgres set app.settings.notification_dispatch_url =
+--   'https://www.dadhealth.co.uk/api/notifications/dispatch';
+-- alter database postgres set app.settings.cron_secret = 'same value as CRON_SECRET';
+create or replace function public.invoke_notification_dispatch()
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  dispatch_url text := nullif(current_setting('app.settings.notification_dispatch_url', true), '');
+  dispatch_secret text := nullif(current_setting('app.settings.cron_secret', true), '');
+begin
+  if dispatch_url is null or dispatch_secret is null then
+    raise notice 'Skipping notification dispatch: URL or cron secret is not configured';
+    return;
+  end if;
+
+  perform net.http_get(
+    url := dispatch_url,
+    headers := jsonb_build_object('authorization', 'Bearer ' || dispatch_secret),
+    timeout_milliseconds := 10000
+  );
+end;
+$$;
+
+select cron.unschedule('notification-dispatch-every-15-min')
+where exists (select 1 from cron.job where jobname = 'notification-dispatch-every-15-min');
+
+select cron.schedule(
+  'notification-dispatch-every-15-min',
+  '*/15 * * * *',
+  $$select public.invoke_notification_dispatch();$$
+);
