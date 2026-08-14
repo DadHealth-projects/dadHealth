@@ -39,7 +39,7 @@ export function buildPayload(args: {
     const score = typeof args.weeklyScore === "number" ? args.weeklyScore : null;
     return {
       type: t,
-      heading: "Weekly score",
+      heading: "Weekly report ready",
       content: `Your Dad Health Score this week: ${score == null ? "—" : score}`,
       link: "/progress",
     };
@@ -67,12 +67,16 @@ export function buildPayload(args: {
     const prompt = args.journalPrompt?.trim() || "Write one sentence about your day.";
     return { type: t, heading: "Journal prompt", content: prompt, link: "/mind" };
   }
-  // milestone_anniversary
-  return {
-    type: t,
-    heading: "Milestone",
-    content: `One year ago: ${args.milestoneText?.trim() || "a special moment"}`,
-    link: "/bond",
-  };
+  if (t === "milestone_anniversary") {
+    return {
+      type: t,
+      heading: "Milestone",
+      content: `One year ago: ${args.milestoneText?.trim() || "a special moment"}`,
+      link: "/bond",
+    };
+  }
+
+  // Event-driven types are built by their event handlers with entity identifiers.
+  throw new Error(`Notification type ${t} requires an event-specific payload`);
 }
 

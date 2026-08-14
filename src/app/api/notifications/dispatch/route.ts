@@ -13,11 +13,9 @@ type PrefRow = {
 };
 
 function requireCronSecret(request: Request) {
-  // Vercel Cron adds this header automatically (no secret support in config).
-  if (request.headers.get("x-vercel-cron") === "1") return true;
-
   const expected = process.env.CRON_SECRET?.trim();
   if (!expected) return false;
+  if (request.headers.get("authorization") === `Bearer ${expected}`) return true;
   const got = request.headers.get("x-cron-secret") || request.headers.get("cron_secret");
   if (got !== expected) return false;
   return true;
@@ -82,6 +80,80 @@ async function computeWeeklyScore(admin: ReturnType<typeof createAdminSupabaseCl
   return calcScore(moodAvg, sleepAvg, workoutCount, journalCount);
 }
 
+async function processPresentDadCompletions(admin: ReturnType<typeof createAdminSupabaseClient>, now: Date) {
+  const nowIso = now.toISOString();
+  const completionResult = await admin
+    .from("present_dad_sessions")
+    .update({ status: "completed", completed_at: nowIso })
+    .eq("status", "active")
+    .lte("ends_at", nowIso);
+  if (completionResult.error) throw completionResult.error;
+
+  const pendingResult = await admin
+    .from("present_dad_sessions")
+    .select("id,user_id")
+    .eq("status", "completed")
+    .is("notification_attempted_at", null)
+    .is("notification_sent_at", null)
+    .limit(100);
+  if (pendingResult.error) throw pendingResult.error;
+
+  let sent = 0;
+  let skipped = 0;
+  let errors = 0;
+  for (const session of pendingResult.data ?? []) {
+    const claimResult = await admin
+      .from("present_dad_sessions")
+      .update({ notification_attempted_at: nowIso })
+      .eq("id", session.id)
+      .is("notification_attempted_at", null)
+      .select("id")
+      .maybeSingle();
+    if (claimResult.error) { errors++; continue; }
+    if (!claimResult.data) continue;
+
+    try {
+      const [profileResult, preferenceResult] = await Promise.all([
+        admin.from("user_profile").select("push_notifications_enabled,timezone").eq("user_id", session.user_id).maybeSingle(),
+        admin.from("notification_preferences").select("enabled").eq("user_id", session.user_id).eq("notification_type", "present_dad_mode_complete").maybeSingle(),
+      ]);
+      if (profileResult.error) throw profileResult.error;
+      if (preferenceResult.error) throw preferenceResult.error;
+      if (profileResult.data?.push_notifications_enabled !== true || preferenceResult.data?.enabled !== true) {
+        skipped++;
+        continue;
+      }
+
+      const logResult = await admin.rpc("log_notification_if_allowed", {
+        p_user_id: session.user_id,
+        p_type: "present_dad_mode_complete",
+        p_timezone: profileResult.data.timezone?.trim() || "UTC",
+      });
+      if (logResult.error) throw logResult.error;
+      if (logResult.data !== true) { skipped++; continue; }
+
+      await sendOneSignalToExternalUserId({
+        externalUserId: session.user_id,
+        payload: {
+          type: "present_dad_mode_complete",
+          heading: "Present Dad Mode complete",
+          content: "You completed 60 minutes of focused time.",
+          link: "/bond",
+          data: { session_id: session.id },
+        },
+      });
+      const sentResult = await admin.from("present_dad_sessions").update({ notification_sent_at: new Date().toISOString() }).eq("id", session.id);
+      if (sentResult.error) throw sentResult.error;
+      sent++;
+    } catch (error) {
+      errors++;
+      console.error("[notifications/dispatch] Present Dad completion failed", { sessionId: session.id, error });
+      await admin.from("present_dad_sessions").update({ notification_attempted_at: null }).eq("id", session.id).is("notification_sent_at", null);
+    }
+  }
+  return { sent, skipped, errors };
+}
+
 export async function GET(request: Request) {
   if (!requireCronSecret(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -90,6 +162,7 @@ export async function GET(request: Request) {
   try {
     const admin = createAdminSupabaseClient();
     const now = new Date();
+    const presentDadResult = await processPresentDadCompletions(admin, now);
 
     const prefsRes = await admin
       .from("notification_preferences")
@@ -101,7 +174,7 @@ export async function GET(request: Request) {
 
     const userIds = Array.from(new Set(prefs.map((p) => p.user_id)));
     if (userIds.length === 0) {
-      return NextResponse.json({ ok: true, sent: 0, skipped: 0, errors: 0 });
+      return NextResponse.json({ ok: true, ...presentDadResult });
     }
 
     const profilesRes = await admin
@@ -123,9 +196,9 @@ export async function GET(request: Request) {
       ])
     );
 
-    let sent = 0;
-    let skipped = 0;
-    let errors = 0;
+    let sent = presentDadResult.sent;
+    let skipped = presentDadResult.skipped;
+    let errors = presentDadResult.errors;
 
     // Cache weekly challenge once per run (only used Mondays 8am local)
     let cachedChallenge: { title: string; description?: string | null } | null | undefined;
@@ -156,7 +229,7 @@ export async function GET(request: Request) {
         if (type === "morning_checkin") {
           due = isInWindow(localHHMM, "07:30");
         } else if (type === "weekly_score") {
-          due = localDow === 0 && isInWindow(localHHMM, "18:00");
+          due = localDow === 1 && isInWindow(localHHMM, "08:00");
         } else if (type === "weekly_challenge") {
           due = localDow === 1 && isInWindow(localHHMM, "08:00");
         } else if (type === "streak_at_risk") {
@@ -215,11 +288,10 @@ export async function GET(request: Request) {
           errors++;
           continue;
         }
-        // TEMP proof test: bypass daily cap / per-type suppression (revert before production traffic)
-        // if (logRes.data !== true) {
-        //   skipped++;
-        //   continue;
-        // }
+        if (logRes.data !== true) {
+          skipped++;
+          continue;
+        }
 
         // Dynamic payload pieces (fetched only when we know we're sending)
         let weeklyChallenge: { title: string; description?: string | null } | null = null;
@@ -239,7 +311,7 @@ export async function GET(request: Request) {
         }
 
         if (type === "weekly_score") {
-          weeklyScore = await computeWeeklyScore(admin, userId, localDate);
+          weeklyScore = await computeWeeklyScore(admin, userId, ymdAddDays(localDate, -1));
         }
 
         if (type === "streak_at_risk") {
