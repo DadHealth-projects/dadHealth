@@ -389,6 +389,7 @@ create table if not exists anonymous_post_owners (
 
 alter table anonymous_post_owners enable row level security;
 
+drop policy if exists "Users can read own anonymous post ownership" on anonymous_post_owners;
 create policy "Users can read own anonymous post ownership"
 on anonymous_post_owners for select to authenticated
 using (auth.uid() = user_id);
@@ -404,6 +405,7 @@ begin
 end;
 $$;
 
+drop trigger if exists capture_anonymous_post_owner_on_insert on posts;
 create trigger capture_anonymous_post_owner_on_insert
 after insert on posts for each row execute function public.capture_anonymous_post_owner();
 
@@ -542,6 +544,9 @@ create table if not exists earned_badges (
 -- - weekly_challenge
 -- - journal_prompt
 -- - milestone_anniversary
+-- - community_reply
+-- - co_parent_event_added
+-- - present_dad_mode_complete
 
 create table if not exists notification_preferences (
   user_id uuid references auth.users(id) on delete cascade not null,
@@ -559,7 +564,10 @@ create table if not exists notification_preferences (
     'streak_at_risk',
     'weekly_challenge',
     'journal_prompt',
-    'milestone_anniversary'
+    'milestone_anniversary',
+    'community_reply',
+    'co_parent_event_added',
+    'present_dad_mode_complete'
   ))
 );
 
@@ -577,9 +585,50 @@ create table if not exists notification_log (
     'streak_at_risk',
     'weekly_challenge',
     'journal_prompt',
-    'milestone_anniversary'
+    'milestone_anniversary',
+    'community_reply',
+    'co_parent_event_added',
+    'present_dad_mode_complete'
   ))
 );
+
+-- Existing environments need their original constraints replaced; CREATE TABLE IF
+-- NOT EXISTS does not update a check constraint on an already-created table.
+alter table notification_preferences drop constraint if exists notification_preferences_type_chk;
+alter table notification_preferences add constraint notification_preferences_type_chk check (notification_type in (
+  'morning_checkin', 'bedtime_story', 'workout_window', 'weekly_score',
+  'streak_at_risk', 'weekly_challenge', 'journal_prompt', 'milestone_anniversary',
+  'community_reply', 'co_parent_event_added', 'present_dad_mode_complete'
+));
+alter table notification_log drop constraint if exists notification_log_type_chk;
+alter table notification_log add constraint notification_log_type_chk check (type in (
+  'morning_checkin', 'bedtime_story', 'workout_window', 'weekly_score',
+  'streak_at_risk', 'weekly_challenge', 'journal_prompt', 'milestone_anniversary',
+  'community_reply', 'co_parent_event_added', 'present_dad_mode_complete'
+));
+
+create table if not exists present_dad_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  started_at timestamptz not null default now(),
+  ends_at timestamptz not null,
+  status text not null default 'active' check (status in ('active', 'cancelled', 'completed')),
+  completed_at timestamptz,
+  notification_attempted_at timestamptz,
+  notification_sent_at timestamptz
+);
+
+create unique index if not exists idx_present_dad_one_active_per_user
+on present_dad_sessions(user_id) where status = 'active';
+create index if not exists idx_present_dad_due
+on present_dad_sessions(status, ends_at);
+
+alter table present_dad_sessions enable row level security;
+drop policy if exists "Users can CRUD own present_dad_sessions" on present_dad_sessions;
+create policy "Users can CRUD own present_dad_sessions"
+on present_dad_sessions for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
 
 create index if not exists idx_notification_log_user_sent_at on notification_log(user_id, sent_at desc);
 create index if not exists idx_notification_log_user_type_sent_at on notification_log(user_id, type, sent_at desc);
@@ -828,6 +877,58 @@ create table if not exists co_parenting_events (
   notes text,
   created_at timestamptz default now()
 );
+
+-- Event-driven push bridge. Configure the deployed database with the full
+-- backend endpoint and the same secret as NOTIFICATION_WEBHOOK_SECRET:
+-- alter database postgres set app.settings.notification_webhook_url =
+--   'https://www.dadhealth.co.uk/api/notifications/events';
+-- alter database postgres set app.settings.notification_webhook_secret = '...';
+create or replace function public.invoke_notification_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  webhook_url text := nullif(current_setting('app.settings.notification_webhook_url', true), '');
+  webhook_secret text := nullif(current_setting('app.settings.notification_webhook_secret', true), '');
+  notification_type text;
+begin
+  if webhook_url is null or webhook_secret is null then
+    raise notice 'Skipping notification event: webhook settings are not configured';
+    return new;
+  end if;
+
+  notification_type := case tg_table_name
+    when 'comments' then 'community_reply'
+    when 'co_parenting_events' then 'co_parent_event_added'
+    else null
+  end;
+  if notification_type is null then return new; end if;
+
+  perform net.http_post(
+    url := webhook_url,
+    headers := jsonb_build_object(
+      'content-type', 'application/json',
+      'authorization', 'Bearer ' || webhook_secret
+    ),
+    body := jsonb_build_object(
+      'type', notification_type,
+      'record_id', new.id,
+      'actor_user_id', auth.uid()
+    )
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_community_reply_on_insert on comments;
+create trigger notify_community_reply_on_insert
+after insert on comments for each row execute function public.invoke_notification_event();
+
+drop trigger if exists notify_co_parent_event_on_insert on co_parenting_events;
+create trigger notify_co_parent_event_on_insert
+after insert on co_parenting_events for each row execute function public.invoke_notification_event();
 
 -- user_profile: link to an invited co-parent account (nullable FK to users.id).
 alter table user_profile add column if not exists co_parent_id uuid references auth.users(id) on delete set null;

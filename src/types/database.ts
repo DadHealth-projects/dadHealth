@@ -73,7 +73,10 @@ export type NotificationType =
   | "streak_at_risk"
   | "weekly_challenge"
   | "journal_prompt"
-  | "milestone_anniversary";
+  | "milestone_anniversary"
+  | "community_reply"
+  | "co_parent_event_added"
+  | "present_dad_mode_complete";
 
 export interface NotificationPreference {
   user_id: string;
