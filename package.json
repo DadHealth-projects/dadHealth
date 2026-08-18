@@ -8,7 +8,8 @@
     "dev:turbo": "next dev --turbopack -p 8080",
     "build": "next build",
     "start": "next start -p 8080",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "node --no-warnings --test tests/notifications.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
