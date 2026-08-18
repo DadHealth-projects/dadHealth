@@ -28,7 +28,7 @@ create table if not exists sleep_logs (
   date date not null,
   hours numeric not null,
   quality int check (quality between 1 and 5),
-  source text default 'manual' check (source in ('manual', 'garmin', 'fitbit')),
+  source text default 'manual',
   created_at timestamptz default now(),
   unique(user_id, date)
 );
@@ -132,6 +132,88 @@ alter table user_profile add column if not exists avatar_url text;
 alter table user_profile add column if not exists stripe_customer_id text;
 alter table user_profile add column if not exists stripe_subscription_id text;
 alter table user_profile add column if not exists subscription_status text;
+
+-- Biometric device credentials are independent of Supabase sessions so a
+-- genuine sign-out does not revoke an explicitly enrolled device. The raw
+-- credential never reaches this table: the server stores an HMAC digest only.
+create table if not exists biometric_device_credentials (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  credential_digest text not null unique,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz
+);
+
+create index if not exists idx_biometric_device_credentials_user
+on biometric_device_credentials(user_id);
+
+alter table biometric_device_credentials enable row level security;
+revoke all on table biometric_device_credentials from anon, authenticated;
+grant select, insert, update, delete on table biometric_device_credentials to service_role;
+
+-- Fixed-window rate-limit buckets. Both device identifiers and request IPs are
+-- HMACed by the server before they are stored here.
+create table if not exists biometric_auth_rate_limits (
+  bucket_hash text primary key,
+  window_started_at timestamptz not null default now(),
+  attempt_count int not null default 0 check (attempt_count >= 0),
+  updated_at timestamptz not null default now()
+);
+
+alter table biometric_auth_rate_limits enable row level security;
+revoke all on table biometric_auth_rate_limits from anon, authenticated;
+grant select, insert, update, delete on table biometric_auth_rate_limits to service_role;
+
+-- Atomically consumes one attempt from a fixed-window bucket. Only the service
+-- role used by the Dad Health backend may execute this function.
+create or replace function public.consume_biometric_auth_rate_limit(
+  p_bucket_hash text,
+  p_limit int,
+  p_window_seconds int
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  next_count int;
+begin
+  if p_bucket_hash is null or length(p_bucket_hash) = 0 then
+    raise exception 'Rate-limit bucket is required';
+  end if;
+  if p_limit < 1 or p_window_seconds < 1 then
+    raise exception 'Invalid rate-limit configuration';
+  end if;
+
+  insert into biometric_auth_rate_limits (
+    bucket_hash,
+    window_started_at,
+    attempt_count,
+    updated_at
+  )
+  values (p_bucket_hash, now(), 1, now())
+  on conflict (bucket_hash) do update
+  set
+    window_started_at = case
+      when biometric_auth_rate_limits.window_started_at <= now() - make_interval(secs => p_window_seconds)
+        then now()
+      else biometric_auth_rate_limits.window_started_at
+    end,
+    attempt_count = case
+      when biometric_auth_rate_limits.window_started_at <= now() - make_interval(secs => p_window_seconds)
+        then 1
+      else biometric_auth_rate_limits.attempt_count + 1
+    end,
+    updated_at = now()
+  returning attempt_count into next_count;
+
+  return next_count <= p_limit;
+end;
+$$;
+
+revoke all on function public.consume_biometric_auth_rate_limit(text, int, int) from public, anon, authenticated;
+grant execute on function public.consume_biometric_auth_rate_limit(text, int, int) to service_role;
 
 -- =========================
 -- ONBOARDING QUESTIONNAIRE FIELDS (Phase 1-3)
@@ -254,8 +336,7 @@ alter table body_metrics
 
 -- source of the metric (manual entry vs wearable sync)
 alter table body_metrics
-  add column if not exists source text not null default 'manual'
-  check (source in ('manual', 'garmin', 'fitbit'));
+  add column if not exists source text not null default 'manual';
 
 -- journal_entries
 create table if not exists journal_entries (
@@ -1278,12 +1359,10 @@ create table if not exists user_integrations (
 
   user_id uuid references auth.users(id) on delete cascade not null,
 
-  provider text not null check (
-    provider in ('garmin', 'fitbit')
-  ),
+  provider text not null,
 
-  access_token text not null,
-  refresh_token text not null,
+  access_token text,
+  refresh_token text,
 
   connected_at timestamptz default now(),
   last_sync_at timestamptz,
@@ -1307,6 +1386,13 @@ on user_integrations
 for insert
 with check (auth.uid() = user_id);
 
+drop policy if exists "Users can update own integrations" on user_integrations;
+create policy "Users can update own integrations"
+on user_integrations
+for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
 drop policy if exists "Users can delete own integrations" on user_integrations;
 create policy "Users can delete own integrations"
 on user_integrations
@@ -1316,14 +1402,129 @@ using (auth.uid() = user_id);
 -- body_metrics wearable source
 alter table body_metrics
 add column if not exists source text
-default 'manual'
-check (source in ('manual', 'garmin', 'fitbit'));
+default 'manual';
 
 -- sleep logs wearable source
 alter table sleep_logs
 add column if not exists source text
-default 'manual'
-check (source in ('manual', 'garmin', 'fitbit'));
+default 'manual';
+
+update body_metrics set source = 'manual' where source is null;
+update sleep_logs set source = 'manual' where source is null;
+alter table body_metrics alter column source set default 'manual', alter column source set not null;
+alter table sleep_logs alter column source set default 'manual', alter column source set not null;
+
+-- Normalize wearable constraints for existing databases as well as fresh installs.
+alter table body_metrics
+drop constraint if exists body_metrics_source_check;
+alter table body_metrics
+add constraint body_metrics_source_check
+check (source in ('manual', 'garmin', 'fitbit', 'apple_health'));
+
+alter table sleep_logs
+drop constraint if exists sleep_logs_source_check;
+alter table sleep_logs
+add constraint sleep_logs_source_check
+check (source in ('manual', 'garmin', 'fitbit', 'apple_health'));
+
+alter table user_integrations
+drop constraint if exists user_integrations_provider_check;
+alter table user_integrations
+add constraint user_integrations_provider_check
+check (provider in ('garmin', 'fitbit', 'apple_health'));
+
+alter table user_integrations
+alter column access_token drop not null,
+alter column refresh_token drop not null;
+
+alter table user_integrations
+drop constraint if exists user_integrations_tokens_check;
+alter table user_integrations
+add constraint user_integrations_tokens_check check (
+  (provider in ('garmin', 'fitbit') and access_token is not null and refresh_token is not null)
+  or
+  (provider = 'apple_health' and access_token is null and refresh_token is null)
+);
+
+-- Atomically import Apple Health daily aggregates without replacing a user's
+-- manual value for the same day. Other wearable rows keep the existing
+-- last-successful-sync behaviour.
+create or replace function public.upsert_apple_health_daily_data(
+  p_metrics jsonb default '[]'::jsonb,
+  p_sleep jsonb default '[]'::jsonb
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  current_user_id uuid := auth.uid();
+  metrics_written int := 0;
+  sleep_written int := 0;
+begin
+  if current_user_id is null then
+    raise exception 'Authentication required';
+  end if;
+
+  with written as (
+    insert into body_metrics (user_id, metric_type, value, recorded_at, source)
+    select
+      current_user_id,
+      metric.metric_type,
+      metric.value,
+      metric.recorded_at,
+      'apple_health'
+    from jsonb_to_recordset(coalesce(p_metrics, '[]'::jsonb))
+      as metric(metric_type text, value numeric, recorded_at timestamptz)
+    where metric.metric_type in ('steps', 'active_mins', 'resting_hr')
+      and metric.value >= 0
+      and not exists (
+        select 1
+        from body_metrics existing
+        where existing.user_id = current_user_id
+          and existing.metric_type = metric.metric_type
+          and existing.recorded_at::date = metric.recorded_at::date
+          and existing.source = 'manual'
+      )
+    on conflict (user_id, metric_type, recorded_at)
+    do update set
+      value = excluded.value,
+      source = excluded.source
+    where body_metrics.source <> 'manual'
+    returning 1
+  )
+  select count(*) into metrics_written from written;
+
+  with written as (
+    insert into sleep_logs (user_id, date, hours, source)
+    select
+      current_user_id,
+      sleep.date,
+      sleep.hours,
+      'apple_health'
+    from jsonb_to_recordset(coalesce(p_sleep, '[]'::jsonb))
+      as sleep(date date, hours numeric)
+    where sleep.hours > 0
+      and sleep.hours <= 24
+    on conflict (user_id, date)
+    do update set
+      hours = excluded.hours,
+      source = excluded.source
+    where sleep_logs.source <> 'manual'
+    returning 1
+  )
+  select count(*) into sleep_written from written;
+
+  return jsonb_build_object(
+    'metrics_written', metrics_written,
+    'sleep_written', sleep_written
+  );
+end;
+$$;
+
+revoke execute on function public.upsert_apple_health_daily_data(jsonb, jsonb) from public;
+grant execute on function public.upsert_apple_health_daily_data(jsonb, jsonb) to authenticated;
 
 -- resting heart rate metric index
 create index if not exists idx_body_metrics_user_metric_date

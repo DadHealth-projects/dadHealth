@@ -42,6 +42,14 @@ export interface UserProfile {
   updated_at?: string;
 }
 
+export interface BiometricDeviceCredential {
+  id: string;
+  user_id: string;
+  credential_digest: string;
+  created_at: string;
+  last_used_at?: string | null;
+}
+
 export type CoParentingEventType = "custody" | "handover" | "school";
 
 export interface CoParentingSchedule {
@@ -108,7 +116,7 @@ export interface SleepLog {
   user_id: string;
   date: string;
   hours: number;
-  source?: "manual" | "garmin" | "fitbit";
+  source?: "manual" | "garmin" | "fitbit" | "apple_health";
   created_at?: string;
 }
 
@@ -195,14 +203,14 @@ export interface BodyMetric {
   metric_type: string;
   value: number;
   recorded_at: string;
-  source?: "manual" | "garmin" | "fitbit";
+  source?: "manual" | "garmin" | "fitbit" | "apple_health";
   created_at?: string;
 }
 
 export interface UserIntegration {
   id: string;
   user_id: string;
-  provider: "garmin" | "fitbit";
+  provider: "garmin" | "fitbit" | "apple_health";
   device_name?: string | null;
   connected_at?: string | null;
   last_sync_at?: string | null;
