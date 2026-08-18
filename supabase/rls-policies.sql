@@ -230,11 +230,22 @@ create policy "Users can insert own dad day searches"
 on dad_day_searches for insert
 with check (auth.uid() = user_id);
 
--- user_integrations: users can view and delete own integrations
+-- user_integrations: users can manage their own connection metadata
 drop policy if exists "Users can view own integrations" on user_integrations;
 create policy "Users can view own integrations"
 on user_integrations for select
 using (auth.uid() = user_id);
+
+drop policy if exists "Users can insert own integrations" on user_integrations;
+create policy "Users can insert own integrations"
+on user_integrations for insert
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update own integrations" on user_integrations;
+create policy "Users can update own integrations"
+on user_integrations for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
 
 drop policy if exists "Users can delete own integrations" on user_integrations;
 create policy "Users can delete own integrations"

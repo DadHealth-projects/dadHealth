@@ -34,7 +34,8 @@ Deno.serve(async (req) => {
   const syncDate = getSyncDate(req);
   const { data: integrations, error } = await supabase
     .from("user_integrations")
-    .select("id,user_id,provider,access_token,refresh_token");
+    .select("id,user_id,provider,access_token,refresh_token")
+    .in("provider", ["garmin", "fitbit"]);
 
   if (error) {
     console.error("[wearable-sync] integration query failed", error);
