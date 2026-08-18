@@ -704,18 +704,122 @@ on present_dad_sessions(user_id) where status = 'active';
 create index if not exists idx_present_dad_due
 on present_dad_sessions(status, ends_at);
 
+create or replace function public.enforce_present_dad_session_timing()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    new.started_at := statement_timestamp();
+    new.ends_at := new.started_at + interval '60 minutes';
+    new.status := 'active';
+    new.completed_at := null;
+    new.notification_attempted_at := null;
+    new.notification_sent_at := null;
+    return new;
+  end if;
+
+  if new.user_id <> old.user_id
+    or new.started_at <> old.started_at
+    or new.ends_at <> old.ends_at then
+    raise exception 'Present Dad session identity and timing cannot be changed';
+  end if;
+
+  if new.status <> old.status then
+    if old.status <> 'active' or new.status not in ('cancelled', 'completed') then
+      raise exception 'Invalid Present Dad session status transition';
+    end if;
+
+    if new.status = 'completed' then
+      if statement_timestamp() < old.ends_at then
+        raise exception 'Present Dad session cannot complete before ends_at';
+      end if;
+      new.completed_at := statement_timestamp();
+    else
+      new.completed_at := null;
+      new.notification_attempted_at := null;
+      new.notification_sent_at := null;
+    end if;
+  elsif new.status = 'completed' then
+    new.completed_at := old.completed_at;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_present_dad_session_timing on present_dad_sessions;
+create trigger enforce_present_dad_session_timing
+before insert or update on present_dad_sessions
+for each row execute function public.enforce_present_dad_session_timing();
+
 alter table present_dad_sessions enable row level security;
 drop policy if exists "Users can CRUD own present_dad_sessions" on present_dad_sessions;
-create policy "Users can CRUD own present_dad_sessions"
-on present_dad_sessions for all
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+drop policy if exists "Users can read own present_dad_sessions" on present_dad_sessions;
+create policy "Users can read own present_dad_sessions"
+on present_dad_sessions for select
+using (auth.uid() = user_id);
+drop policy if exists "Users can start own present_dad_sessions" on present_dad_sessions;
+create policy "Users can start own present_dad_sessions"
+on present_dad_sessions for insert
+with check (
+  auth.uid() = user_id
+  and status = 'active'
+  and completed_at is null
+  and notification_attempted_at is null
+  and notification_sent_at is null
+);
+drop policy if exists "Users can cancel own present_dad_sessions" on present_dad_sessions;
+create policy "Users can cancel own present_dad_sessions"
+on present_dad_sessions for update
+using (auth.uid() = user_id and status = 'active')
+with check (
+  auth.uid() = user_id
+  and status = 'cancelled'
+  and completed_at is null
+  and notification_attempted_at is null
+  and notification_sent_at is null
+);
+
+create table if not exists notification_delivery_claims (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  type text not null,
+  local_day date not null,
+  claimed_at timestamptz not null default now(),
+  completed_at timestamptz,
+  provider_message_id text,
+  constraint notification_delivery_claims_type_chk check (type in (
+    'morning_checkin', 'bedtime_story', 'workout_window', 'weekly_score',
+    'streak_at_risk', 'weekly_challenge', 'journal_prompt', 'milestone_anniversary',
+    'community_reply', 'co_parent_event_added', 'present_dad_mode_complete'
+  )),
+  unique(user_id, type, local_day)
+);
+
+alter table notification_delivery_claims drop constraint if exists notification_delivery_claims_type_chk;
+alter table notification_delivery_claims add constraint notification_delivery_claims_type_chk check (type in (
+  'morning_checkin', 'bedtime_story', 'workout_window', 'weekly_score',
+  'streak_at_risk', 'weekly_challenge', 'journal_prompt', 'milestone_anniversary',
+  'community_reply', 'co_parent_event_added', 'present_dad_mode_complete'
+));
+
+alter table notification_log
+add column if not exists delivery_claim_id uuid references notification_delivery_claims(id) on delete set null;
+
+create index if not exists idx_notification_delivery_claims_user_day
+on notification_delivery_claims(user_id, local_day);
+create unique index if not exists idx_notification_log_delivery_claim_unique
+on notification_log(delivery_claim_id) where delivery_claim_id is not null;
 
 create index if not exists idx_notification_log_user_sent_at on notification_log(user_id, sent_at desc);
 create index if not exists idx_notification_log_user_type_sent_at on notification_log(user_id, type, sent_at desc);
 
 alter table notification_preferences enable row level security;
 alter table notification_log enable row level security;
+alter table notification_delivery_claims enable row level security;
 
 -- Users can manage their own preferences (opt-in, configurable settings)
 drop policy if exists "Users can CRUD own notification_preferences" on notification_preferences;
@@ -728,52 +832,111 @@ with check (auth.uid() = user_id);
 -- Intentionally no client policies for notification_log.
 -- Writes should happen server-side using the service role key.
 
--- Enforce:
--- - never more than 3 notifications per (local) day per user
--- - never send the same type more than once per (local) day
--- Returns true if log row was inserted, else false.
-create or replace function public.log_notification_if_allowed(
+revoke all on table notification_log from public, anon, authenticated;
+revoke all on table notification_delivery_claims from public, anon, authenticated;
+grant select, insert, update, delete on table notification_log to service_role;
+grant select, insert, update, delete on table notification_delivery_claims to service_role;
+
+-- Atomically reserve a notification slot. The per-user advisory lock makes the
+-- daily cap and per-type suppression safe across concurrent cron/webhook runs.
+-- The UUID is also used as OneSignal's idempotency key.
+create or replace function public.claim_notification_delivery(
   p_user_id uuid,
   p_type text,
   p_timezone text
 )
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  time_zone text := coalesce(nullif(p_timezone, ''), 'UTC');
+  claim_local_day date;
+  existing_claim record;
+  reserved_today int;
+  legacy_sent_today int;
+  claim_id uuid;
+begin
+  begin
+    claim_local_day := (now() at time zone time_zone)::date;
+  exception when invalid_parameter_value then
+    time_zone := 'UTC';
+    claim_local_day := (now() at time zone time_zone)::date;
+  end;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 0));
+
+  select id, completed_at into existing_claim
+  from public.notification_delivery_claims
+  where user_id = p_user_id
+    and type = p_type
+    and notification_delivery_claims.local_day = claim_local_day;
+
+  if found then
+    if existing_claim.completed_at is not null then return null; end if;
+    return existing_claim.id;
+  end if;
+
+  select count(*) into reserved_today
+  from public.notification_delivery_claims c
+  where c.user_id = p_user_id and c.local_day = claim_local_day;
+
+  select count(*) into legacy_sent_today
+  from public.notification_log l
+  where l.user_id = p_user_id
+    and l.delivery_claim_id is null
+    and (l.sent_at at time zone time_zone)::date = claim_local_day;
+
+  if reserved_today + legacy_sent_today >= 3 then return null; end if;
+
+  insert into public.notification_delivery_claims (user_id, type, local_day)
+  values (p_user_id, p_type, claim_local_day)
+  returning id into claim_id;
+
+  return claim_id;
+end;
+$$;
+
+-- A notification is recorded as sent only after OneSignal returns a message ID.
+create or replace function public.complete_notification_delivery(
+  p_claim_id uuid,
+  p_provider_message_id text
+)
 returns boolean
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
-  local_day date;
-  sent_today int;
-  sent_type_today int;
+  claimed record;
 begin
-  -- Defensive: fall back to UTC if timezone is blank
-  local_day := (now() at time zone coalesce(nullif(p_timezone, ''), 'UTC'))::date;
+  select id, user_id, type, completed_at into claimed
+  from public.notification_delivery_claims
+  where id = p_claim_id
+  for update;
 
-  select count(*) into sent_today
-  from public.notification_log l
-  where l.user_id = p_user_id
-    and (l.sent_at at time zone coalesce(nullif(p_timezone, ''), 'UTC'))::date = local_day;
+  if not found then return false; end if;
+  if claimed.completed_at is not null then return true; end if;
+  if nullif(p_provider_message_id, '') is null then return false; end if;
 
-  if sent_today >= 3 then
-    return false;
-  end if;
+  insert into public.notification_log (user_id, type, sent_at, opened, delivery_claim_id)
+  values (claimed.user_id, claimed.type, now(), false, claimed.id)
+  on conflict do nothing;
 
-  select count(*) into sent_type_today
-  from public.notification_log l
-  where l.user_id = p_user_id
-    and l.type = p_type
-    and (l.sent_at at time zone coalesce(nullif(p_timezone, ''), 'UTC'))::date = local_day;
-
-  if sent_type_today > 0 then
-    return false;
-  end if;
-
-  insert into public.notification_log (user_id, type, sent_at, opened)
-  values (p_user_id, p_type, now(), false);
+  update public.notification_delivery_claims
+  set completed_at = now(), provider_message_id = p_provider_message_id
+  where id = claimed.id;
 
   return true;
 end;
 $$;
+
+drop function if exists public.log_notification_if_allowed(uuid, text, text);
+revoke all on function public.claim_notification_delivery(uuid, text, text) from public, anon, authenticated;
+revoke all on function public.complete_notification_delivery(uuid, text) from public, anon, authenticated;
+grant execute on function public.claim_notification_delivery(uuid, text, text) to service_role;
+grant execute on function public.complete_notification_delivery(uuid, text) to service_role;
 
 -- =========================
 -- FUNCTIONS
