@@ -268,7 +268,9 @@ export function useDashboard(userId?: string) {
         .maybeSingle();
 
       const sleepWrite =
-        existingSleep?.source === "garmin" || existingSleep?.source === "fitbit"
+        existingSleep?.source === "garmin" ||
+        existingSleep?.source === "fitbit" ||
+        existingSleep?.source === "apple_health"
           ? Promise.resolve()
           : supabase
               .from("sleep_logs")

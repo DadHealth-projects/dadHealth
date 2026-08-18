@@ -58,7 +58,13 @@ const ProgressPage = () => {
   const latestSteps = bodyMetrics.find((metric: { metric_type: string }) => metric.metric_type === "steps");
   const latestActiveMins = bodyMetrics.find((metric: { metric_type: string }) => metric.metric_type === "active_mins");
   const formatProvider = (provider?: string | null) =>
-    provider === "fitbit" ? "Fitbit" : provider === "garmin" ? "Garmin" : "wearable";
+    provider === "fitbit"
+      ? "Fitbit"
+      : provider === "garmin"
+        ? "Garmin"
+        : provider === "apple_health"
+          ? "Apple Health"
+          : "wearable";
   const formatSyncTime = (value?: string | null) => {
     if (!value) return "Not synced yet";
     const date = new Date(value);
