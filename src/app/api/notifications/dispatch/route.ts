@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 import type { NotificationType } from "@/types/database";
 import { buildPayload, pickJournalPrompt } from "@/lib/notifications/buildPayload";
-import { sendOneSignalToExternalUserId } from "@/lib/notifications/onesignal";
+import { sendRateLimitedNotification } from "@/lib/notifications/delivery";
 import { getLocalParts, hhmmFromPgTime, isInWindow, subtractMinutes } from "@/lib/notifications/time";
 
 type PrefRow = {
@@ -124,16 +124,11 @@ async function processPresentDadCompletions(admin: ReturnType<typeof createAdmin
         continue;
       }
 
-      const logResult = await admin.rpc("log_notification_if_allowed", {
-        p_user_id: session.user_id,
-        p_type: "present_dad_mode_complete",
-        p_timezone: profileResult.data.timezone?.trim() || "UTC",
-      });
-      if (logResult.error) throw logResult.error;
-      if (logResult.data !== true) { skipped++; continue; }
-
-      await sendOneSignalToExternalUserId({
-        externalUserId: session.user_id,
+      const delivery = await sendRateLimitedNotification({
+        admin,
+        userId: session.user_id,
+        type: "present_dad_mode_complete",
+        timezone: profileResult.data.timezone?.trim() || "UTC",
         payload: {
           type: "present_dad_mode_complete",
           heading: "Present Dad Mode complete",
@@ -142,6 +137,7 @@ async function processPresentDadCompletions(admin: ReturnType<typeof createAdmin
           data: { session_id: session.id },
         },
       });
+      if (delivery === "limited") { skipped++; continue; }
       const sentResult = await admin.from("present_dad_sessions").update({ notification_sent_at: new Date().toISOString() }).eq("id", session.id);
       if (sentResult.error) throw sentResult.error;
       sent++;
@@ -278,22 +274,7 @@ export async function GET(request: Request) {
 
         if (!due) continue;
 
-        // Server-side cap + per-type daily suppression
-        const logRes = await admin.rpc("log_notification_if_allowed", {
-          p_user_id: userId,
-          p_type: type,
-          p_timezone: timeZone,
-        });
-        if (logRes.error) {
-          errors++;
-          continue;
-        }
-        if (logRes.data !== true) {
-          skipped++;
-          continue;
-        }
-
-        // Dynamic payload pieces (fetched only when we know we're sending)
+        // Dynamic payload pieces for notifications that are currently due.
         let weeklyChallenge: { title: string; description?: string | null } | null = null;
 
         if (type === "weekly_challenge") {
@@ -329,8 +310,15 @@ export async function GET(request: Request) {
         });
 
         try {
-          await sendOneSignalToExternalUserId({ externalUserId: userId, payload });
-          sent++;
+          const delivery = await sendRateLimitedNotification({
+            admin,
+            userId,
+            type,
+            timezone: timeZone,
+            payload,
+          });
+          if (delivery === "sent") sent++;
+          else skipped++;
         } catch (e) {
           console.error("[notifications/dispatch] OneSignal send failed", { userId, type, e });
           errors++;

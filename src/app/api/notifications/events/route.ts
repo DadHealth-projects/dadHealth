@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { sendOneSignalToExternalUserId } from "@/lib/notifications/onesignal";
+import { sendRateLimitedNotification } from "@/lib/notifications/delivery";
 import type { NotificationPayload } from "@/lib/notifications/types";
 import type { NotificationType } from "@/types/database";
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
@@ -29,16 +29,13 @@ async function sendIfAllowed(args: {
   if (preferenceResult.error) throw preferenceResult.error;
   if (profileResult.data?.push_notifications_enabled !== true || preferenceResult.data?.enabled !== true) return "disabled";
 
-  const logResult = await admin.rpc("log_notification_if_allowed", {
-    p_user_id: userId,
-    p_type: type,
-    p_timezone: profileResult.data.timezone?.trim() || "UTC",
+  return sendRateLimitedNotification({
+    admin,
+    userId,
+    type,
+    timezone: profileResult.data.timezone?.trim() || "UTC",
+    payload,
   });
-  if (logResult.error) throw logResult.error;
-  if (logResult.data !== true) return "limited";
-
-  await sendOneSignalToExternalUserId({ externalUserId: userId, payload });
-  return "sent";
 }
 
 async function communityReply(body: Extract<EventBody, { type: "community_reply" }>) {
