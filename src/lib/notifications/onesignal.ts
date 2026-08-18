@@ -1,32 +1,34 @@
 import type { NotificationPayload } from "@/lib/notifications/types";
 
 function requiredEnv(name: string): string {
-  const v = process.env[name]?.trim();
-  if (!v) throw new Error(`Missing ${name}`);
-  return v;
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`Missing ${name}`);
+  return value;
 }
 
 export async function sendOneSignalToExternalUserId(args: {
   externalUserId: string;
   payload: NotificationPayload;
-}): Promise<void> {
-  const appId = process.env.ONESIGNAL_APP_ID?.trim() || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID?.trim();
-  if (!appId) throw new Error("Missing ONESIGNAL_APP_ID (or NEXT_PUBLIC_ONESIGNAL_APP_ID)");
+  idempotencyKey: string;
+}): Promise<{ id: string }> {
+  const appId = requiredEnv("ONESIGNAL_APP_ID");
   const apiKey = requiredEnv("ONESIGNAL_REST_API_KEY");
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:8080").replace(/\/+$/, "");
+  const siteUrl = requiredEnv("NEXT_PUBLIC_SITE_URL").replace(/\/+$/, "");
 
-  const res = await fetch("https://onesignal.com/api/v1/notifications", {
+  const response = await fetch("https://api.onesignal.com/notifications", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      Authorization: `Basic ${apiKey}`,
+      "Content-Type": "application/json",
+      Authorization: `Key ${apiKey}`,
     },
     body: JSON.stringify({
       app_id: appId,
-      include_external_user_ids: [args.externalUserId],
+      target_channel: "push",
+      include_aliases: { external_id: [args.externalUserId] },
       headings: { en: args.payload.heading },
       contents: { en: args.payload.content },
-      url: `${siteUrl}${args.payload.link}`,
+      web_url: `${siteUrl}${args.payload.link}`,
+      idempotency_key: args.idempotencyKey,
       data: {
         type: args.payload.type,
         link: args.payload.link,
@@ -35,21 +37,15 @@ export async function sendOneSignalToExternalUserId(args: {
     }),
   });
 
-  const text = await res.text().catch(() => "");
-  if (!res.ok) {
-    throw new Error(`OneSignal error ${res.status}: ${text}`);
+  const text = await response.text().catch(() => "");
+  if (!response.ok) {
+    throw new Error(`OneSignal error ${response.status}: ${text}`);
   }
 
-  try {
-    const json = JSON.parse(text) as { id?: string; recipients?: number };
-    if (typeof json.recipients === "number" && json.recipients === 0) {
-      console.warn("[OneSignal] API accepted but recipients=0 — no subscribed device for this external_user_id", {
-        externalUserId: args.externalUserId,
-        notificationId: json.id,
-      });
-    }
-  } catch {
-    // non-JSON body; ignore
+  const body = JSON.parse(text || "{}") as { id?: unknown };
+  if (typeof body.id !== "string" || !body.id) {
+    throw new Error("OneSignal accepted the request but did not create a notification");
   }
+
+  return { id: body.id };
 }
-
