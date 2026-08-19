@@ -788,6 +788,7 @@ create table if not exists notification_delivery_claims (
   user_id uuid references auth.users(id) on delete cascade not null,
   type text not null,
   local_day date not null,
+  event_key text not null default 'scheduled',
   claimed_at timestamptz not null default now(),
   completed_at timestamptz,
   provider_message_id text,
@@ -795,8 +796,7 @@ create table if not exists notification_delivery_claims (
     'morning_checkin', 'bedtime_story', 'workout_window', 'weekly_score',
     'streak_at_risk', 'weekly_challenge', 'journal_prompt', 'milestone_anniversary',
     'community_reply', 'co_parent_event_added', 'present_dad_mode_complete'
-  )),
-  unique(user_id, type, local_day)
+  ))
 );
 
 alter table notification_delivery_claims drop constraint if exists notification_delivery_claims_type_chk;
@@ -805,6 +805,19 @@ alter table notification_delivery_claims add constraint notification_delivery_cl
   'streak_at_risk', 'weekly_challenge', 'journal_prompt', 'milestone_anniversary',
   'community_reply', 'co_parent_event_added', 'present_dad_mode_complete'
 ));
+
+-- Event-driven notifications need one claim per source record, while scheduled
+-- notifications retain their existing one-per-type/day identity.
+alter table notification_delivery_claims add column if not exists event_key text;
+update notification_delivery_claims
+set event_key = 'scheduled'
+where event_key is null or btrim(event_key) = '';
+alter table notification_delivery_claims alter column event_key set default 'scheduled';
+alter table notification_delivery_claims alter column event_key set not null;
+alter table notification_delivery_claims
+drop constraint if exists notification_delivery_claims_user_id_type_local_day_key;
+create unique index if not exists idx_notification_delivery_claims_identity
+on notification_delivery_claims(user_id, type, local_day, event_key);
 
 alter table notification_log
 add column if not exists delivery_claim_id uuid references notification_delivery_claims(id) on delete set null;
@@ -843,7 +856,8 @@ grant select, insert, update, delete on table notification_delivery_claims to se
 create or replace function public.claim_notification_delivery(
   p_user_id uuid,
   p_type text,
-  p_timezone text
+  p_timezone text,
+  p_event_key text
 )
 returns uuid
 language plpgsql
@@ -852,6 +866,7 @@ set search_path = public
 as $$
 declare
   time_zone text := coalesce(nullif(p_timezone, ''), 'UTC');
+  claim_event_key text := coalesce(nullif(btrim(p_event_key), ''), 'scheduled');
   claim_local_day date;
   existing_claim record;
   reserved_today int;
@@ -871,7 +886,8 @@ begin
   from public.notification_delivery_claims
   where user_id = p_user_id
     and type = p_type
-    and notification_delivery_claims.local_day = claim_local_day;
+    and notification_delivery_claims.local_day = claim_local_day
+    and notification_delivery_claims.event_key = claim_event_key;
 
   if found then
     if existing_claim.completed_at is not null then return null; end if;
@@ -890,12 +906,32 @@ begin
 
   if reserved_today + legacy_sent_today >= 3 then return null; end if;
 
-  insert into public.notification_delivery_claims (user_id, type, local_day)
-  values (p_user_id, p_type, claim_local_day)
+  insert into public.notification_delivery_claims (user_id, type, local_day, event_key)
+  values (p_user_id, p_type, claim_local_day, claim_event_key)
   returning id into claim_id;
 
   return claim_id;
 end;
+$$;
+
+-- Backward-compatible scheduled wrapper. Existing server instances can keep
+-- calling the original three-argument RPC during deployment.
+create or replace function public.claim_notification_delivery(
+  p_user_id uuid,
+  p_type text,
+  p_timezone text
+)
+returns uuid
+language sql
+security definer
+set search_path = public
+as $$
+  select public.claim_notification_delivery(
+    p_user_id,
+    p_type,
+    p_timezone,
+    'scheduled'
+  );
 $$;
 
 -- A notification is recorded as sent only after OneSignal returns a message ID.
@@ -934,8 +970,10 @@ $$;
 
 drop function if exists public.log_notification_if_allowed(uuid, text, text);
 revoke all on function public.claim_notification_delivery(uuid, text, text) from public, anon, authenticated;
+revoke all on function public.claim_notification_delivery(uuid, text, text, text) from public, anon, authenticated;
 revoke all on function public.complete_notification_delivery(uuid, text) from public, anon, authenticated;
 grant execute on function public.claim_notification_delivery(uuid, text, text) to service_role;
+grant execute on function public.claim_notification_delivery(uuid, text, text, text) to service_role;
 grant execute on function public.complete_notification_delivery(uuid, text) to service_role;
 
 -- =========================
