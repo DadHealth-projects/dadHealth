@@ -18,9 +18,10 @@ async function sendIfAllowed(args: {
   admin: ReturnType<typeof createAdminSupabaseClient>;
   userId: string;
   type: NotificationType;
+  eventKey: string;
   payload: NotificationPayload;
 }) {
-  const { admin, userId, type, payload } = args;
+  const { admin, userId, type, eventKey, payload } = args;
   const [profileResult, preferenceResult] = await Promise.all([
     admin.from("user_profile").select("push_notifications_enabled,timezone").eq("user_id", userId).maybeSingle(),
     admin.from("notification_preferences").select("enabled").eq("user_id", userId).eq("notification_type", type).maybeSingle(),
@@ -42,6 +43,7 @@ async function sendIfAllowed(args: {
     userId,
     type,
     timezone: profileResult.data.timezone?.trim() || "UTC",
+    eventKey,
     payload,
   });
 }
@@ -82,6 +84,7 @@ async function communityReply(body: Extract<EventBody, { type: "community_reply"
       admin,
       userId,
       type: "community_reply",
+      eventKey: comment.id,
       payload: {
         type: "community_reply",
         heading: "New community reply",
@@ -115,6 +118,7 @@ async function coParentEvent(body: Extract<EventBody, { type: "co_parent_event_a
       admin,
       userId,
       type: "co_parent_event_added",
+      eventKey: event.id,
       payload: {
         type: "co_parent_event_added",
         heading: "Co-parent event added",

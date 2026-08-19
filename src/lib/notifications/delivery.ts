@@ -11,11 +11,14 @@ export async function sendRateLimitedNotification(args: {
   type: NotificationType;
   timezone: string;
   payload: NotificationPayload;
+  /** Stable source-record identity for event-driven notifications. */
+  eventKey?: string;
 }): Promise<"sent" | "limited"> {
   const claimResult = await args.admin.rpc("claim_notification_delivery", {
     p_user_id: args.userId,
     p_type: args.type,
     p_timezone: args.timezone,
+    p_event_key: args.eventKey?.trim() || "scheduled",
   });
   if (claimResult.error) throw claimResult.error;
   if (typeof claimResult.data !== "string" || !claimResult.data) {
