@@ -81,3 +81,20 @@ test("notification environment and database setting names stay aligned", async (
     assert.ok(schema.includes(setting), `Missing database setting: ${setting}`);
   }
 });
+
+test("event delivery has database, server, and provider diagnostics", async () => {
+  const [schema, events, dispatch, delivery, oneSignal] = await Promise.all([
+    source("supabase/schema.sql"),
+    source("src/app/api/notifications/events/route.ts"),
+    source("src/app/api/notifications/dispatch/route.ts"),
+    source("src/lib/notifications/delivery.ts"),
+    source("src/lib/notifications/onesignal.ts"),
+  ]);
+
+  assert.match(schema, /Queued notification event type/);
+  assert.match(schema, /Queued notification dispatch pg_net request/);
+  assert.match(events, /\[notifications\/events\] Event received/);
+  assert.match(dispatch, /\[notifications\/dispatch\] Run started/);
+  assert.match(delivery, /\[notifications\/delivery\] Sending claimed notification/);
+  assert.match(oneSignal, /\[notifications\/onesignal\] Message accepted/);
+});

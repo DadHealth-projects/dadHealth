@@ -120,6 +120,11 @@ async function processPresentDadCompletions(admin: ReturnType<typeof createAdmin
       if (profileResult.error) throw profileResult.error;
       if (preferenceResult.error) throw preferenceResult.error;
       if (profileResult.data?.push_notifications_enabled !== true || preferenceResult.data?.enabled !== true) {
+        console.info("[notifications/dispatch] Present Dad notification skipped by settings", {
+          user: session.user_id.slice(0, 8),
+          masterEnabled: profileResult.data?.push_notifications_enabled === true,
+          typeEnabled: preferenceResult.data?.enabled === true,
+        });
         skipped++;
         continue;
       }
@@ -158,6 +163,7 @@ export async function GET(request: Request) {
   try {
     const admin = createAdminSupabaseClient();
     const now = new Date();
+    console.info("[notifications/dispatch] Run started", { now: now.toISOString() });
     const presentDadResult = await processPresentDadCompletions(admin, now);
 
     const prefsRes = await admin
@@ -170,6 +176,7 @@ export async function GET(request: Request) {
 
     const userIds = Array.from(new Set(prefs.map((p) => p.user_id)));
     if (userIds.length === 0) {
+      console.info("[notifications/dispatch] Run completed", { ...presentDadResult, scheduledUsers: 0 });
       return NextResponse.json({ ok: true, ...presentDadResult });
     }
 
@@ -274,6 +281,13 @@ export async function GET(request: Request) {
 
         if (!due) continue;
 
+        console.info("[notifications/dispatch] Notification is due", {
+          user: userId.slice(0, 8),
+          type,
+          localDate,
+          localTime: localHHMM,
+        });
+
         // Dynamic payload pieces for notifications that are currently due.
         let weeklyChallenge: { title: string; description?: string | null } | null = null;
 
@@ -326,6 +340,12 @@ export async function GET(request: Request) {
       }
     }
 
+    console.info("[notifications/dispatch] Run completed", {
+      sent,
+      skipped,
+      errors,
+      scheduledUsers: userIds.length,
+    });
     return NextResponse.json({ ok: true, sent, skipped, errors });
   } catch (e) {
     console.error("[notifications/dispatch]", e);
