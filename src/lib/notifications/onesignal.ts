@@ -47,5 +47,11 @@ export async function sendOneSignalToExternalUserId(args: {
     throw new Error("OneSignal accepted the request but did not create a notification");
   }
 
+  console.info("[notifications/onesignal] Message accepted", {
+    user: args.externalUserId.slice(0, 8),
+    type: args.payload.type,
+    providerMessage: body.id.slice(0, 8),
+  });
+
   return { id: body.id };
 }

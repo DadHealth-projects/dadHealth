@@ -18,9 +18,20 @@ export async function sendRateLimitedNotification(args: {
     p_timezone: args.timezone,
   });
   if (claimResult.error) throw claimResult.error;
-  if (typeof claimResult.data !== "string" || !claimResult.data) return "limited";
+  if (typeof claimResult.data !== "string" || !claimResult.data) {
+    console.info("[notifications/delivery] Delivery skipped by rate limit", {
+      user: args.userId.slice(0, 8),
+      type: args.type,
+    });
+    return "limited";
+  }
 
   const claimId = claimResult.data;
+  console.info("[notifications/delivery] Sending claimed notification", {
+    claim: claimId.slice(0, 8),
+    user: args.userId.slice(0, 8),
+    type: args.type,
+  });
   const delivery = await sendOneSignalToExternalUserId({
     externalUserId: args.userId,
     payload: args.payload,
@@ -35,6 +46,13 @@ export async function sendRateLimitedNotification(args: {
   if (completionResult.data !== true) {
     throw new Error("Notification delivery could not be finalized");
   }
+
+  console.info("[notifications/delivery] Notification sent and recorded", {
+    claim: claimId.slice(0, 8),
+    user: args.userId.slice(0, 8),
+    type: args.type,
+    providerMessage: delivery.id.slice(0, 8),
+  });
 
   return "sent";
 }
