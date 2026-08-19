@@ -14,6 +14,13 @@ interface DadStrengthSectionProps {
   workoutImg: string;
 }
 
+function localDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const mapExerciseToMove = (exercise: WorkoutExercise) => ({
   title: exercise.name,
   detail: `${exercise.sets} sets · ${exercise.reps_or_duration} · Rest ${exercise.rest_period}`,
@@ -76,8 +83,12 @@ const DadStrengthSection = ({ workoutImg }: DadStrengthSectionProps) => {
       : "—";
 
   // Wearable-synced metrics — same source the fitness page reads from.
+  const todayKey = localDateKey(new Date());
   const latestStepsMetric = bodyMetrics.find((m: { metric_type: string }) => m.metric_type === "steps");
-  const latestActiveMinsMetric = bodyMetrics.find((m: { metric_type: string }) => m.metric_type === "active_mins");
+  const latestActiveMinsMetric = bodyMetrics.find(
+    (m: { metric_type: string; recorded_at: string }) =>
+      m.metric_type === "active_mins" && m.recorded_at.slice(0, 10) === todayKey,
+  );
   const latestStepsDisplay =
     user && latestStepsMetric?.value != null
       ? Number(latestStepsMetric.value).toLocaleString()
@@ -103,7 +114,12 @@ const DadStrengthSection = ({ workoutImg }: DadStrengthSectionProps) => {
   const activeDisplay = wearableActiveDisplay
     ?? (user && activeTodayMin > 0 ? `${activeTodayMin} min` : "—");
 
-  const latestLogged = workouts[0];
+  const latestLoggedAt = [workouts[0]?.performed_at, bodyMetrics[0]?.recorded_at]
+    .filter((value): value is string => Boolean(value))
+    .reduce<string | null>((latest, value) => {
+      if (!latest) return value;
+      return new Date(value).getTime() > new Date(latest).getTime() ? value : latest;
+    }, null);
 
   const progressStats = [
     { value: user ? String(monthWorkouts) : "—", label: "WORKOUTS" },
@@ -126,8 +142,8 @@ const DadStrengthSection = ({ workoutImg }: DadStrengthSectionProps) => {
         </h2>
         <p className="text-sm text-foreground/50 mt-2">
           {todaysMoves.length} moves · full-body session
-          {latestLogged?.performed_at
-            ? ` · Last logged ${latestLogged.performed_at.slice(0, 10)}`
+          {latestLoggedAt
+            ? ` · Last logged ${latestLoggedAt.slice(0, 10)}`
             : ""}
         </p>
       </div>

@@ -237,6 +237,13 @@ type GeneratedMealPlanResponse = {
   grocery_list?: unknown;
 };
 
+function localDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const DIETARY_PREFERENCE_LABEL: Record<DietaryPreference, string> = {
   none: "No strict diet",
   vegetarian: "Vegetarian",
@@ -400,8 +407,12 @@ const FitnessPage = () => {
       ? `${Number.isInteger(bestRunMetric.value) ? bestRunMetric.value : Number(bestRunMetric.value).toFixed(1)}km`
       : "—";
 
+  const todayKey = localDateKey(new Date());
   const latestStepsMetric = bodyMetrics.find((m: { metric_type: string }) => m.metric_type === "steps");
-  const latestActiveMinsMetric = bodyMetrics.find((m: { metric_type: string }) => m.metric_type === "active_mins");
+  const latestActiveMinsMetric = bodyMetrics.find(
+    (m: { metric_type: string; recorded_at: string }) =>
+      m.metric_type === "active_mins" && m.recorded_at.slice(0, 10) === todayKey,
+  );
   const latestStepsDisplay =
     user && latestStepsMetric?.value != null
       ? Number(latestStepsMetric.value).toLocaleString()
@@ -437,7 +448,12 @@ const FitnessPage = () => {
   const todaysMoves = selectedWorkout?.exercises?.length
     ? selectedWorkout.exercises.map(mapExerciseToMove)
     : DAD_STRENGTH_MOVES;
-  const latestLogged = workouts[0];
+  const latestLoggedAt = [workouts[0]?.performed_at, bodyMetrics[0]?.recorded_at]
+    .filter((value): value is string => Boolean(value))
+    .reduce<string | null>((latest, value) => {
+      if (!latest) return value;
+      return new Date(value).getTime() > new Date(latest).getTime() ? value : latest;
+    }, null);
   const currentMove = todaysMoves[currentExerciseIdx] ?? todaysMoves[0];
 
   const handleGenerateMealPlan = () => {
@@ -561,8 +577,8 @@ const FitnessPage = () => {
           </h1>
           <p className="text-sm text-foreground/50 mt-2">
             {todaysMoves.length} moves · workout + meal planner hub
-            {latestLogged?.performed_at
-              ? ` · Last logged ${latestLogged.performed_at.slice(0, 10)}`
+            {latestLoggedAt
+              ? ` · Last logged ${latestLoggedAt.slice(0, 10)}`
               : ""}
           </p>
         </div>
