@@ -134,6 +134,7 @@ async function processPresentDadCompletions(admin: ReturnType<typeof createAdmin
         userId: session.user_id,
         type: "present_dad_mode_complete",
         timezone: profileResult.data.timezone?.trim() || "UTC",
+        eventKey: session.id,
         payload: {
           type: "present_dad_mode_complete",
           heading: "Present Dad Mode complete",

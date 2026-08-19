@@ -46,6 +46,54 @@ test("notification claims are concurrency-safe and service-role-only", async () 
   assert.match(schema, /drop function if exists public\.log_notification_if_allowed/);
 });
 
+test("event-driven notifications use per-record claim identities", async () => {
+  const [schema, migration, delivery, events, dispatch, regression] = await Promise.all([
+    source("supabase/schema.sql"),
+    source("supabase/migrations/20260819150000_notification_event_keys.sql"),
+    source("src/lib/notifications/delivery.ts"),
+    source("src/app/api/notifications/events/route.ts"),
+    source("src/app/api/notifications/dispatch/route.ts"),
+    source("supabase/tests/notification_claims_test.sql"),
+  ]);
+
+  for (const sql of [schema, migration]) {
+    assert.match(sql, /event_key/);
+    assert.match(sql, /notification_delivery_claims\(user_id, type, local_day, event_key\)/);
+    assert.match(sql, /pg_advisory_xact_lock/);
+    assert.match(sql, /reserved_today \+ legacy_sent_today >= 3/);
+    assert.match(sql, /event_key = claim_event_key/);
+    assert.match(sql, /return existing_claim\.id/);
+    assert.match(sql, /p_timezone,\s*'scheduled'/);
+    assert.match(sql, /claim_notification_delivery\(uuid, text, text, text\)/);
+  }
+  assert.match(schema, /event_key text not null default 'scheduled'/);
+
+  assert.match(delivery, /p_event_key: args\.eventKey\?\.trim\(\) \|\| "scheduled"/);
+  assert.match(delivery, /idempotencyKey: claimId/);
+  assert.match(events, /type: "community_reply",\s*eventKey: comment\.id/);
+  assert.match(events, /type: "co_parent_event_added",\s*eventKey: event\.id/);
+  assert.match(dispatch, /type: "present_dad_mode_complete",[\s\S]*eventKey: session\.id/);
+
+  for (const scenario of [
+    "comment A receives a delivery claim",
+    "comment B on the same day receives a delivery claim",
+    "a completed retry of comment A is skipped as a duplicate",
+    "a fourth eligible notification is skipped by the daily cap",
+    "the scheduled wrapper does not duplicate its notification period",
+    "an incomplete retry receives the original claim ID",
+  ]) {
+    assert.ok(regression.includes(scenario), `Missing SQL regression scenario: ${scenario}`);
+  }
+});
+
+test("temporary notification skip diagnostics are removed", async () => {
+  const events = await source("src/app/api/notifications/events/route.ts");
+
+  assert.equal(events.includes("EventSkipReason"), false);
+  assert.equal(events.includes("[notifications/events] Delivery skipped"), false);
+  assert.equal(events.includes("rate_limit_unknown"), false);
+});
+
 test("Present Dad completion is enforced against the server-owned ends_at", async () => {
   const schema = await source("supabase/schema.sql");
   const dispatch = await source("src/app/api/notifications/dispatch/route.ts");
