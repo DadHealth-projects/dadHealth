@@ -1137,9 +1137,10 @@ declare
   webhook_url text := nullif(current_setting('app.settings.notification_webhook_url', true), '');
   webhook_secret text := nullif(current_setting('app.settings.notification_webhook_secret', true), '');
   notification_type text;
+  request_id bigint;
 begin
   if webhook_url is null or webhook_secret is null then
-    raise notice 'Skipping notification event: webhook settings are not configured';
+    raise warning 'Skipping notification event: webhook URL or secret is not configured';
     return new;
   end if;
 
@@ -1150,7 +1151,7 @@ begin
   end;
   if notification_type is null then return new; end if;
 
-  perform net.http_post(
+  select net.http_post(
     url := webhook_url,
     headers := jsonb_build_object(
       'content-type', 'application/json',
@@ -1161,7 +1162,8 @@ begin
       'record_id', new.id,
       'actor_user_id', auth.uid()
     )
-  );
+  ) into request_id;
+  raise log 'Queued notification event type %, record %, pg_net request %', notification_type, new.id, request_id;
   return new;
 end;
 $$;
@@ -1750,17 +1752,19 @@ as $$
 declare
   dispatch_url text := nullif(current_setting('app.settings.notification_dispatch_url', true), '');
   dispatch_secret text := nullif(current_setting('app.settings.cron_secret', true), '');
+  request_id bigint;
 begin
   if dispatch_url is null or dispatch_secret is null then
-    raise notice 'Skipping notification dispatch: URL or cron secret is not configured';
+    raise warning 'Skipping notification dispatch: URL or cron secret is not configured';
     return;
   end if;
 
-  perform net.http_get(
+  select net.http_get(
     url := dispatch_url,
     headers := jsonb_build_object('authorization', 'Bearer ' || dispatch_secret),
     timeout_milliseconds := 10000
-  );
+  ) into request_id;
+  raise log 'Queued notification dispatch pg_net request %', request_id;
 end;
 $$;
 

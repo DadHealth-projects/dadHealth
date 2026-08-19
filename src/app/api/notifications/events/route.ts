@@ -27,7 +27,15 @@ async function sendIfAllowed(args: {
   ]);
   if (profileResult.error) throw profileResult.error;
   if (preferenceResult.error) throw preferenceResult.error;
-  if (profileResult.data?.push_notifications_enabled !== true || preferenceResult.data?.enabled !== true) return "disabled";
+  if (profileResult.data?.push_notifications_enabled !== true || preferenceResult.data?.enabled !== true) {
+    console.info("[notifications/events] Recipient settings skipped delivery", {
+      user: userId.slice(0, 8),
+      type,
+      masterEnabled: profileResult.data?.push_notifications_enabled === true,
+      typeEnabled: preferenceResult.data?.enabled === true,
+    });
+    return "disabled";
+  }
 
   return sendRateLimitedNotification({
     admin,
@@ -62,6 +70,11 @@ async function communityReply(body: Extract<EventBody, { type: "community_reply"
   }
 
   recipients.delete(body.actor_user_id || comment.user_id);
+  console.info("[notifications/events] Community recipients resolved", {
+    record: comment.id.slice(0, 8),
+    recipients: recipients.size,
+    isThreadReply: Boolean(comment.parent_id),
+  });
   let sent = 0;
   let skipped = 0;
   for (const userId of recipients) {
@@ -123,7 +136,12 @@ export async function POST(request: Request) {
     if (!body?.record_id || (body.type !== "community_reply" && body.type !== "co_parent_event_added")) {
       return NextResponse.json({ error: "Invalid event" }, { status: 400 });
     }
+    console.info("[notifications/events] Event received", {
+      type: body.type,
+      record: body.record_id.slice(0, 8),
+    });
     const result = body.type === "community_reply" ? await communityReply(body) : await coParentEvent(body);
+    console.info("[notifications/events] Event processed", { type: body.type, ...result });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     console.error("[notifications/events]", error);
