@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start -p 8080",
     "lint": "eslint .",
-    "test": "node --no-warnings --test tests/notifications.test.mjs tests/fitnessHealth.test.mjs"
+    "test": "node --no-warnings --test tests/notifications.test.mjs tests/fitnessHealth.test.mjs tests/healthConnect.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
