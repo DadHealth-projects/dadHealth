@@ -9,10 +9,11 @@
     "build": "next build",
     "start": "next start -p 8080",
     "lint": "eslint .",
-    "test": "node --no-warnings --test tests/notifications.test.mjs tests/fitnessHealth.test.mjs tests/healthConnect.test.mjs"
+    "test": "node --no-warnings --test tests/notifications.test.mjs tests/fitnessHealth.test.mjs tests/healthConnect.test.mjs tests/nativeSubscriptions.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
+    "@apple/app-store-server-library": "3.1.0",
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
@@ -53,6 +54,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
+    "google-auth-library": "10.9.1",
     "input-otp": "^1.4.2",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.462.0",

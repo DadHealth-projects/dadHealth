@@ -1,4 +1,5 @@
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
+import { upsertSubscriptionEntitlement } from "@/lib/native-subscriptions/store";
 
 const DAD_HEALTH_CLIENT_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -29,5 +30,17 @@ export async function syncUserProfile(
       ...payload,
     });
     if (error) throw error;
+  }
+
+  if (fields.stripe_subscription_id && fields.subscription_status) {
+    await upsertSubscriptionEntitlement(admin, {
+      userId,
+      provider: "stripe",
+      providerSubscriptionId: fields.stripe_subscription_id,
+      providerAccountId: fields.stripe_customer_id ?? null,
+      status: fields.subscription_status,
+      environment: process.env.STRIPE_SECRET_KEY?.startsWith("sk_test_") ? "test" : "production",
+      lastVerifiedAt: new Date().toISOString(),
+    });
   }
 }
