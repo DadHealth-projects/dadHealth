@@ -116,7 +116,7 @@ export interface SleepLog {
   user_id: string;
   date: string;
   hours: number;
-  source?: "manual" | "garmin" | "fitbit" | "apple_health";
+  source?: "manual" | "garmin" | "fitbit" | "apple_health" | "health_connect";
   created_at?: string;
 }
 
@@ -203,14 +203,14 @@ export interface BodyMetric {
   metric_type: string;
   value: number;
   recorded_at: string;
-  source?: "manual" | "garmin" | "fitbit" | "apple_health";
+  source?: "manual" | "garmin" | "fitbit" | "apple_health" | "health_connect";
   created_at?: string;
 }
 
 export interface UserIntegration {
   id: string;
   user_id: string;
-  provider: "garmin" | "fitbit" | "apple_health";
+  provider: "garmin" | "fitbit" | "apple_health" | "health_connect";
   device_name?: string | null;
   connected_at?: string | null;
   last_sync_at?: string | null;

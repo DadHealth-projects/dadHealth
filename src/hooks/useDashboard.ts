@@ -270,7 +270,8 @@ export function useDashboard(userId?: string) {
       const sleepWrite =
         existingSleep?.source === "garmin" ||
         existingSleep?.source === "fitbit" ||
-        existingSleep?.source === "apple_health"
+        existingSleep?.source === "apple_health" ||
+        existingSleep?.source === "health_connect"
           ? Promise.resolve()
           : supabase
               .from("sleep_logs")
