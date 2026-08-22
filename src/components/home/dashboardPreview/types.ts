@@ -4,6 +4,7 @@ export type DashboardScreen =
   | "MIND"
   | "BOND"
   | "COMMUNITY"
+  | "CHALLENGE"
   | "PROGRESS";
 
 export type DashboardGoalStatus = "done" | "start" | "log" | "open";

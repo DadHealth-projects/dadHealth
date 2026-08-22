@@ -78,7 +78,13 @@ async function fetchDashboard(userId: string) {
       .eq("user_id", userId)
       .order("date", { ascending: false })
       .limit(8),
-    supabase.from("weekly_challenges").select("*").eq("active", true).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase
+      .from("weekly_challenges")
+      .select("id, title, description, participants_count")
+      .eq("active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
     supabase.from("dad_dates").select("*"),
     supabase.from("user_profile").select("display_name, goals").eq("user_id", userId).maybeSingle(),
     supabase
@@ -136,7 +142,27 @@ async function fetchDashboard(userId: string) {
   const monthWorkouts = workoutsRes.count ?? 0;
   const journalCount = journalRes.count ?? 0;
   const dadDatesCount = milestonesRes.count ?? 0;
-  const challenge = challengeRes.data;
+  const activeChallenge = challengeRes.error ? null : challengeRes.data;
+  const participationRes = activeChallenge?.id
+      ? await supabase
+        .from("weekly_challenge_participants")
+        .select("challenge_id, completed_at")
+        .eq("challenge_id", activeChallenge.id)
+        .eq("user_id", userId)
+        .maybeSingle()
+    : null;
+  const challenge = activeChallenge
+    ? {
+        ...activeChallenge,
+        participationStatus: participationRes?.error
+          ? "unavailable"
+          : participationRes?.data?.completed_at
+            ? "completed"
+            : participationRes?.data
+              ? "joined"
+              : "not_joined",
+      }
+    : null;
   const dadDates = dadDatesRes.data ?? [];
   const reminders = remindersRes.error ? [] : (remindersRes.data ?? []);
   const circles = circlesRes.error ? [] : (circlesRes.data ?? []);
@@ -246,7 +272,7 @@ export function useDashboard(userId?: string) {
   const queryClient = useQueryClient();
   const date = new Date().toISOString().slice(0, 10);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["dashboard", userId],
     queryFn: () => fetchDashboard(userId!),
     enabled: !!userId,
@@ -298,11 +324,57 @@ export function useDashboard(userId?: string) {
     },
   });
 
+  const challengeParticipation = useMutation({
+    mutationFn: async ({ challengeId, join }: { challengeId: string; join: boolean }) => {
+      if (!userId) throw new Error("Not authenticated");
+
+      const result = join
+        ? await supabase
+            .from("weekly_challenge_participants")
+            .upsert(
+              { challenge_id: challengeId, user_id: userId },
+              { onConflict: "challenge_id,user_id", ignoreDuplicates: true },
+            )
+        : await supabase
+            .from("weekly_challenge_participants")
+            .delete()
+            .eq("challenge_id", challengeId)
+            .eq("user_id", userId);
+
+      if (result.error) throw result.error;
+      if (join) {
+        trackEvent("weekly_challenge_joined", { challenge_id: challengeId });
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", userId] });
+    },
+  });
+
+  const challengeCompletion = useMutation({
+    mutationFn: async ({ challengeId }: { challengeId: string }) => {
+      if (!userId) throw new Error("Not authenticated");
+
+      const { error } = await supabase.rpc("complete_weekly_challenge", {
+        p_challenge_id: challengeId,
+      });
+      if (error) throw new Error(error.message);
+
+      trackEvent("weekly_challenge_completed", { challenge_id: challengeId });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", userId] });
+    },
+  });
+
   return {
     data,
     loading: isLoading,
     dadDates: data?.dadDates ?? [],
     dadsCount: appStats?.dadsCount ?? 0,
     checkIn,
+    challengeParticipation,
+    challengeCompletion,
+    refreshChallenge: refetch,
   };
 }
