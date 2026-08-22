@@ -808,9 +808,17 @@ create table if not exists weekly_challenges (
   title text not null,
   description text,
   participants_count int default 0,
-  active boolean default true,
+  active boolean not null default false,
   created_at timestamptz default now()
 );
+
+update public.weekly_challenges
+set active = false
+where active is null;
+
+alter table public.weekly_challenges
+  alter column active set default false,
+  alter column active set not null;
 
 insert into weekly_challenges (title, description, participants_count, active) 
 select 'Screen-free Sunday', 'Put the phone down for a full Sunday. Be fully present with your kids.', 0, true 
@@ -822,6 +830,331 @@ set description = 'Put the phone down for a full Sunday. Be fully present with y
     participants_count = 0
 where title = 'Screen-free Sunday'
   and description = '847 dads taking part';
+
+with ranked_active as (
+  select
+    id,
+    row_number() over (
+      order by created_at desc nulls last, id desc
+    ) as active_position
+  from public.weekly_challenges
+  where active is true
+)
+update public.weekly_challenges as challenge
+set active = false
+from ranked_active
+where challenge.id = ranked_active.id
+  and ranked_active.active_position > 1;
+
+create unique index if not exists weekly_challenges_single_active_idx
+on public.weekly_challenges ((1))
+where active is true;
+
+create or replace function public.set_active_weekly_challenge(
+  p_challenge_id uuid,
+  p_active boolean
+)
+returns setof public.weekly_challenges
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  perform pg_advisory_xact_lock(
+    hashtextextended('public.weekly_challenges.single_active', 0)
+  );
+
+  if not exists (
+    select 1
+    from public.weekly_challenges
+    where id = p_challenge_id
+  ) then
+    return;
+  end if;
+
+  if p_active then
+    update public.weekly_challenges
+    set active = false
+    where active is true
+      and id <> p_challenge_id;
+  end if;
+
+  return query
+  update public.weekly_challenges
+  set active = p_active
+  where id = p_challenge_id
+  returning *;
+end;
+$$;
+
+revoke all
+on function public.set_active_weekly_challenge(uuid, boolean)
+from public, anon, authenticated;
+
+grant execute
+on function public.set_active_weekly_challenge(uuid, boolean)
+to service_role;
+
+create table if not exists public.weekly_challenge_participants (
+  challenge_id uuid not null references public.weekly_challenges(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  joined_at timestamptz not null default now(),
+  completed_at timestamptz,
+  primary key (challenge_id, user_id)
+);
+
+alter table public.weekly_challenge_participants
+  add column if not exists completed_at timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'weekly_challenge_completion_after_join'
+      and conrelid = 'public.weekly_challenge_participants'::regclass
+  ) then
+    alter table public.weekly_challenge_participants
+      add constraint weekly_challenge_completion_after_join
+      check (completed_at is null or completed_at >= joined_at);
+  end if;
+end;
+$$;
+
+create or replace function public.complete_weekly_challenge(
+  p_challenge_id uuid
+)
+returns timestamptz
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_completed_at timestamptz;
+begin
+  if v_user_id is null then
+    raise exception using
+      errcode = '42501',
+      message = 'authentication_required';
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended('public.weekly_challenges.single_active', 0)
+  );
+
+  select participant.completed_at
+  into v_completed_at
+  from public.weekly_challenge_participants as participant
+  where participant.challenge_id = p_challenge_id
+    and participant.user_id = v_user_id
+  for update;
+
+  if not found then
+    raise exception using
+      errcode = 'P0001',
+      message = 'challenge_not_joined';
+  end if;
+
+  if v_completed_at is not null then
+    return v_completed_at;
+  end if;
+
+  if not exists (
+    select 1
+    from public.weekly_challenges as challenge
+    where challenge.id = p_challenge_id
+      and challenge.active is true
+  ) then
+    raise exception using
+      errcode = 'P0001',
+      message = 'challenge_not_active';
+  end if;
+
+  update public.weekly_challenge_participants
+  set completed_at = now()
+  where challenge_id = p_challenge_id
+    and user_id = v_user_id
+    and completed_at is null
+  returning completed_at into v_completed_at;
+
+  return v_completed_at;
+end;
+$$;
+
+revoke all
+on function public.complete_weekly_challenge(uuid)
+from public, anon, authenticated, service_role;
+
+grant execute
+on function public.complete_weekly_challenge(uuid)
+to authenticated;
+
+update public.weekly_challenges as challenge
+set participants_count = (
+  select count(*)::integer
+  from public.weekly_challenge_participants as participant
+  where participant.challenge_id = challenge.id
+);
+
+alter table public.weekly_challenges
+  alter column participants_count set default 0,
+  alter column participants_count set not null;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'weekly_challenges_participants_count_nonnegative'
+      and conrelid = 'public.weekly_challenges'::regclass
+  ) then
+    alter table public.weekly_challenges
+      add constraint weekly_challenges_participants_count_nonnegative
+      check (participants_count >= 0);
+  end if;
+end;
+$$;
+
+create or replace function public.sync_weekly_challenge_participant_count()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.weekly_challenges
+    set participants_count = participants_count + 1
+    where id = new.challenge_id;
+    return new;
+  end if;
+
+  if tg_op = 'DELETE' then
+    update public.weekly_challenges
+    set participants_count = greatest(participants_count - 1, 0)
+    where id = old.challenge_id;
+    return old;
+  end if;
+
+  if old.challenge_id is distinct from new.challenge_id then
+    update public.weekly_challenges
+    set participants_count = greatest(participants_count - 1, 0)
+    where id = old.challenge_id;
+
+    update public.weekly_challenges
+    set participants_count = participants_count + 1
+    where id = new.challenge_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all
+on function public.sync_weekly_challenge_participant_count()
+from public, anon, authenticated;
+
+drop trigger if exists sync_weekly_challenge_participant_count_on_membership
+on public.weekly_challenge_participants;
+
+create trigger sync_weekly_challenge_participant_count_on_membership
+after insert or delete or update of challenge_id
+on public.weekly_challenge_participants
+for each row
+execute function public.sync_weekly_challenge_participant_count();
+
+alter table public.weekly_challenges enable row level security;
+
+revoke all privileges
+on table public.weekly_challenges
+from anon, authenticated;
+
+grant select
+on table public.weekly_challenges
+to anon, authenticated;
+
+do $$
+declare
+  existing_policy record;
+begin
+  for existing_policy in
+    select policyname
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'weekly_challenges'
+  loop
+    execute format(
+      'drop policy %I on public.weekly_challenges',
+      existing_policy.policyname
+    );
+  end loop;
+end;
+$$;
+
+create policy "Clients can read active weekly challenge"
+on public.weekly_challenges
+for select
+to anon, authenticated
+using (active is true);
+
+alter table public.weekly_challenge_participants enable row level security;
+
+revoke all privileges
+on table public.weekly_challenge_participants
+from anon, authenticated;
+
+grant select, delete
+on table public.weekly_challenge_participants
+to authenticated;
+
+grant insert (challenge_id, user_id)
+on table public.weekly_challenge_participants
+to authenticated;
+
+drop policy if exists "Users can read own weekly challenge participation"
+on public.weekly_challenge_participants;
+
+create policy "Users can read own weekly challenge participation"
+on public.weekly_challenge_participants
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Users can join active weekly challenge"
+on public.weekly_challenge_participants;
+
+create policy "Users can join active weekly challenge"
+on public.weekly_challenge_participants
+for insert
+to authenticated
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.weekly_challenges as challenge
+    where challenge.id = weekly_challenge_participants.challenge_id
+      and challenge.active is true
+  )
+);
+
+drop policy if exists "Users can leave own weekly challenge"
+on public.weekly_challenge_participants;
+
+create policy "Users can leave own weekly challenge"
+on public.weekly_challenge_participants
+for delete
+to authenticated
+using (
+  auth.uid() = user_id
+  and completed_at is null
+  and exists (
+    select 1
+    from public.weekly_challenges as challenge
+    where challenge.id = weekly_challenge_participants.challenge_id
+      and challenge.active is true
+  )
+);
 
 -- meal_plans
 create table if not exists meal_plans (
@@ -1121,6 +1454,25 @@ after insert or delete or update of circle_id
 on public.user_circles
 for each row
 execute function public.sync_circle_member_count();
+
+alter table public.circles enable row level security;
+
+revoke all privileges
+on table public.circles
+from anon, authenticated;
+
+grant select
+on table public.circles
+to anon, authenticated;
+
+drop policy if exists "Anyone can read circles"
+on public.circles;
+
+create policy "Anyone can read circles"
+on public.circles
+for select
+to anon, authenticated
+using (true);
 
 -- badges
 create table if not exists badges (
