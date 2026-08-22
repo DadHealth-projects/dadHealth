@@ -19,6 +19,132 @@ async function verifyAdmin(): Promise<boolean> {
   return session === adminKey;
 }
 
+const CIRCLE_ICON_KEYS = new Set([
+  "community",
+  "baby",
+  "grad",
+  "fitness",
+  "mind",
+  "bond",
+  "gaming",
+  "camping",
+  "kickabout",
+  "run",
+  "story",
+  "journal",
+]);
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type CircleWriteResult =
+  | { ok: true; value: { id?: string; name: string; icon: string } }
+  | { ok: false; error: string };
+
+type ChallengeWriteResult =
+  | { ok: true; value: { id?: string; title: string; description: string } }
+  | { ok: false; error: string };
+
+function parseCircleWrite(body: unknown, requireId: boolean): CircleWriteResult {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, error: "Circle details are required." };
+  }
+
+  const record = body as Record<string, unknown>;
+  const allowedKeys = new Set(requireId ? ["id", "name", "icon"] : ["name", "icon"]);
+  if (Object.keys(record).some((key) => !allowedKeys.has(key))) {
+    return { ok: false, error: "Only Circle name and icon can be changed." };
+  }
+
+  const name = typeof record.name === "string" ? record.name.trim() : "";
+  const icon = typeof record.icon === "string" ? record.icon.trim() : "";
+  if (!name) return { ok: false, error: "Circle name is required." };
+  if (!CIRCLE_ICON_KEYS.has(icon)) return { ok: false, error: "Choose a supported Circle icon." };
+
+  if (!requireId) return { ok: true, value: { name, icon } };
+
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  if (!UUID_PATTERN.test(id)) return { ok: false, error: "A valid Circle ID is required." };
+  return { ok: true, value: { id, name, icon } };
+}
+
+function parseCircleId(body: unknown): { ok: true; id: string } | { ok: false; error: string } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, error: "A valid Circle ID is required." };
+  }
+  const record = body as Record<string, unknown>;
+  if (Object.keys(record).some((key) => key !== "id")) {
+    return { ok: false, error: "Only the Circle ID can be supplied when deleting." };
+  }
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  return UUID_PATTERN.test(id)
+    ? { ok: true, id }
+    : { ok: false, error: "A valid Circle ID is required." };
+}
+
+function parseChallengeWrite(body: unknown, requireId: boolean): ChallengeWriteResult {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, error: "Challenge details are required." };
+  }
+
+  const record = body as Record<string, unknown>;
+  const allowedKeys = new Set(requireId ? ["id", "title", "description"] : ["title", "description"]);
+  if (Object.keys(record).some((key) => !allowedKeys.has(key))) {
+    return { ok: false, error: "Only the challenge title and description can be changed." };
+  }
+
+  const title = typeof record.title === "string" ? record.title.trim() : "";
+  if (!title) return { ok: false, error: "Challenge title is required." };
+  if (record.description == null) {
+    return { ok: false, error: "Challenge description is required." };
+  }
+  if (typeof record.description !== "string") {
+    return { ok: false, error: "Challenge description must be text." };
+  }
+  const description = record.description.trim();
+  if (!description) return { ok: false, error: "Challenge description is required." };
+
+  if (!requireId) return { ok: true, value: { title, description } };
+
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  if (!UUID_PATTERN.test(id)) return { ok: false, error: "A valid challenge ID is required." };
+  return { ok: true, value: { id, title, description } };
+}
+
+function parseChallengeActive(
+  body: unknown,
+): { ok: true; id: string; active: boolean } | { ok: false; error: string } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, error: "Challenge active state is required." };
+  }
+
+  const record = body as Record<string, unknown>;
+  const allowedKeys = new Set(["id", "active"]);
+  if (Object.keys(record).some((key) => !allowedKeys.has(key))) {
+    return { ok: false, error: "Only the challenge active state can be changed in this request." };
+  }
+
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  if (!UUID_PATTERN.test(id)) return { ok: false, error: "A valid challenge ID is required." };
+  if (typeof record.active !== "boolean") {
+    return { ok: false, error: "Challenge active state must be true or false." };
+  }
+  return { ok: true, id, active: record.active };
+}
+
+function parseChallengeId(body: unknown): { ok: true; id: string } | { ok: false; error: string } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, error: "A valid challenge ID is required." };
+  }
+  const record = body as Record<string, unknown>;
+  if (Object.keys(record).some((key) => key !== "id")) {
+    return { ok: false, error: "Only the challenge ID can be supplied when deleting." };
+  }
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  return UUID_PATTERN.test(id)
+    ? { ok: true, id }
+    : { ok: false, error: "A valid challenge ID is required." };
+}
+
 // Query PostHog for distinct visitors over the last 7 days via HogQL.
 // Returns null if env vars are missing or the request fails — never throws,
 // so analytics stays responsive even when PostHog is unavailable.
@@ -69,32 +195,13 @@ export async function GET(
   try {
     switch (resource) {
       case "challenges": {
-        const { data: challenges, error } = await supabase
+        const { data, error } = await supabase
           .from("weekly_challenges")
-          .select("*")
+          .select("id, title, description, active, created_at")
+          .order("active", { ascending: false })
           .order("created_at", { ascending: false });
         if (error) throw error;
-        if (!challenges || challenges.length === 0) return NextResponse.json([]);
-
-        // Compute real participant counts: distinct users who checked in (mood log)
-        // on or after each challenge's created_at date.
-        const counts = await Promise.all(
-          challenges.map(async (c) => {
-            const { count } = await supabase
-              .from("mood_logs")
-              .select("user_id", { count: "exact", head: true })
-              .gte("created_at", c.created_at);
-            return { id: c.id, participants_count: count ?? 0 };
-          }),
-        );
-
-        const countMap = Object.fromEntries(counts.map((r) => [r.id, r.participants_count]));
-        const enriched = challenges.map((c) => ({
-          ...c,
-          participants_count: countMap[c.id] ?? 0,
-        }));
-
-        return NextResponse.json(enriched);
+        return NextResponse.json(data ?? []);
       }
 
       case "recipes": {
@@ -132,6 +239,15 @@ export async function GET(
           .order("name");
         if (error) throw error;
         return NextResponse.json(data);
+      }
+
+      case "circles": {
+        const { data, error } = await supabase
+          .from("circles")
+          .select("id, name, icon, members_count")
+          .order("name", { ascending: true });
+        if (error) throw error;
+        return NextResponse.json(data ?? []);
       }
 
       case "expert_events": {
@@ -208,6 +324,12 @@ export async function GET(
     }
   } catch (err) {
     console.error(`[admin GET ${resource}]`, err);
+    if (resource === "challenges") {
+      return NextResponse.json({ error: "Weekly challenges could not be loaded. Please try again." }, { status: 500 });
+    }
+    if (resource === "circles") {
+      return NextResponse.json({ error: "Dad Circles could not be loaded. Please try again." }, { status: 500 });
+    }
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
@@ -228,17 +350,20 @@ export async function POST(
   try {
     switch (resource) {
       case "challenges": {
+        const parsed = parseChallengeWrite(body, false);
+        if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
         const { data, error } = await supabase
           .from("weekly_challenges")
           .insert({
-            title: body.title,
-            description: body.description ?? null,
-            active: body.active ?? true,
+            title: parsed.value.title,
+            description: parsed.value.description,
+            active: false,
           })
-          .select()
+          .select("id, title, description, active, created_at")
           .single();
         if (error) throw error;
-        return NextResponse.json(data);
+        return NextResponse.json(data, { status: 201 });
       }
 
       case "recipes": {
@@ -311,6 +436,19 @@ export async function POST(
         return NextResponse.json(data);
       }
 
+      case "circles": {
+        const parsed = parseCircleWrite(body, false);
+        if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+        const { data, error } = await supabase
+          .from("circles")
+          .insert(parsed.value)
+          .select("id, name, icon, members_count")
+          .single();
+        if (error) throw error;
+        return NextResponse.json(data, { status: 201 });
+      }
+
       case "expert_events": {
         const { data, error } = await supabase
           .from("expert_events")
@@ -332,6 +470,12 @@ export async function POST(
     }
   } catch (err) {
     console.error(`[admin POST ${resource}]`, err);
+    if (resource === "challenges") {
+      return NextResponse.json({ error: "This weekly challenge could not be created. Please try again." }, { status: 500 });
+    }
+    if (resource === "circles") {
+      return NextResponse.json({ error: "This Circle could not be created. Please try again." }, { status: 500 });
+    }
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
@@ -348,12 +492,78 @@ export async function PATCH(
   const { resource } = await context.params;
   const supabase = getAdminSupabase();
   const body = await req.json();
+
+  if (resource === "challenges") {
+    if (body && typeof body === "object" && !Array.isArray(body) && "active" in body) {
+      const parsed = parseChallengeActive(body);
+      if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+      try {
+        const { data, error } = await supabase
+          .rpc("set_active_weekly_challenge", {
+            p_challenge_id: parsed.id,
+            p_active: parsed.active,
+          })
+          .select("id, title, description, active, created_at")
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return NextResponse.json({ error: "This weekly challenge no longer exists." }, { status: 404 });
+        return NextResponse.json(data);
+      } catch (err) {
+        console.error("[admin PATCH challenges active]", err);
+        return NextResponse.json(
+          { error: parsed.active ? "This weekly challenge could not be made active. Please try again." : "This weekly challenge could not be deactivated. Please try again." },
+          { status: 500 },
+        );
+      }
+    }
+
+    const parsed = parseChallengeWrite(body, true);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { id, ...updates } = parsed.value;
+
+    try {
+      const { data, error } = await supabase
+        .from("weekly_challenges")
+        .update(updates)
+        .eq("id", id!)
+        .select("id, title, description, active, created_at")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return NextResponse.json({ error: "This weekly challenge no longer exists." }, { status: 404 });
+      return NextResponse.json(data);
+    } catch (err) {
+      console.error("[admin PATCH challenges content]", err);
+      return NextResponse.json({ error: "This weekly challenge could not be updated. Please try again." }, { status: 500 });
+    }
+  }
+
+  if (resource === "circles") {
+    const parsed = parseCircleWrite(body, true);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { id, ...updates } = parsed.value;
+
+    try {
+      const { data, error } = await supabase
+        .from("circles")
+        .update(updates)
+        .eq("id", id!)
+        .select("id, name, icon, members_count")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return NextResponse.json({ error: "This Circle no longer exists." }, { status: 404 });
+      return NextResponse.json(data);
+    } catch (err) {
+      console.error("[admin PATCH circles]", err);
+      return NextResponse.json({ error: "This Circle could not be updated. Please try again." }, { status: 500 });
+    }
+  }
+
   const { id, ...updates } = body;
 
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const TABLE_MAP: Record<string, string> = {
-    challenges: "weekly_challenges",
     recipes: "recipes",
     workouts: "workouts",
     therapists: "therapists",
@@ -390,7 +600,48 @@ export async function DELETE(
 
   const { resource } = await context.params;
   const supabase = getAdminSupabase();
-  const { id } = await req.json();
+  const body = await req.json();
+  const { id } = body;
+
+  if (resource === "challenges") {
+    const parsed = parseChallengeId(body);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+    try {
+      const { data, error } = await supabase
+        .from("weekly_challenges")
+        .delete()
+        .eq("id", parsed.id)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return NextResponse.json({ error: "This weekly challenge no longer exists." }, { status: 404 });
+      return NextResponse.json({ ok: true });
+    } catch (err) {
+      console.error("[admin DELETE challenges]", err);
+      return NextResponse.json({ error: "This weekly challenge could not be deleted. Please try again." }, { status: 500 });
+    }
+  }
+
+  if (resource === "circles") {
+    const parsed = parseCircleId(body);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+    try {
+      const { data, error } = await supabase
+        .from("circles")
+        .delete()
+        .eq("id", parsed.id)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return NextResponse.json({ error: "This Circle no longer exists." }, { status: 404 });
+      return NextResponse.json({ ok: true });
+    } catch (err) {
+      console.error("[admin DELETE circles]", err);
+      return NextResponse.json({ error: "This Circle could not be deleted. Please try again." }, { status: 500 });
+    }
+  }
 
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
@@ -407,7 +658,6 @@ export async function DELETE(
   }
 
   const TABLE_MAP: Record<string, string> = {
-    challenges: "weekly_challenges",
     recipes: "recipes",
     workouts: "workouts",
     therapists: "therapists",

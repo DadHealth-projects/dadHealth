@@ -18,8 +18,10 @@ import {
   Trash2,
   Trophy,
   UtensilsCrossed,
+  Users,
   X,
 } from "lucide-react";
+import { DashboardIcon } from "@/components/DashboardIcon";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +33,7 @@ type Tab =
   | "therapists"
   | "dad_dates"
   | "expert_events"
+  | "circles"
   | "moderation";
 
 interface Challenge {
@@ -38,7 +41,6 @@ interface Challenge {
   title: string;
   description?: string;
   active: boolean;
-  participants_count?: number;
   created_at?: string;
 }
 
@@ -104,6 +106,13 @@ interface ExpertEvent {
   active: boolean;
 }
 
+interface CircleItem {
+  id: string;
+  icon: string;
+  name: string;
+  members_count: number | null;
+}
+
 interface Post {
   id: string;
   content: string;
@@ -138,6 +147,15 @@ async function adminFetch(
     },
     credentials: "include",
   });
+}
+
+async function adminErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = await response.json() as { error?: unknown };
+    return typeof body.error === "string" && body.error.trim() ? body.error : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -241,110 +259,222 @@ function AnalyticsTab() {
 
 // ── Challenges Tab ────────────────────────────────────────────────────────────
 
+const BLANK_CHALLENGE_FORM = { title: "", description: "" };
+
 function ChallengesTab() {
   const [items, setItems] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", active: true });
+  const [changingActiveId, setChangingActiveId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [form, setForm] = useState(BLANK_CHALLENGE_FORM);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await adminFetch("/api/admin/challenges");
-      if (res.ok) setItems(await res.json());
+      if (!res.ok) {
+        setError(await adminErrorMessage(res, "Weekly challenges could not be loaded. Please try again."));
+        return;
+      }
+      setItems(await res.json());
+    } catch {
+      setError("Weekly challenges could not be loaded. Please try again.");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const handleCreate = async () => {
-    if (!form.title.trim()) return;
+  const resetForm = () => {
+    setForm(BLANK_CHALLENGE_FORM);
+    setEditId(null);
+    setShowForm(false);
+  };
+
+  const startCreate = () => {
+    setError(null);
+    setNotice(null);
+    setForm(BLANK_CHALLENGE_FORM);
+    setEditId(null);
+    setShowForm(true);
+  };
+
+  const startEdit = (item: Challenge) => {
+    setError(null);
+    setNotice(null);
+    setForm({ title: item.title, description: item.description ?? "" });
+    setEditId(item.id);
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    const title = form.title.trim();
+    if (!title) {
+      setError("Enter a challenge title before saving.");
+      return;
+    }
+    const description = form.description.trim();
+    if (!description) {
+      setError("Enter the challenge instruction before saving.");
+      return;
+    }
+
     setSaving(true);
+    setError(null);
+    setNotice(null);
     try {
       const res = await adminFetch("/api/admin/challenges", {
-        method: "POST",
-        body: JSON.stringify(form),
+        method: editId ? "PATCH" : "POST",
+        body: JSON.stringify(editId
+          ? { id: editId, title, description }
+          : { title, description }),
       });
-      if (res.ok) {
-        setForm({ title: "", description: "", active: true });
-        setShowForm(false);
-        load();
+      if (!res.ok) {
+        setError(await adminErrorMessage(
+          res,
+          editId ? "This weekly challenge could not be updated. Please try again." : "This weekly challenge could not be created. Please try again.",
+        ));
+        return;
       }
+
+      const message = editId ? "Weekly challenge updated." : "Weekly challenge created. Use Make active when it is ready to appear in Dad Health.";
+      resetForm();
+      await load();
+      setNotice(message);
+    } catch {
+      setError(editId ? "This weekly challenge could not be updated. Please try again." : "This weekly challenge could not be created. Please try again.");
     } finally {
       setSaving(false);
     }
   };
 
-  const toggleActive = async (item: Challenge) => {
-    await adminFetch("/api/admin/challenges", {
-      method: "PATCH",
-      body: JSON.stringify({ id: item.id, active: !item.active }),
-    });
-    load();
+  const changeActiveState = async (item: Challenge) => {
+    const nextActive = !item.active;
+    const currentActive = items.find((candidate) => candidate.active && candidate.id !== item.id);
+
+    if (nextActive && currentActive) {
+      const confirmed = confirm(`Make “${item.title}” active? It will replace “${currentActive.title}” in Dad Health.`);
+      if (!confirmed) return;
+    }
+    if (!nextActive) {
+      const confirmed = confirm(`Deactivate “${item.title}”? Dad Health will show no active weekly challenge until another is selected.`);
+      if (!confirmed) return;
+    }
+
+    setChangingActiveId(item.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await adminFetch("/api/admin/challenges", {
+        method: "PATCH",
+        body: JSON.stringify({ id: item.id, active: nextActive }),
+      });
+      if (!res.ok) {
+        setError(await adminErrorMessage(
+          res,
+          nextActive ? "This weekly challenge could not be made active. Please try again." : "This weekly challenge could not be deactivated. Please try again.",
+        ));
+        return;
+      }
+      await load();
+      setNotice(nextActive ? "Weekly challenge is now shown in Dad Health." : "Weekly challenge deactivated.");
+    } catch {
+      setError(nextActive ? "This weekly challenge could not be made active. Please try again." : "This weekly challenge could not be deactivated. Please try again.");
+    } finally {
+      setChangingActiveId(null);
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this challenge?")) return;
-    await adminFetch("/api/admin/challenges", {
-      method: "DELETE",
-      body: JSON.stringify({ id }),
-    });
-    load();
+  const handleDelete = async (item: Challenge) => {
+    const activeWarning = item.active ? " Dad Health will show no active weekly challenge until another is selected." : "";
+    if (!confirm(`Delete “${item.title}”? Its participation and completion history will also be removed.${activeWarning}`)) return;
+
+    setDeletingId(item.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await adminFetch("/api/admin/challenges", {
+        method: "DELETE",
+        body: JSON.stringify({ id: item.id }),
+      });
+      if (!res.ok) {
+        setError(await adminErrorMessage(res, "This weekly challenge could not be deleted. Please try again."));
+        return;
+      }
+      if (editId === item.id) resetForm();
+      await load();
+      setNotice("Weekly challenge deleted.");
+    } catch {
+      setError("This weekly challenge could not be deleted. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
     <div>
-      <SectionHeader title="Weekly Challenges" onRefresh={load}>
-        <button type="button" onClick={() => setShowForm((v) => !v)} className={btnPrimary}>
+      <SectionHeader title="Weekly Challenges" onRefresh={() => void load()}>
+        <button type="button" onClick={startCreate} className={btnPrimary}>
           <Plus className="h-3 w-3" /> New Challenge
         </button>
       </SectionHeader>
 
+      <p className="mb-4 text-sm text-muted-foreground">
+        Only the challenge marked Shown in Dad Health appears in the web and mobile apps. Create a new challenge for each week; editing an existing challenge keeps its participation history.
+      </p>
+
+      {error && (
+        <p role="alert" className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-600">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-primary">
+          {notice}
+        </p>
+      )}
+
       {showForm && (
-        <div className="mb-6 rounded-2xl border border-border bg-card p-4 space-y-3">
+        <div className="mb-6 space-y-3 rounded-2xl border border-border bg-card p-4">
           <h3 className="font-heading text-sm font-extrabold uppercase text-foreground">
-            Create Challenge
+            {editId ? "Edit Challenge" : "Create Challenge"}
           </h3>
           <div>
             <label className={labelCls}>Title *</label>
             <input
               className={inputCls}
               value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
               placeholder="e.g. Screen-free Sunday"
+              autoFocus
             />
           </div>
           <div>
-            <label className={labelCls}>Description</label>
+            <label className={labelCls}>Challenge instruction *</label>
             <textarea
               className={`${inputCls} min-h-[80px] resize-none`}
               value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
               placeholder="Challenge description…"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="challenge-active"
-              checked={form.active}
-              onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
-              className="h-4 w-4 accent-primary"
-            />
-            <label htmlFor="challenge-active" className="text-sm text-foreground">
-              Active immediately
-            </label>
-          </div>
+          {!editId && (
+            <p className="text-xs text-muted-foreground">
+              New challenges are created inactive. Use Make active when the challenge is ready to appear in Dad Health.
+            </p>
+          )}
           <div className="flex gap-2">
-            <button type="button" onClick={handleCreate} disabled={saving} className={btnPrimary}>
-              {saving ? "Saving…" : "Save Challenge"}
+            <button type="button" onClick={() => void handleSave()} disabled={saving} className={btnPrimary}>
+              {saving ? "Saving…" : editId ? "Update Challenge" : "Create Challenge"}
             </button>
-            <button type="button" onClick={() => setShowForm(false)} className={btnGhost}>
-              Cancel
-            </button>
+            <button type="button" onClick={resetForm} disabled={saving} className={btnGhost}>Cancel</button>
           </div>
         </div>
       )}
@@ -352,51 +482,30 @@ function ChallengesTab() {
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No challenges yet.</p>
+        <p className="text-sm text-muted-foreground">No weekly challenges have been created yet.</p>
       ) : (
         <div className="space-y-2">
           {items.map((item) => (
             <div
               key={item.id}
-              className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-card p-4"
+              className={`flex items-start justify-between gap-3 rounded-2xl border bg-card p-4 ${item.active ? "border-primary" : "border-border"}`}
             >
               <div className="min-w-0 flex-1">
-                <div className="font-heading text-sm font-bold text-foreground uppercase">
-                  {item.title}
-                </div>
-                {item.description && (
-                  <p className="text-xs text-muted-foreground mt-1">{item.description}</p>
-                )}
-                <div className="flex items-center gap-2 mt-2">
-                  <span
-                    className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
-                      item.active
-                        ? "bg-primary/10 text-primary"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {item.active ? "Active" : "Inactive"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {item.participants_count ?? 0} dads checked in since launch
-                  </span>
-                </div>
+                <div className="font-heading text-sm font-bold uppercase text-foreground">{item.title}</div>
+                {item.description && <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>}
+                <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${item.active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                  {item.active ? "Shown in Dad Health" : "Not currently shown"}
+                </span>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => toggleActive(item)}
-                  className={btnGhost}
-                >
-                  {item.active ? "Deactivate" : "Activate"}
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <button type="button" onClick={() => startEdit(item)} disabled={changingActiveId === item.id || deletingId === item.id} className={`${btnGhost} disabled:opacity-50`}>
+                  Edit
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(item.id)}
-                  className={btnDanger}
-                  aria-label="Delete"
-                >
-                  <Trash2 className="h-3 w-3" />
+                <button type="button" onClick={() => void changeActiveState(item)} disabled={changingActiveId === item.id || deletingId === item.id} className={`${btnGhost} disabled:opacity-50`}>
+                  {changingActiveId === item.id ? "Updating…" : item.active ? "Deactivate" : "Make active"}
+                </button>
+                <button type="button" onClick={() => void handleDelete(item)} disabled={deletingId === item.id || changingActiveId === item.id} className={`${btnDanger} disabled:opacity-50`} aria-label={`Delete ${item.title}`}>
+                  <Trash2 className="h-3 w-3" /> {deletingId === item.id ? "Deleting…" : "Delete"}
                 </button>
               </div>
             </div>
@@ -1233,6 +1342,239 @@ function ExpertEventsTab() {
   );
 }
 
+// ── Circles Tab ──────────────────────────────────────────────────────────────
+
+// Circles catalogue management. Memberships remain user-owned.
+const CIRCLE_ICON_OPTIONS = [
+  { value: "community", label: "Community" },
+  { value: "baby", label: "New dads" },
+  { value: "grad", label: "School age" },
+  { value: "fitness", label: "Fitness" },
+  { value: "mind", label: "Mind" },
+  { value: "bond", label: "Bond" },
+  { value: "gaming", label: "Gaming" },
+  { value: "camping", label: "Outdoors" },
+  { value: "kickabout", label: "Football" },
+  { value: "run", label: "Running" },
+  { value: "story", label: "Stories" },
+  { value: "journal", label: "Journal" },
+] as const;
+
+const BLANK_CIRCLE_FORM = { name: "", icon: "community" };
+
+function CirclesTab() {
+  const [items, setItems] = useState<CircleItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [form, setForm] = useState(BLANK_CIRCLE_FORM);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await adminFetch("/api/admin/circles");
+      if (!response.ok) {
+        setError(await adminErrorMessage(response, "Dad Circles could not be loaded. Please try again."));
+        return;
+      }
+      setItems(await response.json());
+    } catch {
+      setError("Dad Circles could not be loaded. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const resetForm = () => {
+    setForm(BLANK_CIRCLE_FORM);
+    setEditId(null);
+    setShowForm(false);
+  };
+
+  const startCreate = () => {
+    setError(null);
+    setNotice(null);
+    setForm(BLANK_CIRCLE_FORM);
+    setEditId(null);
+    setShowForm(true);
+  };
+
+  const startEdit = (item: CircleItem) => {
+    setError(null);
+    setNotice(null);
+    setForm({ name: item.name, icon: item.icon });
+    setEditId(item.id);
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    const name = form.name.trim();
+    if (!name) {
+      setError("Enter a Circle name before saving.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await adminFetch("/api/admin/circles", {
+        method: editId ? "PATCH" : "POST",
+        body: JSON.stringify(editId ? { id: editId, name, icon: form.icon } : { name, icon: form.icon }),
+      });
+      if (!response.ok) {
+        setError(await adminErrorMessage(
+          response,
+          editId ? "This Circle could not be updated. Please try again." : "This Circle could not be created. Please try again.",
+        ));
+        return;
+      }
+
+      const message = editId ? "Circle updated." : "Circle created.";
+      resetForm();
+      await load();
+      setNotice(message);
+    } catch {
+      setError(editId ? "This Circle could not be updated. Please try again." : "This Circle could not be created. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (item: CircleItem) => {
+    const memberCount = item.members_count ?? 0;
+    const membershipCopy = memberCount === 1 ? "1 membership" : `${memberCount} memberships`;
+    if (!confirm(`Delete ${item.name}? This removes ${membershipCopy}. Community posts are not affected.`)) return;
+
+    setDeletingId(item.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await adminFetch("/api/admin/circles", {
+        method: "DELETE",
+        body: JSON.stringify({ id: item.id }),
+      });
+      if (!response.ok) {
+        setError(await adminErrorMessage(response, "This Circle could not be deleted. Please try again."));
+        return;
+      }
+      if (editId === item.id) resetForm();
+      await load();
+      setNotice("Circle deleted.");
+    } catch {
+      setError("This Circle could not be deleted. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <div>
+      <SectionHeader title="Dad Circles" onRefresh={() => void load()}>
+        <button type="button" onClick={startCreate} className={btnPrimary}>
+          <Plus className="h-3 w-3" /> Add Circle
+        </button>
+      </SectionHeader>
+
+      {error && (
+        <p role="alert" className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-600">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="mb-4 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-primary">
+          {notice}
+        </p>
+      )}
+
+      {showForm && (
+        <div className="mb-6 space-y-3 rounded-2xl border border-border bg-card p-4">
+          <h3 className="font-heading text-sm font-extrabold uppercase text-foreground">
+            {editId ? "Edit Circle" : "Add Circle"}
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className={labelCls}>Circle name *</label>
+              <input
+                className={inputCls}
+                value={form.name}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="e.g. New dads"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Icon</label>
+              <select
+                className={inputCls}
+                value={form.icon}
+                onChange={(event) => setForm((current) => ({ ...current, icon: event.target.value }))}
+              >
+                {CIRCLE_ICON_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-background p-3">
+            <DashboardIcon icon={form.icon} size="lg" />
+            <div>
+              <div className="font-heading text-sm font-bold uppercase text-foreground">{form.name.trim() || "Circle preview"}</div>
+              <div className="text-[11px] text-muted-foreground">Member count is managed automatically.</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => void handleSave()} disabled={saving} className={btnPrimary}>
+              {saving ? "Saving…" : editId ? "Update Circle" : "Create Circle"}
+            </button>
+            <button type="button" onClick={resetForm} disabled={saving} className={btnGhost}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {editId ? null : loading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No Dad Circles have been created yet.</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {items.map((item) => (
+            <div key={item.id} className={`rounded-2xl border bg-card p-4 ${editId === item.id ? "border-primary" : "border-border"}`}>
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-primary/10 p-2"><DashboardIcon icon={item.icon} size="lg" /></div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-heading text-sm font-bold uppercase text-foreground">{item.name}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {(item.members_count ?? 0).toLocaleString()} {(item.members_count ?? 0) === 1 ? "member" : "members"}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button type="button" onClick={() => startEdit(item)} className={btnGhost}>Edit</button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(item)}
+                  disabled={deletingId === item.id}
+                  className={`${btnDanger} disabled:opacity-50`}
+                >
+                  <Trash2 className="h-3 w-3" /> {deletingId === item.id ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Moderation Tab ────────────────────────────────────────────────────────────
 
 function ModerationTab() {
@@ -1426,6 +1768,7 @@ const NAV_ITEMS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "therapists", label: "Therapists", icon: <Stethoscope className="h-4 w-4" /> },
   { id: "dad_dates", label: "Dad Dates", icon: <Heart className="h-4 w-4" /> },
   { id: "expert_events", label: "Expert Q&A", icon: <CalendarDays className="h-4 w-4" /> },
+  { id: "circles", label: "Circles", icon: <Users className="h-4 w-4" /> },
   { id: "moderation", label: "Moderation", icon: <Flag className="h-4 w-4" /> },
 ];
 
@@ -1472,6 +1815,7 @@ export default function AdminPage() {
       case "therapists": return <TherapistsTab />;
       case "dad_dates": return <DadDatesTab />;
       case "expert_events": return <ExpertEventsTab />;
+      case "circles": return <CirclesTab />;
       case "moderation": return <ModerationTab />;
     }
   };
