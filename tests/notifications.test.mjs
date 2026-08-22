@@ -103,6 +103,15 @@ test("Present Dad completion is enforced against the server-owned ends_at", asyn
   assert.match(dispatch, /\.eq\("status", "active"\)[\s\S]*\.lte\("ends_at", nowIso\)/);
 });
 
+test("Weekly Challenge notification is skipped when no active challenge exists", async () => {
+  const dispatch = await source("src/app/api/notifications/dispatch/route.ts");
+
+  assert.match(
+    dispatch,
+    /if \(type === "weekly_challenge"\)[\s\S]*?weeklyChallenge = cachedChallenge \?\? null;[\s\S]*?if \(!weeklyChallenge\) \{[\s\S]*?skipped \+= 1;[\s\S]*?continue;/,
+  );
+});
+
 test("notification environment and database setting names stay aligned", async () => {
   const envExample = await source(".env.local.example");
   const schema = await source("supabase/schema.sql");

@@ -304,6 +304,10 @@ export async function GET(request: Request) {
             cachedChallenge = (cRes.data as { title: string; description?: string | null } | null) ?? null;
           }
           weeklyChallenge = cachedChallenge ?? null;
+          if (!weeklyChallenge) {
+            skipped += 1;
+            continue;
+          }
         }
 
         if (type === "weekly_score") {
