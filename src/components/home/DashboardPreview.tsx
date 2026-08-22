@@ -14,6 +14,7 @@ import MindScreen from "./dashboardPreview/MindScreen";
 import BondScreen from "./dashboardPreview/BondScreen";
 import CommunityScreen from "./dashboardPreview/CommunityScreen";
 import ProgressScreen from "./dashboardPreview/ProgressScreen";
+import WeeklyChallengeScreen, { type WeeklyChallengeItem } from "./dashboardPreview/WeeklyChallengeScreen";
 import { useDashboardPreviewData } from "./dashboardPreview/useDashboardPreviewData";
 import type { DashboardGoal, DashboardScreen } from "./dashboardPreview/types";
 import { trackEvent } from "@/lib/analytics";
@@ -59,7 +60,14 @@ type DashboardPreviewProps = {
 const DashboardPreview = ({ variant = "preview" }: DashboardPreviewProps) => {
   const { user, loading: authLoading } = useAuth();
   const { data: profile } = useUserProfile(user?.id);
-  const { data: dashboard, dadsCount, checkIn } = useDashboard(user?.id);
+  const {
+    data: dashboard,
+    dadsCount,
+    checkIn,
+    challengeParticipation,
+    challengeCompletion,
+    refreshChallenge,
+  } = useDashboard(user?.id);
   const { posts: communityPosts = [], loading: communityLoading } = useCommunity(user?.id);
   const [activeScreen, setActiveScreen] = useState<DashboardScreen>("HOME");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -154,6 +162,8 @@ const DashboardPreview = ({ variant = "preview" }: DashboardPreviewProps) => {
     if (status === "log") return "Mark Done";
     return "View";
   };
+
+  const challenge = (dashboard?.challenge as WeeklyChallengeItem | null | undefined) ?? null;
 
   if (authLoading) {
     return (
@@ -267,8 +277,10 @@ const DashboardPreview = ({ variant = "preview" }: DashboardPreviewProps) => {
             moodWeek={moodWeek}
             moodSummary={moodSummary}
             reminders={reminders}
-            challenge={(dashboard?.challenge as { title?: string; participants_count?: number } | null) ?? null}
-            onGoProgress={() => setActiveScreen("PROGRESS")}
+            challenge={challenge}
+            onOpenChallenge={() => {
+              if (challenge) setActiveScreen("CHALLENGE");
+            }}
           />
         ) : (
           <>
@@ -306,6 +318,29 @@ const DashboardPreview = ({ variant = "preview" }: DashboardPreviewProps) => {
                 loading={communityLoading}
                 posts={displayPosts}
                 circles={circles}
+              />
+            )}
+            {activeScreen === "CHALLENGE" && (
+              <WeeklyChallengeScreen
+                isFullDashboard={isFullDashboard}
+                userId={user?.id}
+                challenge={challenge}
+                busy={challengeParticipation.isPending || challengeCompletion.isPending}
+                onBack={() => setActiveScreen("HOME")}
+                onRetry={async () => {
+                  await refreshChallenge();
+                }}
+                onParticipationChange={async (join) => {
+                  if (!challenge) return;
+                  await challengeParticipation.mutateAsync({
+                    challengeId: challenge.id,
+                    join,
+                  });
+                }}
+                onComplete={async () => {
+                  if (!challenge) return;
+                  await challengeCompletion.mutateAsync({ challengeId: challenge.id });
+                }}
               />
             )}
             {activeScreen === "PROGRESS" && (

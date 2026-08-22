@@ -31,8 +31,8 @@ type HomeScreenProps = {
   moodWeek: number[];
   moodSummary: { label: string; scoreText: string };
   reminders: ReminderItem[];
-  challenge: { title?: string; participants_count?: number } | null;
-  onGoProgress: () => void;
+  challenge: { id: string; title: string; participants_count: number } | null;
+  onOpenChallenge: () => void;
 };
 
 export default function HomeScreen({
@@ -58,7 +58,7 @@ export default function HomeScreen({
   moodSummary,
   reminders,
   challenge,
-  onGoProgress,
+  onOpenChallenge,
 }: HomeScreenProps) {
   const { isPro } = useProStatus();
   return (
@@ -237,16 +237,17 @@ export default function HomeScreen({
           <div className="font-heading text-[10px] font-bold tracking-[2px] uppercase text-primary mb-1">
             THIS WEEK'S CHALLENGE
           </div>
-          <div className="font-heading text-[16px] font-extrabold text-foreground uppercase tracking-wide mb-1">
+          <div className="line-clamp-2 font-heading text-[16px] font-extrabold text-foreground uppercase tracking-wide mb-1">
             {challenge?.title ?? "NO ACTIVE CHALLENGE"}
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            {challenge?.participants_count ?? 0} dads taking part
+            {challenge?.participants_count ?? 0} {(challenge?.participants_count ?? 0) === 1 ? "dad" : "dads"} taking part
           </p>
           <button
             type="button"
-            onClick={onGoProgress}
-            className="bg-transparent border-[1.5px] font-heading font-bold tracking-wider uppercase cursor-pointer inline-flex gap-1.5 py-2 px-3.5 text-[11px] text-foreground border-foreground hover:border-primary hover:text-primary transition-all duration-200"
+            onClick={onOpenChallenge}
+            disabled={!challenge}
+            className="bg-transparent border-[1.5px] font-heading font-bold tracking-wider uppercase cursor-pointer inline-flex gap-1.5 py-2 px-3.5 text-[11px] text-foreground border-foreground hover:border-primary hover:text-primary transition-all duration-200 disabled:cursor-default disabled:opacity-50"
           >
             TAKE ACTION →
           </button>
