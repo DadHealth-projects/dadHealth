@@ -22,6 +22,7 @@ alter table posts enable row level security;
 alter table likes enable row level security;
 alter table comments enable row level security;
 alter table saved_posts enable row level security;
+alter table circles enable row level security;
 alter table user_circles enable row level security;
 alter table earned_badges enable row level security;
 alter table recipes enable row level security;
@@ -32,6 +33,8 @@ alter table user_integrations enable row level security;
 alter table co_parenting_schedules enable row level security;
 alter table co_parenting_events enable row level security;
 alter table expert_events enable row level security;
+alter table weekly_challenges enable row level security;
+alter table weekly_challenge_participants enable row level security;
 
 -- ============================================================
 -- AUTHENTICATION AND ADMIN TABLES
@@ -189,6 +192,123 @@ create policy "Users can delete own saves" on saved_posts for delete using (auth
 -- ============================================================
 -- GROUPS AND BADGES - USER SPECIFIC
 -- ============================================================
+
+-- weekly challenges: clients see the active challenge; participation is owner-only
+revoke all privileges
+on table public.weekly_challenges
+from anon, authenticated;
+
+grant select
+on table public.weekly_challenges
+to anon, authenticated;
+
+do $$
+declare
+  existing_policy record;
+begin
+  for existing_policy in
+    select policyname
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'weekly_challenges'
+  loop
+    execute format(
+      'drop policy %I on public.weekly_challenges',
+      existing_policy.policyname
+    );
+  end loop;
+end;
+$$;
+
+create policy "Clients can read active weekly challenge"
+on public.weekly_challenges
+for select
+to anon, authenticated
+using (active is true);
+
+revoke all privileges
+on table public.weekly_challenge_participants
+from anon, authenticated;
+
+grant select, delete
+on table public.weekly_challenge_participants
+to authenticated;
+
+grant insert (challenge_id, user_id)
+on table public.weekly_challenge_participants
+to authenticated;
+
+revoke all
+on function public.complete_weekly_challenge(uuid)
+from public, anon, authenticated, service_role;
+
+grant execute
+on function public.complete_weekly_challenge(uuid)
+to authenticated;
+
+drop policy if exists "Users can read own weekly challenge participation"
+on public.weekly_challenge_participants;
+
+create policy "Users can read own weekly challenge participation"
+on public.weekly_challenge_participants
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Users can join active weekly challenge"
+on public.weekly_challenge_participants;
+
+create policy "Users can join active weekly challenge"
+on public.weekly_challenge_participants
+for insert
+to authenticated
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.weekly_challenges as challenge
+    where challenge.id = weekly_challenge_participants.challenge_id
+      and challenge.active is true
+  )
+);
+
+drop policy if exists "Users can leave own weekly challenge"
+on public.weekly_challenge_participants;
+
+create policy "Users can leave own weekly challenge"
+on public.weekly_challenge_participants
+for delete
+to authenticated
+using (
+  auth.uid() = user_id
+  and completed_at is null
+  and exists (
+    select 1
+    from public.weekly_challenges as challenge
+    where challenge.id = weekly_challenge_participants.challenge_id
+      and challenge.active is true
+  )
+);
+
+-- circles: public catalogue read; writes happen through the service-role admin API
+alter table public.circles enable row level security;
+
+revoke all privileges
+on table public.circles
+from anon, authenticated;
+
+grant select
+on table public.circles
+to anon, authenticated;
+
+drop policy if exists "Anyone can read circles"
+on public.circles;
+
+create policy "Anyone can read circles"
+on public.circles
+for select
+to anon, authenticated
+using (true);
 
 -- user_circles: users can CRUD own circle memberships
 drop policy if exists "Users can CRUD own user_circles" on user_circles;
