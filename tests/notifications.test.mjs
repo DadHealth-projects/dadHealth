@@ -112,6 +112,42 @@ test("Weekly Challenge notification is skipped when no active challenge exists",
   );
 });
 
+test("the weekly Dad Health report is dispatched on Sunday", async () => {
+  const [dispatch, time, settings] = await Promise.all([
+    source("src/app/api/notifications/dispatch/route.ts"),
+    source("src/lib/notifications/time.ts"),
+    source("src/app/settings/page.tsx"),
+  ]);
+
+  // getLocalParts maps Sunday to 0.
+  assert.match(time, /Sun: 0, Mon: 1/);
+
+  const weekly = /type === "weekly_score"\) \{([\s\S]*?)\} else if/.exec(dispatch)?.[1] ?? "";
+  assert.ok(weekly.length > 0);
+  assert.match(weekly, /localDow === 0/);
+
+  // The weekly challenge keeps its own Monday cadence.
+  assert.match(dispatch, /type === "weekly_challenge"\) \{\s*due = localDow === 1/);
+
+  // The window still ends on yesterday, so it stays a complete seven days.
+  assert.match(dispatch, /computeWeeklyScore\(admin, userId, ymdAddDays\(localDate, -1\)\)/);
+
+  // Settings copy agrees with the dispatcher.
+  assert.match(settings, /Sunday 08:00 - Your Dad Health Score this week/);
+});
+
+test("the meal planner allows three free AI plans before requiring Pro", async () => {
+  const route = await source("src/app/api/generate-meal-plan/route.ts");
+
+  assert.match(route, /export const FREE_AI_MEAL_PLANS = 3/);
+  // The allowance is only checked for members without Pro.
+  assert.match(route, /if \(!isProfilePro\([\s\S]*?\.eq\('source', 'ai_generated'\)/);
+  assert.match(route, /count \?\? 0\) >= FREE_AI_MEAL_PLANS/);
+  assert.match(route, /code: 'meal_plan_limit_reached'/);
+  // The old unconditional Pro wall is gone.
+  assert.doesNotMatch(route, /Meal planner is a Pro feature/);
+});
+
 test("notification environment and database setting names stay aligned", async () => {
   const envExample = await source(".env.local.example");
   const schema = await source("supabase/schema.sql");
