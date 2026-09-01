@@ -233,7 +233,9 @@ export async function GET(request: Request) {
         if (type === "morning_checkin") {
           due = isInWindow(localHHMM, "07:30");
         } else if (type === "weekly_score") {
-          due = localDow === 1 && isInWindow(localHHMM, "08:00");
+          // The weekly Dad Health report lands on Sunday. `computeWeeklyScore`
+          // still ends on yesterday, so the window stays a complete seven days.
+          due = localDow === 0 && isInWindow(localHHMM, "08:00");
         } else if (type === "weekly_challenge") {
           due = localDow === 1 && isInWindow(localHHMM, "08:00");
         } else if (type === "streak_at_risk") {

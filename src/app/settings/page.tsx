@@ -51,7 +51,7 @@ const TYPES: Array<{
   {
     type: "weekly_score",
     title: "Weekly score",
-    description: "Sunday 18:00 - Your Dad Health Score this week: [score]",
+    description: "Sunday 08:00 - Your Dad Health Score this week: [score]",
     linkLabel: "Progress",
   },
   {
