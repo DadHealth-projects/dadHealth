@@ -546,6 +546,9 @@ const buildFallbackMealPlan = (calorieTarget: number, adults: number, dietaryPre
   }))
 }
 
+/** AI meal plans a dad can generate before Dad Health Pro is required. */
+export const FREE_AI_MEAL_PLANS = 3
+
 export const maxDuration = 60
 
 export async function POST(req: Request) {
@@ -597,7 +600,31 @@ export async function POST(req: Request) {
       .maybeSingle()
 
     if (!isProfilePro(profile as { is_pro?: boolean | string | number | null; subscription_status?: string | null } | null)) {
-      return NextResponse.json({ error: 'Meal planner is a Pro feature' }, { status: 403 })
+      // Every dad gets the first three AI meal plans. After that it is Pro.
+      const { count, error: usageError } = await profileClient
+        .from('meal_plans')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('source', 'ai_generated')
+
+      if (usageError) {
+        console.error('[generate-meal-plan] allowance lookup failed', usageError)
+        return NextResponse.json(
+          { error: 'We could not check your meal planner allowance. Please try again.' },
+          { status: 503 },
+        )
+      }
+
+      if ((count ?? 0) >= FREE_AI_MEAL_PLANS) {
+        return NextResponse.json(
+          {
+            error: `You have used your ${FREE_AI_MEAL_PLANS} free meal plans. Dad Health Pro gives you unlimited plans.`,
+            code: 'meal_plan_limit_reached',
+            plansUsed: count ?? 0,
+          },
+          { status: 403 },
+        )
+      }
     }
 
     const { calorieTarget, preferences, dietaryPreference: rawDietaryPreference, mealsPerDay, adults } = await req.json()
