@@ -108,7 +108,21 @@ export interface MoodLog {
   user_id: string;
   date: string;
   mood_value: number;
+  stress_level?: number | null;
   created_at?: string;
+}
+
+export interface DadScoreRow {
+  user_id: string;
+  mind_score: number;
+  body_score: number;
+  bond_score: number;
+  previous_mind_score: number | null;
+  previous_body_score: number | null;
+  previous_bond_score: number | null;
+  mind_week_change: number | null;
+  body_week_change: number | null;
+  bond_week_change: number | null;
 }
 
 export interface SleepLog {
