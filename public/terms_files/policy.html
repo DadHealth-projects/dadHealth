@@ -1,310 +1,349 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dad Health Privacy Notice</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; line-height: 1.65; color: #1a1a1a; background: #fff; }
+    main { max-width: 900px; margin: 0 auto; padding: 40px 24px 64px; }
+    h1, h2, h3 { line-height: 1.25; }
+    h1 { margin-bottom: 8px; }
+    h2 { margin-top: 36px; }
+    h3 { margin-top: 26px; }
+    .meta { color: #555; margin-bottom: 20px; }
+    .warning { border: 1px solid #999; padding: 14px 16px; margin: 18px 0; background: #fafafa; }
+    ul, ol { padding-left: 24px; }
+    table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+    th, td { border: 1px solid #bbb; padding: 10px; vertical-align: top; text-align: left; }
+    a { color: inherit; text-decoration: underline; overflow-wrap: anywhere; }
+  </style>
+</head>
 <body>
-<p><strong>Updated: June 2025 &middot; Version 2.0</strong></p>
+<main>
+  <h1>DAD HEALTH — PRIVACY NOTICE</h1>
+  <p class="meta"><strong>Updated: June 2025 · Version 2.0 · Reviewed against UK GDPR requirements</strong></p>
 
-<p>This Privacy Notice for Dad Health ("<strong>we</strong>," "<strong>us</strong>," or "<strong>our</strong>") describes how and why we might access, collect, store, use, and/or share ("process") your personal information when you use our services ("Services"), including when you:</p>
-<ul>
-  <li>Visit our website at <a href="https://dadhealth.co.uk" target="_blank">https://dadhealth.co.uk</a> or any website of ours that links to this Privacy Notice</li>
-  <li>Download and use our mobile application (Dad Health), or any other application of ours that links to this Privacy Notice</li>
-  <li>Use Dad Health. Dad Health is a wellness tool and not a clinical mental health service</li>
-  <li>Engage with us in other related ways, including any marketing or events</li>
-</ul>
-<p><strong>Questions or concerns?</strong> Reading this Privacy Notice will help you understand your privacy rights and choices. We are responsible for making decisions about how your personal information is processed. If you do not agree with our policies and practices, please do not use our Services. If you still have any questions or concerns, please contact us at <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a>.</p>
+  <div class="warning">
+    This document contains tracked amendments and requires solicitor review before publication,
+    particularly regarding special category mental health data under Article 9 UK GDPR.
+  </div>
 
-<h2>Summary of key points</h2>
-<p>This summary provides key points from our Privacy Notice. Use the table of contents below to find specific sections.</p>
-<p><strong>What personal information do we process?</strong> When you visit, use, or navigate our Services, we may process personal information including account details, mood and wellbeing data, journal entries, location data for activity search, and community posts. See Section 1 for full details.</p>
-<p><strong>Do we process sensitive personal information?</strong> Yes. We process special category health data including mood logs, mental wellbeing check-in responses, journal entries and CBT pulse responses under Article 9 UK GDPR with your explicit consent. See Section 1 and Section 3 for full details.</p>
-<p><strong>Do we use AI to process your data?</strong> Yes. When you use the Dad Days activity search or meal plan generator, your query and approximate location are sent to Anthropic's API to generate results. No personally identifiable information beyond your search query and approximate location area is shared. See Section 4 for full details.</p>
-<p><strong>Do we share personal information?</strong> We share data with service providers necessary to operate the app. We do not sell your data. See Section 4 for a full list of processors.</p>
-<p><strong>How do we keep your information safe?</strong> We use Supabase with Row Level Security, encrypted connections and appropriate technical measures. See Section 7.</p>
-<p><strong>What are your rights?</strong> You have rights to access, rectify, erase, port and restrict processing of your data. See Section 9.</p>
+  <p>This Privacy Notice for Dad Health ('we', 'us', or 'our') describes how and why we might access, collect, store, use, and/or share ('process') your personal information when you use our services ('Services'), including when you:</p>
+  <ol>
+    <li>Visit our website at <a href="https://dadhealth.co.uk">https://dadhealth.co.uk</a> or any website of ours that links to this Privacy Notice</li>
+    <li>Download and use our mobile application (Dad Health), or any other application of ours that links to this Privacy Notice</li>
+    <li>Use Dad Health. Dad Health is a wellness tool and not a clinical mental health service</li>
+    <li>Engage with us in other related ways, including any marketing or events</li>
+  </ol>
 
-<h2>Table of contents</h2>
-<ol>
-  <li>What information do we collect?</li>
-  <li>How do we process your information?</li>
-  <li>What legal bases do we rely on?</li>
-  <li>When and with whom do we share your personal information?</li>
-  <li>Do we use cookies and other tracking technologies?</li>
-  <li>How long do we keep your information?</li>
-  <li>How do we keep your information safe?</li>
-  <li>Do we collect information from minors?</li>
-  <li>What are your privacy rights?</li>
-  <li>Controls for Do-Not-Track features</li>
-  <li>Do United States residents have specific privacy rights?</li>
-  <li>Do other regions have specific privacy rights?</li>
-  <li>Do we make updates to this notice?</li>
-  <li>How can you contact us?</li>
-  <li>How can you review, update, or delete your data?</li>
-</ol>
+  <p><strong>Questions or concerns?</strong> Reading this Privacy Notice will help you understand your privacy rights and choices. We are responsible for making decisions about how your personal information is processed. If you do not agree with our policies and practices, please do not use our Services. If you still have any questions or concerns, please contact us at <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a>.</p>
 
-<h2>1. What information do we collect?</h2>
-<p><strong>In Short:</strong> We collect personal information you provide, health and wellbeing data you generate through using the app, and technical data about your device and usage.</p>
+  <h2>SUMMARY OF KEY POINTS</h2>
+  <p>This summary provides key points from our Privacy Notice. Use the table of contents below to find specific sections.</p>
 
-<h3>Personal information you disclose to us</h3>
-<p>We collect personal information that you voluntarily provide when you register, use the Services or contact us. This may include:</p>
-<ul>
-  <li>Names and usernames</li>
-  <li>Email addresses</li>
-  <li>Passwords and authentication data</li>
-  <li>Contact preferences</li>
-  <li>Payment information (handled by Stripe &mdash; we do not store card details)</li>
-</ul>
+  <p><strong>What personal information do we process?</strong> When you visit, use, or navigate our Services, we may process personal information including account details, mood and wellbeing data, journal entries, location data for activity search, and community posts. See Section 1 for full details.</p>
+  <p><strong>Do we process sensitive personal information?</strong> Yes. We process special category health data including mood logs, mental wellbeing check-in responses, journal entries and CBT pulse responses under Article 9 UK GDPR with your explicit consent. See Section 1 and Section 3 for full details.</p>
+  <p><strong>Do we use AI to process your data?</strong> Yes. When you use the Dad Days activity search or meal plan generator, your query and approximate location are sent to Anthropic's API to generate results. No personally identifiable information beyond your search query and approximate location area is shared. See Section 4 for full details.</p>
+  <p><strong>Do we share personal information?</strong> We share data with service providers necessary to operate the app. We do not sell your data. See Section 4 for a full list of processors.</p>
+  <p><strong>How do we keep your information safe?</strong> We use Supabase with Row Level Security, encrypted connections and appropriate technical measures. See Section 7.</p>
+  <p><strong>What are your rights?</strong> You have rights to access, rectify, erase, port and restrict processing of your data. See Section 9.</p>
 
-<h3>Special category health and wellbeing data</h3>
-<p>When you use Dad Health's mental health and wellbeing features, we collect and process the following special category personal data with your explicit consent:</p>
-<ul>
-  <li>Daily mood check-in responses (mood index 0&ndash;4)</li>
-  <li>3-question CBT mental pulse responses (sleep quality, stress level, connection to children)</li>
-  <li>Journal entries (free text, mood tag, date)</li>
-  <li>Bond check-in data (quality time logged, presence rating, conversation rating)</li>
-  <li>Sleep logs (hours, quality rating, date)</li>
-  <li>Dad Health Score components (calculated from the above data points)</li>
-  <li>Custody pattern (daily / most days / 50&ndash;50 / weekends / varies)</li>
-  <li>Remote bonding activity logs on non-contact days</li>
-</ul>
-<p>This data is processed under Article 9(2)(a) UK GDPR &mdash; explicit consent. You may withdraw consent at any time by deleting your account or contacting <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a>. Withdrawal does not affect the lawfulness of processing before withdrawal.</p>
-<p>This data is used solely to provide you with your Dad Health Score, personalised insights and app functionality. It is never used for advertising, sold to third parties or shared beyond the processors listed in Section 4.</p>
+  <h2>TABLE OF CONTENTS</h2>
+  <ol>
+    <li>What information do we collect?</li>
+    <li>How do we process your information?</li>
+    <li>What legal bases do we rely on?</li>
+    <li>When and with whom do we share your personal information?</li>
+    <li>Do we use cookies and other tracking technologies?</li>
+    <li>How long do we keep your information?</li>
+    <li>How do we keep your information safe?</li>
+    <li>Do we collect information from minors?</li>
+    <li>What are your privacy rights?</li>
+    <li>Controls for Do-Not-Track features</li>
+    <li>Do United States residents have specific privacy rights?</li>
+    <li>Do other regions have specific privacy rights?</li>
+    <li>Do we make updates to this notice?</li>
+    <li>How can you contact us?</li>
+    <li>How can you review, update, or delete your data?</li>
+  </ol>
 
-<h3>Fitness and body metrics data</h3>
-<ul>
-  <li>Body weight (kg), waist measurement, blood pressure readings, step count</li>
-  <li>Workout sessions (name, duration, exercises completed, estimated calories)</li>
-  <li>Meal plan preferences and dietary requirements</li>
-  <li>TDEE calculator inputs (age, weight, height, activity level, gender)</li>
-</ul>
+  <h2>1. WHAT INFORMATION DO WE COLLECT?</h2>
+  <p><strong>In Short:</strong> We collect personal information you provide, health and wellbeing data you generate through using the app, and technical data about your device and usage.</p>
 
-<h3>Location data</h3>
-<p>When you use the Dad Days activity search feature, we request access to your device location or postcode to find nearby activities. We process location data as follows:</p>
-<ul>
-  <li>Raw GPS coordinates are converted to an approximate area on our server and never stored in identifiable form</li>
-  <li>Only the postcode district (e.g. SK9, not SK9 5EY) may be retained for analytics purposes</li>
-  <li>Location data is sent to Anthropic's API to generate activity results and to Google Maps Platform for mapping functionality</li>
-  <li>You may decline location permission and enter a postcode manually instead</li>
-</ul>
+  <h3>Personal information you disclose to us</h3>
+  <p>We collect personal information that you voluntarily provide when you register, use the Services or contact us. This may include:</p>
+  <ol>
+    <li>Names and usernames</li>
+    <li>Email addresses</li>
+    <li>Passwords and authentication data</li>
+    <li>Contact preferences</li>
+    <li>Payment information (handled by Stripe — we do not store card details)</li>
+  </ol>
 
-<h3>Community and social data</h3>
-<p>When you use the community feed and Dad Circles features:</p>
-<ul>
-  <li>Post content, tags and timestamps are stored in our database</li>
-  <li>Anonymous posts: if you choose to post anonymously, your post will appear without your name to other users. However, a user identifier is retained by Dad Health for moderation, safety and legal compliance purposes and will never be exposed publicly</li>
-  <li>Circle membership (which Dad Circles you have joined)</li>
-  <li>Respect (likes) and comment interactions</li>
-</ul>
+  <h3>Special category health and wellbeing data — NEW SECTION</h3>
+  <div class="warning">
+    SOLICITOR REVIEW REQUIRED — The following is special category data under Article 9 UK GDPR.
+    Explicit consent must be obtained before processing. A Data Protection Impact Assessment (DPIA)
+    is strongly recommended before launch.
+  </div>
 
-<h3>Milestone and parenting data</h3>
-<p>Information about moments and milestones you log relating to your children is stored solely to provide you with the milestone tracking feature. This data:</p>
-<ul>
-  <li>Is processed under your consent as the parent or guardian</li>
-  <li>Is not used for any purpose other than providing the milestone feature to you</li>
-  <li>Is not shared with or accessible to other users unless you explicitly mark a milestone as shared with a co-parent</li>
-</ul>
+  <p>When you use Dad Health's mental health and wellbeing features, we collect and process the following special category personal data with your explicit consent:</p>
+  <ol>
+    <li>Daily mood check-in responses (mood index 0–4)</li>
+    <li>3-question CBT mental pulse responses (sleep quality, stress level, connection to children)</li>
+    <li>Journal entries (free text, mood tag, date)</li>
+    <li>Bond check-in data (quality time logged, presence rating, conversation rating)</li>
+    <li>Sleep logs (hours, quality rating, date)</li>
+    <li>Dad Health Score components (calculated from the above data points)</li>
+    <li>Custody pattern (daily / most days / 50–50 / weekends / varies)</li>
+    <li>Remote bonding activity logs on non-contact days</li>
+  </ol>
 
-<h3>Wearable device data</h3>
-<p>On iOS, with your explicit permission, Dad Health can read steps, Apple Exercise Time, resting heart rate and sleep data from Apple Health. This data is stored in your Dad Health account to update your existing Fitness, Progress and Dad Health Score features. Dad Health does not write data back to Apple Health. A future Android version may support Google Health Connect through its own permission flow.</p>
+  <p>This data is processed under Article 9(2)(a) UK GDPR — explicit consent. You may withdraw consent at any time by deleting your account or contacting <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a>. Withdrawal does not affect the lawfulness of processing before withdrawal.</p>
+  <p>This data is used solely to provide you with your Dad Health Score, personalised insights and app functionality. It is never used for advertising, sold to third parties or shared beyond the processors listed in Section 4.</p>
 
-<h3>Payment data</h3>
-<p>Payment processing is handled entirely by Stripe. We collect only the minimum data necessary to initiate a payment. Card numbers and security codes are never processed or stored by us. See Stripe's privacy policy at <a href="https://stripe.com/privacy" target="_blank">https://stripe.com/privacy</a>.</p>
+  <h3>Fitness and body metrics data</h3>
+  <ol>
+    <li>Body weight (kg), waist measurement, blood pressure readings, step count</li>
+    <li>Workout sessions (name, duration, exercises completed, estimated calories)</li>
+    <li>Meal plan preferences and dietary requirements</li>
+    <li>TDEE calculator inputs (age, weight, height, activity level, gender)</li>
+  </ol>
 
-<h3>Push notifications</h3>
-<p>We may request permission to send push notifications via OneSignal. You may withdraw this permission at any time in your device settings.</p>
+  <h3>Location data</h3>
+  <p>When you use the Dad Days activity search feature, we request access to your device location or postcode to find nearby activities. We process location data as follows:</p>
+  <ol>
+    <li>Raw GPS coordinates are converted to an approximate area on our server and never stored in identifiable form</li>
+    <li>Only the postcode district (e.g. SK9, not SK9 5EY) may be retained for analytics purposes</li>
+    <li>Location data is sent to Anthropic's API to generate activity results and to Google Maps Platform for mapping functionality</li>
+    <li>You may decline location permission and enter a postcode manually instead</li>
+  </ol>
 
-<h2>2. How do we process your information?</h2>
-<p><strong>In Short:</strong> We process your information to provide the Services, calculate your Dad Health Score, generate AI-powered activity suggestions, process payments and keep you safe.</p>
-<p>We process your personal information for the following purposes:</p>
-<ul>
-  <li>To create and manage your account</li>
-  <li>To calculate and display your Dad Health Score and pillar breakdowns</li>
-  <li>To provide personalised wellbeing insights based on your mood, sleep and activity data</li>
-  <li>To generate AI-powered Dad Days activity suggestions based on your location and preferences</li>
-  <li>To generate personalised meal plans and TDEE calculations</li>
-  <li>To process subscription payments via Stripe</li>
-  <li>To send push notifications and service-related emails via OneSignal and Resend</li>
-  <li>To track anonymous usage analytics to improve the Services via PostHog</li>
-  <li>To moderate community content and enforce our terms of service</li>
-  <li>To respond to your support requests</li>
-  <li>To comply with our legal obligations</li>
-  <li>To protect the vital interests of users where there is a risk to safety</li>
-</ul>
+  <h3>Community and social data</h3>
+  <p>When you use the community feed and Dad Circles features:</p>
+  <ol>
+    <li>Post content, tags and timestamps are stored in our database</li>
+    <li>Anonymous posts: if you choose to post anonymously, your post will appear without your name to other users. However, a user identifier is retained by Dad Health for moderation, safety and legal compliance purposes and will never be exposed publicly</li>
+    <li>Circle membership (which Dad Circles you have joined)</li>
+    <li>Respect (likes) and comment interactions</li>
+  </ol>
 
-<h3>Automated processing &mdash; Dad Health Score</h3>
-<p>The Dad Health Score is calculated automatically from your mood logs, sleep logs and Bond check-in data using a weighted formula (Mind 35% + Body 35% + Bond 30%). This automated calculation:</p>
-<ul>
-  <li>Does not produce legal or similarly significant effects</li>
-  <li>Is purely informational and intended to help you understand your overall wellbeing</li>
-  <li>Can be understood by reviewing the Score breakdown on the Progress screen</li>
-  <li>Is based entirely on data you have voluntarily provided</li>
-</ul>
-<p>You have the right to request information about how your score is calculated by contacting <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a>.</p>
+  <h3>Milestone and parenting data</h3>
+  <p>Information about moments and milestones you log relating to your children is stored solely to provide you with the milestone tracking feature. This data:</p>
+  <ol>
+    <li>Is processed under your consent as the parent or guardian</li>
+    <li>Is not used for any purpose other than providing the milestone feature to you</li>
+    <li>Is not shared with or accessible to other users unless you explicitly mark a milestone as shared with a co-parent</li>
+  </ol>
 
-<h2>3. What legal bases do we rely on?</h2>
-<p><strong>In Short:</strong> We process your personal information on the basis of consent, contract performance, legitimate interests and legal obligations depending on the type of data and purpose.</p>
-<p>Under UK GDPR we rely on the following legal bases:</p>
-<p><strong>Explicit Consent (Article 6(1)(a) and Article 9(2)(a)):</strong> We rely on your explicit consent to process special category health and wellbeing data including mood logs, journal entries, CBT pulse responses, sleep logs and Bond check-in data. You may withdraw consent at any time by deleting your account or contacting us. Withdrawal does not affect prior processing.</p>
-<p><strong>Contract Performance (Article 6(1)(b)):</strong> We process your account data, payment information and subscription status to fulfil our contractual obligations &mdash; providing you with the Dad Health Services you have signed up for.</p>
-<p><strong>Legitimate Interests (Article 6(1)(f)):</strong> We process usage analytics data, fraud prevention data and technical logs on the basis of our legitimate interest in operating and improving a secure, functioning service. We have assessed that these interests are not overridden by your rights and freedoms.</p>
-<p><strong>Legal Obligations (Article 6(1)(c)):</strong> We may process your information where necessary to comply with legal obligations such as responding to lawful requests from regulatory bodies or law enforcement.</p>
-<p><strong>Vital Interests (Article 6(1)(d)):</strong> We may process your information where necessary to protect the vital interests of you or another person, including where there is a risk to life or safety.</p>
+  <h3>Wearable device data (Phase 3)</h3>
+  <p>In a future version of the app, with your explicit permission, we may sync with Apple HealthKit (iOS) or Google Health Connect (Android) to receive steps, sleep data, heart rate and workout information. This will be covered by a separate consent flow when the feature launches.</p>
 
-<h2>4. When and with whom do we share your personal information?</h2>
-<p><strong>In Short:</strong> We share data with service providers necessary to operate the app. We do not sell your personal information. We do not share special category health data with any party except processors listed below who process it solely on our behalf.</p>
+  <h3>Payment data</h3>
+  <p>Payment processing is handled entirely by Stripe. We collect only the minimum data necessary to initiate a payment. Card numbers and security codes are never processed or stored by us. See Stripe's privacy policy at <a href="https://stripe.com/privacy">https://stripe.com/privacy</a>.</p>
 
-<h3>4.1 Service providers and data processors</h3>
-<p>We share your personal information with the following third party processors who process data solely on our behalf under written data processing agreements:</p>
-<table>
-  <thead>
-    <tr><th>Processor</th><th>Purpose</th><th>Data shared</th><th>Privacy policy</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>Supabase</td><td>Database, authentication and file storage</td><td>Account data, all app data, health and wellbeing data</td><td><a href="https://supabase.com/privacy" target="_blank">supabase.com/privacy</a></td></tr>
-    <tr><td>Stripe</td><td>Payment processing and subscription management</td><td>Payment details, email, subscription status</td><td><a href="https://stripe.com/privacy" target="_blank">stripe.com/privacy</a></td></tr>
-    <tr><td>Anthropic</td><td>AI-powered Dad Days activity search and meal plan generation</td><td>Search query, approximate location area, dietary preferences</td><td><a href="https://www.anthropic.com/legal/privacy" target="_blank">anthropic.com/privacy</a></td></tr>
-    <tr><td>Vercel</td><td>Web application hosting and deployment</td><td>Technical logs, IP addresses</td><td><a href="https://vercel.com/legal/privacy-policy" target="_blank">vercel.com/legal/privacy-policy</a></td></tr>
-    <tr><td>OneSignal</td><td>Push notification delivery</td><td>Device token, notification preferences</td><td><a href="https://onesignal.com/privacy" target="_blank">onesignal.com/privacy</a></td></tr>
-    <tr><td>PostHog</td><td>Usage analytics and product improvement</td><td>Anonymised usage events, session data</td><td><a href="https://posthog.com/privacy" target="_blank">posthog.com/privacy</a></td></tr>
-    <tr><td>Resend</td><td>Transactional email delivery</td><td>Email address, email content</td><td><a href="https://resend.com/legal/privacy-policy" target="_blank">resend.com/privacy</a></td></tr>
-    <tr><td>Google Maps Platform</td><td>Location mapping and activity search</td><td>Approximate location area</td><td><a href="https://policies.google.com/privacy" target="_blank">policies.google.com/privacy</a></td></tr>
-    <tr><td>Awin / Rakuten (Phase 2)</td><td>Affiliate activity recommendations</td><td>Anonymised click data, budget preference</td><td><a href="https://www.awin.com/gb/privacy-policy" target="_blank">awin.com/privacy</a> / <a href="https://rakutenadvertising.com/legal-notices/services-privacy-policy/" target="_blank">rakutenadvertising.com/privacy</a></td></tr>
-  </tbody>
-</table>
+  <h3>Push notifications</h3>
+  <p>We may request permission to send push notifications via OneSignal. You may withdraw this permission at any time in your device settings.</p>
 
-<h3>4.2 Anonymous community posts</h3>
-<p>While posts you choose to submit anonymously are displayed without your name to other users, a user identifier is retained by Dad Health for moderation, safety and legal compliance purposes. This identifier is never exposed publicly and is only accessed in cases of serious terms of service violations or legal requirements.</p>
+  <h2>2. HOW DO WE PROCESS YOUR INFORMATION?</h2>
+  <p><strong>In Short:</strong> We process your information to provide the Services, calculate your Dad Health Score, generate AI-powered activity suggestions, process payments and keep you safe.</p>
+  <p>We process your personal information for the following purposes:</p>
+  <ol>
+    <li>To create and manage your account</li>
+    <li>To calculate and display your Dad Health Score and pillar breakdowns</li>
+    <li>To provide personalised wellbeing insights based on your mood, sleep and activity data</li>
+    <li>To generate AI-powered Dad Days activity suggestions based on your location and preferences</li>
+    <li>To generate personalised meal plans and TDEE calculations</li>
+    <li>To process subscription payments via Stripe</li>
+    <li>To send push notifications and service-related emails via OneSignal and Resend</li>
+    <li>To track anonymous usage analytics to improve the Services via PostHog</li>
+    <li>To moderate community content and enforce our terms of service</li>
+    <li>To respond to your support requests</li>
+    <li>To comply with our legal obligations</li>
+    <li>To protect the vital interests of users where there is a risk to safety</li>
+  </ol>
 
-<h3>4.3 Co-parenting calendar</h3>
-<p>If you choose to use the co-parenting shared calendar feature, shared events and milestones you mark as shared will be visible to the connected co-parent account. You control which milestones are shared. No data is shared with a co-parent account without your explicit action.</p>
+  <h3>Automated processing — Dad Health Score</h3>
+  <p>The Dad Health Score is calculated automatically from your mood logs, sleep logs and Bond check-in data using a weighted formula (Mind 35% + Body 35% + Bond 30%). This automated calculation:</p>
+  <ol>
+    <li>Does not produce legal or similarly significant effects</li>
+    <li>Is purely informational and intended to help you understand your overall wellbeing</li>
+    <li>Can be understood by reviewing the Score breakdown on the Progress screen</li>
+    <li>Is based entirely on data you have voluntarily provided</li>
+  </ol>
+  <p>You have the right to request information about how your score is calculated by contacting <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a>.</p>
 
-<h3>4.4 Business transfers</h3>
-<p>We may share or transfer your information in connection with any merger, sale of company assets, financing or acquisition of all or part of our business. We will notify you of any such transfer that materially affects your personal information.</p>
+  <h2>3. WHAT LEGAL BASES DO WE RELY ON?</h2>
+  <p><strong>In Short:</strong> We process your personal information on the basis of consent, contract performance, legitimate interests and legal obligations depending on the type of data and purpose.</p>
 
-<h3>4.5 Legal requirements</h3>
-<p>We may disclose your information where required by law, to protect our rights, or where we believe disclosure is necessary to prevent harm.</p>
+  <p><strong>Explicit Consent (Article 6(1)(a) and Article 9(2)(a)):</strong> We rely on your explicit consent to process special category health and wellbeing data including mood logs, journal entries, CBT pulse responses, sleep logs and Bond check-in data. You may withdraw consent at any time by deleting your account or contacting us. Withdrawal does not affect prior processing.</p>
+  <p><strong>Contract Performance (Article 6(1)(b)):</strong> We process your account data, payment information and subscription status to fulfil our contractual obligations — providing you with the Dad Health Services you have signed up for.</p>
+  <p><strong>Legitimate Interests (Article 6(1)(f)):</strong> We process usage analytics data, fraud prevention data and technical logs on the basis of our legitimate interest in operating and improving a secure, functioning service. We have assessed that these interests are not overridden by your rights and freedoms.</p>
+  <p><strong>Legal Obligations (Article 6(1)(c)):</strong> We may process your information where necessary to comply with legal obligations such as responding to lawful requests from regulatory bodies or law enforcement.</p>
+  <p><strong>Vital Interests (Article 6(1)(d)):</strong> We may process your information where necessary to protect the vital interests of you or another person, including where there is a risk to life or safety.</p>
 
-<h2>5. Do we use cookies and other tracking technologies?</h2>
-<p><strong>In Short:</strong> We use cookies and similar technologies for security, preferences and analytics. We will request your consent before placing non-essential cookies.</p>
-<p>We use cookies and similar tracking technologies to maintain the security of our Services, save your preferences and conduct analytics. Specifically:</p>
-<ul>
-  <li><strong>Essential cookies:</strong> required for the app to function (authentication tokens, session management)</li>
-  <li><strong>Analytics cookies:</strong> PostHog uses cookies to track anonymised usage events. You will be asked for consent before these are placed.</li>
-</ul>
-<p>A cookie consent banner is displayed on first visit to dadhealth.co.uk. You may withdraw consent for non-essential cookies at any time through the cookie settings on our website.</p>
-<p>For full details of the cookies we use, please see our <a href="https://dadhealth.co.uk/cookies" target="_blank">Cookie Notice</a>.</p>
+  <h2>4. WHEN AND WITH WHOM DO WE SHARE YOUR PERSONAL INFORMATION?</h2>
+  <p><strong>In Short:</strong> We share data with service providers necessary to operate the app. We do not sell your personal information. We do not share special category health data with any party except processors listed below who process it solely on our behalf.</p>
 
-<h2>6. How long do we keep your information?</h2>
-<p><strong>In Short:</strong> We keep your information for as long as necessary to provide the Services and comply with legal obligations.</p>
-<table>
-  <thead>
-    <tr><th>Data type</th><th>Retention period</th><th>Reason</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>Account and profile data</td><td>Duration of account + 6 months</td><td>Service provision and fraud prevention</td></tr>
-    <tr><td>Mood logs, journal entries and health data</td><td>Duration of account + 6 months</td><td>Service provision only</td></tr>
-    <tr><td>Payment records</td><td>7 years from transaction</td><td>UK tax and accounting legal requirement</td></tr>
-    <tr><td>Community posts</td><td>Duration of account or until deleted by user</td><td>Service provision</td></tr>
-    <tr><td>Anonymous post identifiers</td><td>7 years</td><td>Legal compliance and moderation audit trail</td></tr>
-    <tr><td>Analytics data (PostHog)</td><td>12 months rolling</td><td>Product improvement</td></tr>
-    <tr><td>Backup archives</td><td>Up to 30 days after deletion</td><td>Technical recovery only</td></tr>
-  </tbody>
-</table>
+  <h3>4.1 Service providers and data processors</h3>
+  <p>We share your personal information with the following third party processors who process data solely on our behalf under written data processing agreements:</p>
+  <table>
+    <thead><tr><th>Processor</th><th>Purpose</th><th>Data shared</th><th>Privacy policy</th></tr></thead>
+    <tbody>
+      <tr><td>Supabase</td><td>Database, authentication and file storage</td><td>Account data, all app data, health and wellbeing data</td><td>supabase.com/privacy</td></tr>
+      <tr><td>Stripe</td><td>Payment processing and subscription management</td><td>Payment details, email, subscription status</td><td>stripe.com/privacy</td></tr>
+      <tr><td>Anthropic</td><td>AI-powered Dad Days activity search and meal plan generation</td><td>Search query, approximate location area, dietary preferences</td><td>anthropic.com/privacy</td></tr>
+      <tr><td>Vercel</td><td>Web application hosting and deployment</td><td>Technical logs, IP addresses</td><td>vercel.com/legal/privacy-policy</td></tr>
+      <tr><td>OneSignal</td><td>Push notification delivery</td><td>Device token, notification preferences</td><td>onesignal.com/privacy</td></tr>
+      <tr><td>PostHog</td><td>Usage analytics and product improvement</td><td>Anonymised usage events, session data</td><td>posthog.com/privacy</td></tr>
+      <tr><td>Resend</td><td>Transactional email delivery</td><td>Email address, email content</td><td>resend.com/privacy</td></tr>
+      <tr><td>Google Maps Platform</td><td>Location mapping and activity search</td><td>Approximate location area</td><td>policies.google.com/privacy</td></tr>
+      <tr><td>Awin / Rakuten (Phase 2)</td><td>Affiliate activity recommendations</td><td>Anonymised click data, budget preference</td><td>awin.com/privacy / rakutenadvertising.com/privacy</td></tr>
+    </tbody>
+  </table>
 
-<h2>7. How do we keep your information safe?</h2>
-<p><strong>In Short:</strong> We use industry-standard technical and organisational measures to protect your data.</p>
-<p>We implement the following security measures:</p>
-<ul>
-  <li>All data is stored in Supabase with Row Level Security (RLS) enabled &mdash; users can only access their own data</li>
-  <li>All connections use HTTPS / TLS encryption in transit</li>
-  <li>Authentication is handled by Supabase Auth with support for OAuth providers</li>
-  <li>Anthropic API key and all sensitive credentials are stored server-side only and never exposed to the client</li>
-  <li>Anonymous post user identifiers are stored server-side only and never returned in API responses</li>
-  <li>Access to production systems is restricted to authorised personnel only</li>
-</ul>
-<p>In the event of a personal data breach that is likely to result in a risk to your rights and freedoms, we will notify the Information Commissioner's Office (ICO) within 72 hours of becoming aware and will notify affected users without undue delay where required.</p>
-<p>Despite our safeguards, no electronic transmission or storage technology can be guaranteed to be 100% secure. If you become aware of any security concern, please contact <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a> immediately.</p>
+  <h3>4.2 Anonymous community posts</h3>
+  <p>While posts you choose to submit anonymously are displayed without your name to other users, a user identifier is retained by Dad Health for moderation, safety and legal compliance purposes. This identifier is never exposed publicly and is only accessed in cases of serious terms of service violations or legal requirements.</p>
 
-<h2>8. Do we collect information from minors?</h2>
-<p><strong>In Short:</strong> Dad Health is for adults aged 18 and over. We do not knowingly collect personal data from children.</p>
-<p>Dad Health is designed for use by adults aged 18 and over. We do not knowingly collect, solicit or market to children under the age of 18.</p>
-<p>Some features of the app, including the milestone tracker, Bond check-in and Present Dad Mode, allow parents to log information about their interactions with their children. This information:</p>
-<ul>
-  <li>Is submitted by the parent user and processed under that parent's consent</li>
-  <li>Does not involve direct data collection from children</li>
-  <li>Is not used for any purpose other than providing the relevant feature to the parent</li>
-  <li>Is not shared with or accessible to other users unless explicitly shared by the parent via the co-parenting feature</li>
-</ul>
-<p>If we learn that a user is under the age of 18, we will deactivate their account and delete their data. Please contact <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a> if you believe a minor has registered.</p>
+  <h3>4.3 Co-parenting calendar</h3>
+  <p>If you choose to use the co-parenting shared calendar feature, shared events and milestones you mark as shared will be visible to the connected co-parent account. You control which milestones are shared. No data is shared with a co-parent account without your explicit action.</p>
 
-<h2>9. What are your privacy rights?</h2>
-<p><strong>In Short:</strong> Under UK GDPR you have significant rights over your personal data. We will respond to all valid requests within one month.</p>
-<p>Under UK GDPR you have the following rights:</p>
-<ul>
-  <li><strong>Right of access</strong> &mdash; to receive a copy of the personal data we hold about you</li>
-  <li><strong>Right to rectification</strong> &mdash; to have inaccurate data corrected</li>
-  <li><strong>Right to erasure ('right to be forgotten')</strong> &mdash; to have your data deleted, subject to legal retention requirements</li>
-  <li><strong>Right to restrict processing</strong> &mdash; to limit how we use your data</li>
-  <li><strong>Right to data portability</strong> &mdash; to receive your data in a structured, commonly used format</li>
-  <li><strong>Right to object</strong> &mdash; to object to processing based on legitimate interests</li>
-  <li><strong>Rights related to automated decision-making</strong> &mdash; to request human review of automated decisions that significantly affect you</li>
-</ul>
-<p>To exercise any of these rights, please contact us at <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a> or submit a Data Subject Access Request at <a href="https://dadhealth.co.uk/privacy-request" target="_blank">https://dadhealth.co.uk/privacy-request</a>.</p>
-<p>If you are located in the UK and believe we are unlawfully processing your personal information, you have the right to complain to the Information Commissioner's Office (ICO):</p>
-<ul>
-  <li>Website: <a href="https://ico.org.uk" target="_blank">ico.org.uk</a></li>
-  <li>Phone: 0303 123 1113</li>
-</ul>
-<h3>Withdrawing consent</h3>
-<p>Where we rely on your consent to process special category health and wellbeing data, you may withdraw that consent at any time by deleting your account or contacting <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a>. Withdrawal does not affect the lawfulness of processing before withdrawal. Following withdrawal, your health and wellbeing data will be deleted within 30 days.</p>
-<h3>Opting out of marketing</h3>
-<p>You may unsubscribe from marketing emails at any time by clicking the unsubscribe link in any email we send or by contacting us. We may still send service-related messages necessary for account operation.</p>
+  <h3>4.4 Business transfers</h3>
+  <p>We may share or transfer your information in connection with any merger, sale of company assets, financing or acquisition of all or part of our business. We will notify you of any such transfer that materially affects your personal information.</p>
 
-<h2>10. Controls for Do-Not-Track features</h2>
-<p>Most web browsers include a Do-Not-Track ("DNT") feature. No uniform technology standard for implementing DNT signals has been finalised. As such, we do not currently respond to DNT browser signals. If a standard is adopted in the future, we will update this notice accordingly.</p>
+  <h3>4.5 Legal requirements</h3>
+  <p>We may disclose your information where required by law, to protect our rights, or where we believe disclosure is necessary to prevent harm.</p>
 
-<h2>11. Do United States residents have specific privacy rights?</h2>
-<p>If you are a resident of California, Colorado, Connecticut, Delaware, Florida, Indiana, Iowa, Kentucky, Maryland, Minnesota, Montana, Nebraska, New Hampshire, New Jersey, Oregon, Rhode Island, Tennessee, Texas, Utah, or Virginia, you may have specific privacy rights under applicable state law.</p>
-<h3>Categories of personal information collected</h3>
-<table>
-  <thead>
-    <tr><th>Category</th><th>Examples</th><th>Collected</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>A. Identifiers</td><td>Email address, username, IP address</td><td>YES</td></tr>
-    <tr><td>B. California Customer Records</td><td>Name, contact information</td><td>YES</td></tr>
-    <tr><td>C. Protected classification characteristics</td><td>Age, gender</td><td>YES</td></tr>
-    <tr><td>D. Commercial information</td><td>Purchase history, subscription status</td><td>YES</td></tr>
-    <tr><td>E. Biometric information</td><td>Fingerprints and voiceprints</td><td>NO</td></tr>
-    <tr><td>F. Internet or network activity</td><td>App usage data, analytics</td><td>YES</td></tr>
-    <tr><td>G. Geolocation data</td><td>Approximate location for Dad Days search</td><td>YES &mdash; approximate area only, not precise</td></tr>
-    <tr><td>H. Audio, electronic or visual information</td><td>Profile photos (if uploaded)</td><td>YES &mdash; if provided</td></tr>
-    <tr><td>I. Professional or employment information</td><td>Not collected</td><td>NO</td></tr>
-    <tr><td>J. Education information</td><td>Not collected</td><td>NO</td></tr>
-    <tr><td>K. Inferences from personal information</td><td>Dad Health Score calculated from mood, sleep and Bond data</td><td>YES &mdash; see Section 2</td></tr>
-    <tr><td>L. Sensitive personal information</td><td>Mood logs, journal entries, health check-in data, precise location</td><td>YES &mdash; see Section 1</td></tr>
-  </tbody>
-</table>
-<p><strong>Appeals:</strong> If we decline to take action on your privacy request, you may appeal by emailing <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a>. We will respond in writing within 60 days. If your appeal is denied, you may submit a complaint to your state attorney general.</p>
+  <h2>5. DO WE USE COOKIES AND OTHER TRACKING TECHNOLOGIES?</h2>
+  <p><strong>In Short:</strong> We use cookies and similar technologies for security, preferences and analytics. We will request your consent before placing non-essential cookies.</p>
+  <p>We use cookies and similar tracking technologies to maintain the security of our Services, save your preferences and conduct analytics. Specifically:</p>
+  <ol>
+    <li><strong>Essential cookies:</strong> required for the app to function (authentication tokens, session management)</li>
+    <li><strong>Analytics cookies:</strong> PostHog uses cookies to track anonymised usage events. You will be asked for consent before these are placed.</li>
+  </ol>
+  <p>A cookie consent banner is displayed on first visit to dadhealth.co.uk. You may withdraw consent for non-essential cookies at any time through the cookie settings on our website.</p>
+  <p>For full details of the cookies we use, please see our Cookie Notice at <a href="https://dadhealth.co.uk/cookies">https://dadhealth.co.uk/cookies</a>.</p>
 
-<h2>12. Do other regions have specific privacy rights?</h2>
-<h3>Australia and New Zealand</h3>
-<p>We collect and process your personal information under the obligations set by Australia's Privacy Act 1988 and New Zealand's Privacy Act 2020. If you believe we are unlawfully processing your personal information, you may contact the Office of the Australian Information Commissioner or the Office of New Zealand Privacy Commissioner.</p>
-<h3>Republic of South Africa</h3>
-<p>You have the right to request access to or correction of your personal information at any time. Complaints may be submitted to the Information Regulator (South Africa) at <a href="mailto:enquiries@inforegulator.org.za">enquiries@inforegulator.org.za</a>.</p>
+  <h2>6. HOW LONG DO WE KEEP YOUR INFORMATION?</h2>
+  <p><strong>In Short:</strong> We keep your information for as long as necessary to provide the Services and comply with legal obligations.</p>
+  <table>
+    <thead><tr><th>Data type</th><th>Retention period</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td>Account and profile data</td><td>Duration of account + 6 months</td><td>Service provision and fraud prevention</td></tr>
+      <tr><td>Mood logs, journal entries and health data</td><td>Duration of account + 6 months</td><td>Service provision only</td></tr>
+      <tr><td>Payment records</td><td>7 years from transaction</td><td>UK tax and accounting legal requirement</td></tr>
+      <tr><td>Community posts</td><td>Duration of account or until deleted by user</td><td>Service provision</td></tr>
+      <tr><td>Anonymous post identifiers</td><td>7 years</td><td>Legal compliance and moderation audit trail</td></tr>
+      <tr><td>Analytics data (PostHog)</td><td>12 months rolling</td><td>Product improvement</td></tr>
+      <tr><td>Backup archives</td><td>Up to 30 days after deletion</td><td>Technical recovery only</td></tr>
+    </tbody>
+  </table>
 
-<h2>13. Do we make updates to this notice?</h2>
-<p>We may update this Privacy Notice from time to time to reflect changes in our Services, legal requirements or data processing activities. The updated version will show a revised date at the top. We will notify you of material changes either by posting a notice within the app or by email.</p>
+  <h2>7. HOW DO WE KEEP YOUR INFORMATION SAFE?</h2>
+  <p><strong>In Short:</strong> We use industry-standard technical and organisational measures to protect your data.</p>
+  <ol>
+    <li>All data is stored in Supabase with Row Level Security (RLS) enabled — users can only access their own data</li>
+    <li>All connections use HTTPS / TLS encryption in transit</li>
+    <li>Authentication is handled by Supabase Auth with support for OAuth providers</li>
+    <li>Anthropic API key and all sensitive credentials are stored server-side only and never exposed to the client</li>
+    <li>Anonymous post user identifiers are stored server-side only and never returned in API responses</li>
+    <li>Access to production systems is restricted to authorised personnel only</li>
+  </ol>
+  <p>In the event of a personal data breach that is likely to result in a risk to your rights and freedoms, we will notify the Information Commissioner's Office (ICO) within 72 hours of becoming aware and will notify affected users without undue delay where required.</p>
+  <p>Despite our safeguards, no electronic transmission or storage technology can be guaranteed to be 100% secure. If you become aware of any security concern, please contact <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a> immediately.</p>
 
-<h2>14. How can you contact us?</h2>
-<p>If you have questions or comments about this notice, or wish to exercise your privacy rights, please contact our Data Protection Officer:</p>
-<ul>
-  <li>Email: <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a></li>
-</ul>
-<p>We aim to respond to all privacy enquiries within 30 days.</p>
+  <h2>8. DO WE COLLECT INFORMATION FROM MINORS?</h2>
+  <p><strong>In Short:</strong> Dad Health is for adults aged 18 and over. We do not knowingly collect personal data from children.</p>
+  <p>Dad Health is designed for use by adults aged 18 and over. We do not knowingly collect, solicit or market to children under the age of 18.</p>
+  <p>Some features of the app, including the milestone tracker, Bond check-in and Present Dad Mode, allow parents to log information about their interactions with their children. This information:</p>
+  <ol>
+    <li>Is submitted by the parent user and processed under that parent's consent</li>
+    <li>Does not involve direct data collection from children</li>
+    <li>Is not used for any purpose other than providing the relevant feature to the parent</li>
+    <li>Is not shared with or accessible to other users unless explicitly shared by the parent via the co-parenting feature</li>
+  </ol>
+  <p>If we learn that a user is under the age of 18, we will deactivate their account and delete their data. Please contact <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a> if you believe a minor has registered.</p>
 
-<h2>15. How can you review, update, or delete your data?</h2>
-<p>Based on applicable laws, you may have the right to request access to, correction of, or deletion of your personal information. To make such a request:</p>
-<ul>
-  <li>Log in to your account and use the account settings to update your profile</li>
-  <li>Submit a Data Subject Access Request at <a href="https://dadhealth.co.uk/privacy-request" target="_blank">https://dadhealth.co.uk/privacy-request</a></li>
-  <li>Email <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a> with your request</li>
-</ul>
-<p>We will respond to verified requests within one month in accordance with UK GDPR. In complex cases we may extend this by a further two months, in which case we will notify you.</p>
+  <h2>9. WHAT ARE YOUR PRIVACY RIGHTS?</h2>
+  <p><strong>In Short:</strong> Under UK GDPR you have significant rights over your personal data. We will respond to all valid requests within one month.</p>
+  <ol>
+    <li>Right of access — to receive a copy of the personal data we hold about you</li>
+    <li>Right to rectification — to have inaccurate data corrected</li>
+    <li>Right to erasure ('right to be forgotten') — to have your data deleted, subject to legal retention requirements</li>
+    <li>Right to restrict processing — to limit how we use your data</li>
+    <li>Right to data portability — to receive your data in a structured, commonly used format</li>
+    <li>Right to object — to object to processing based on legitimate interests</li>
+    <li>Rights related to automated decision-making — to request human review of automated decisions that significantly affect you</li>
+  </ol>
+  <p>To exercise any of these rights, please contact us at <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a> or submit a Data Subject Access Request at <a href="https://dadhealth.co.uk/privacy-request">https://dadhealth.co.uk/privacy-request</a>.</p>
+  <p>If you are located in the UK and believe we are unlawfully processing your personal information, you have the right to complain to the Information Commissioner's Office (ICO):</p>
+  <ol>
+    <li>Website: <a href="https://ico.org.uk">ico.org.uk</a></li>
+    <li>Phone: 0303 123 1113</li>
+  </ol>
+
+  <h3>Withdrawing consent</h3>
+  <p>Where we rely on your consent to process special category health and wellbeing data, you may withdraw that consent at any time by deleting your account or contacting <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a>. Withdrawal does not affect the lawfulness of processing before withdrawal. Following withdrawal, your health and wellbeing data will be deleted within 30 days.</p>
+
+  <h3>Opting out of marketing</h3>
+  <p>You may unsubscribe from marketing emails at any time by clicking the unsubscribe link in any email we send or by contacting us. We may still send service-related messages necessary for account operation.</p>
+
+  <h2>10. CONTROLS FOR DO-NOT-TRACK FEATURES</h2>
+  <p>Most web browsers include a Do-Not-Track ('DNT') feature. No uniform technology standard for implementing DNT signals has been finalised. As such, we do not currently respond to DNT browser signals. If a standard is adopted in the future, we will update this notice accordingly.</p>
+
+  <h2>11. DO UNITED STATES RESIDENTS HAVE SPECIFIC PRIVACY RIGHTS?</h2>
+  <p>If you are a resident of California, Colorado, Connecticut, Delaware, Florida, Indiana, Iowa, Kentucky, Maryland, Minnesota, Montana, Nebraska, New Hampshire, New Jersey, Oregon, Rhode Island, Tennessee, Texas, Utah, or Virginia, you may have specific privacy rights under applicable state law.</p>
+
+  <h3>Categories of personal information collected</h3>
+  <table>
+    <thead><tr><th>Category</th><th>Examples</th><th>Collected</th></tr></thead>
+    <tbody>
+      <tr><td>A. Identifiers</td><td>Email address, username, IP address</td><td>YES</td></tr>
+      <tr><td>B. California Customer Records</td><td>Name, contact information</td><td>YES</td></tr>
+      <tr><td>C. Protected classification characteristics</td><td>Age, gender</td><td>YES</td></tr>
+      <tr><td>D. Commercial information</td><td>Purchase history, subscription status</td><td>YES</td></tr>
+      <tr><td>E. Biometric information</td><td>Fingerprints and voiceprints</td><td>NO</td></tr>
+      <tr><td>F. Internet or network activity</td><td>App usage data, analytics</td><td>YES</td></tr>
+      <tr><td>G. Geolocation data</td><td>Approximate location for Dad Days search</td><td>YES — approximate area only, not precise</td></tr>
+      <tr><td>H. Audio, electronic or visual information</td><td>Profile photos (if uploaded)</td><td>YES — if provided</td></tr>
+      <tr><td>I. Professional or employment information</td><td>Not collected</td><td>NO</td></tr>
+      <tr><td>J. Education information</td><td>Not collected</td><td>NO</td></tr>
+      <tr><td>K. Inferences from personal information</td><td>Dad Health Score calculated from mood, sleep and Bond data</td><td>YES — see Section 2</td></tr>
+      <tr><td>L. Sensitive personal information</td><td>Mood logs, journal entries, health check-in data, precise location</td><td>YES — see Section 1</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>Appeals:</strong> If we decline to take action on your privacy request, you may appeal by emailing <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a>. We will respond in writing within 60 days. If your appeal is denied, you may submit a complaint to your state attorney general.</p>
+
+  <h2>12. DO OTHER REGIONS HAVE SPECIFIC PRIVACY RIGHTS?</h2>
+  <h3>Australia and New Zealand</h3>
+  <p>We collect and process your personal information under the obligations set by Australia's Privacy Act 1988 and New Zealand's Privacy Act 2020. If you believe we are unlawfully processing your personal information, you may contact the Office of the Australian Information Commissioner or the Office of New Zealand Privacy Commissioner.</p>
+
+  <h3>Republic of South Africa</h3>
+  <p>You have the right to request access to or correction of your personal information at any time. Complaints may be submitted to the Information Regulator (South Africa) at <a href="mailto:enquiries@inforegulator.org.za">enquiries@inforegulator.org.za</a>.</p>
+
+  <h2>13. DO WE MAKE UPDATES TO THIS NOTICE?</h2>
+  <p>We may update this Privacy Notice from time to time to reflect changes in our Services, legal requirements or data processing activities. The updated version will show a revised date at the top. We will notify you of material changes either by posting a notice within the app or by email.</p>
+
+  <h2>14. HOW CAN YOU CONTACT US?</h2>
+  <p>If you have questions or comments about this notice, or wish to exercise your privacy rights, please contact our Data Protection Officer:</p>
+  <p>Email: <a href="mailto:hello@dadhealth.co.uk">hello@dadhealth.co.uk</a><br>
+  Post: Dad Health, Data Protection Officer, 66 Paul Street, London EC2A 4NA, England, United Kingdom</p>
+  <p>We aim to respond to all privacy enquiries within 30 days.</p>
+  <div class="warning">ICO Registration Number: [ADD YOUR ICO REGISTRATION NUMBER HERE] — Register at ico.org.uk if not yet registered. Required before handling user data.</div>
+
+  <h2>15. HOW CAN YOU REVIEW, UPDATE, OR DELETE YOUR DATA?</h2>
+  <p>Based on applicable laws, you may have the right to request access to, correction of, or deletion of your personal information. To make such a request:</p>
+  <ol>
+    <li>Log in to your account and use the account settings to update your profile</li>
+    <li>Submit a Data Subject Access Request at <a href="https://dadhealth.co.uk/privacy-request">https://dadhealth.co.uk/privacy-request</a></li>
+    <li>Email <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a> with your request</li>
+  </ol>
+  <p>We will respond to verified requests within one month in accordance with UK GDPR. In complex cases we may extend this by a further two months, in which case we will notify you.</p>
+
+  <hr>
+  <p><strong>DAD HEALTH — Privacy Notice v2.0 · June 2025 · Requires solicitor review before publication</strong></p>
+</main>
 </body>
+</html>
