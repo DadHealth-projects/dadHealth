@@ -42,8 +42,18 @@ export async function sendOneSignalToExternalUserId(args: {
     throw new Error(`OneSignal error ${response.status}: ${text}`);
   }
 
-  const body = JSON.parse(text || "{}") as { id?: unknown };
-  if (typeof body.id !== "string" || !body.id) {
+  const body = JSON.parse(text || "{}") as {
+  id?: unknown;
+  errors?: unknown;
+};
+
+if (body.errors) {
+  throw new Error(
+    `OneSignal returned delivery errors: ${JSON.stringify(body.errors)}`
+  );
+}
+
+if (typeof body.id !== "string" || !body.id) {
     throw new Error("OneSignal accepted the request but did not create a notification");
   }
 
