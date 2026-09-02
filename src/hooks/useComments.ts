@@ -21,6 +21,7 @@ user_liked?: boolean;
   parent_id?: string | null;
   /** display_name from user_profile, or anonymous label when anonymous */
   author_label: string;
+  author_name?: string | null;
 };
 
 function byCreatedAt(a: EnrichedComment, b: EnrichedComment) {
@@ -123,6 +124,7 @@ export function useComments(postId: string | null, sessionUserId?: string) {
         anonymous?: boolean;
         created_at?: string;
         parent_id?: string | null;
+        author_name?: string | null;
       }>;
 
       if (rows.length === 0) {
@@ -161,6 +163,14 @@ export function useComments(postId: string | null, sessionUserId?: string) {
               p.display_name,
             ])
           );
+        }
+        if (profileByUser.size < ids.length || [...profileByUser.values()].some((name) => !name?.trim())) {
+          const { data: authors, error: authorsError } = await supabase.rpc("get_comment_author_names", { p_user_ids: ids });
+          if (!authorsError && authors) {
+            for (const author of authors as { user_id: string; display_name: string | null }[]) {
+              profileByUser.set(threadIdKey(author.user_id), author.display_name);
+            }
+          }
         }
       }
 
@@ -209,7 +219,7 @@ export function useComments(postId: string | null, sessionUserId?: string) {
 
         const author_label = anon
           ? ANONYMOUS_AUTHOR_NAME
-          : fromProfile?.trim() || DEFAULT_DISPLAY_FALLBACK;
+          : r.author_name?.trim() || fromProfile?.trim() || DEFAULT_DISPLAY_FALLBACK;
 
         const rawParent = r.parent_id;
 
@@ -305,6 +315,7 @@ export function useAddComment(sessionUserId?: string) {
         parent_id: optimisticParent,
         created_at: new Date().toISOString(),
         author_label: "You",
+        author_name: "You",
       };
       queryClient.setQueryData<EnrichedComment[]>(["comments", pid], [...(prevComments ?? []), optimistic]);
       queryClient.setQueryData<Record<string, unknown>[]>(ck, (old) => {

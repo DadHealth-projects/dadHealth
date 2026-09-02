@@ -62,6 +62,19 @@ async function sendIfAllowed(args: {
   });
 }
 
+async function actorName(admin: ReturnType<typeof createAdminSupabaseClient>, userId: string | null | undefined) {
+  if (!userId) return "Someone";
+  const result = await admin.from("user_profile").select("display_name").eq("user_id", userId).maybeSingle();
+  if (result.error) throw result.error;
+  if (result.data?.display_name?.trim()) return result.data.display_name.trim();
+  const authResult = await admin.auth.admin.getUserById(userId);
+  if (authResult.error) throw authResult.error;
+  const metadata = authResult.data.user?.user_metadata as Record<string, unknown> | undefined;
+  const fallback = [metadata?.display_name, metadata?.full_name, metadata?.name]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+  return fallback?.trim() || authResult.data.user?.email?.split("@")[0]?.trim() || "Someone";
+}
+
 async function communityReply(body: Extract<EventBody, { type: "community_reply" }>) {
   const admin = createAdminSupabaseClient();
   const commentResult = await admin.from("comments").select("id,user_id,post_id,parent_id").eq("id", body.record_id).maybeSingle();
@@ -84,6 +97,7 @@ async function communityReply(body: Extract<EventBody, { type: "community_reply"
     if (ownerResult.error) throw ownerResult.error;
     if (ownerResult.data?.user_id) recipients.add(ownerResult.data.user_id);
   }
+  const name = await actorName(admin, body.actor_user_id || comment.user_id);
 
   recipients.delete(body.actor_user_id || comment.user_id);
   console.info("[notifications/events] Community recipients resolved", {
@@ -105,8 +119,8 @@ async function communityReply(body: Extract<EventBody, { type: "community_reply"
     ? "New reply"
     : "New comment",
   content: comment.parent_id
-    ? "Someone replied to your comment."
-    : "Someone commented on your post.",
+    ? `${name} replied to your comment.`
+    : `${name} commented on your post.`,
   link: "/community",
   data: {
     post_id: comment.post_id,
@@ -154,6 +168,7 @@ async function communityLike(
     if (!recipientUserId || recipientUserId === body.actor_user_id) {
       return { sent: 0, skipped: 1 };
     }
+    const name = await actorName(admin, body.actor_user_id);
 
     const result = await sendIfAllowed({
       admin,
@@ -163,7 +178,7 @@ async function communityLike(
       payload: {
         type: "community_like",
         heading: "New respect",
-        content: "Someone respected your post.",
+        content: `${name} respected your post.`,
         link: "/community",
         data: {
           post_id: post.id,
@@ -191,6 +206,7 @@ async function communityLike(
   if (!comment.user_id || comment.user_id === body.actor_user_id) {
     return { sent: 0, skipped: 1 };
   }
+  const name = await actorName(admin, body.actor_user_id);
 
   const result = await sendIfAllowed({
     admin,
@@ -200,7 +216,7 @@ async function communityLike(
     payload: {
       type: "community_like",
       heading: "New respect",
-      content: "Someone respected your comment.",
+      content: `${name} respected your comment.`,
       link: "/community",
       data: {
         post_id: comment.post_id,

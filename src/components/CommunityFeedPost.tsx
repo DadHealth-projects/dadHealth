@@ -281,7 +281,7 @@ export default function CommunityFeedPost({
           }`}
           title={!isAnon ? displayTitle : undefined}
         >
-          {avatarInitials}
+          {isAnon ? "A" : avatarInitials}
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-heading text-[13px] font-bold text-foreground tracking-wide flex items-center gap-1.5">
