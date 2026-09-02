@@ -68,6 +68,12 @@ function getOneSignalAppId(): string {
   return process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID?.trim() || "";
 }
 
+function isOneSignalAlreadyInitializedError(err: unknown): boolean {
+  return err instanceof Error
+    ? /sdk already initialized/i.test(err.message)
+    : /sdk already initialized/i.test(String(err));
+}
+
 async function initOneSignalOnce(oneSignal: any, appId: string): Promise<void> {
   if (!appId) return;
   if (window.__onesignalInitialized) return;
@@ -80,6 +86,11 @@ async function initOneSignalOnce(oneSignal: any, appId: string): Promise<void> {
         });
         window.__onesignalInitialized = true;
       } catch (err) {
+        // Another consumer may have initialized the singleton before this callback ran.
+        if (isOneSignalAlreadyInitializedError(err)) {
+          window.__onesignalInitialized = true;
+          return;
+        }
         // Reset promise so a future retry is possible (e.g. after network recovery)
         window.__onesignalInitPromise = undefined;
         console.warn("[OneSignal] init failed — check NEXT_PUBLIC_ONESIGNAL_APP_ID and OneSignal dashboard origin settings.", err);
