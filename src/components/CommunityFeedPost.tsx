@@ -32,6 +32,7 @@ import {
   useDeleteComment,
   groupCommentThreads,
   threadIdKey,
+  useToggleCommentLike,
   type EnrichedComment,
 } from "@/hooks/useComments";
 import type { User } from "@supabase/supabase-js";
@@ -138,7 +139,11 @@ export default function CommunityFeedPost({
     prevReplyCount.current = replyCount;
   }, [replyCount]);
 
-  const { data: comments = [], isLoading: commentsLoading } = useComments(expanded && postId ? postId : null);
+  const { data: comments = [], isLoading: commentsLoading } =
+  useComments(
+    expanded && postId ? postId : null,
+    user?.id
+  );
   const { roots, repliesByParentId } = groupCommentThreads(comments);
   const replyingToLabel = useMemo(() => {
     if (!replyingToId) return null;
@@ -149,7 +154,7 @@ export default function CommunityFeedPost({
   }, [replyingToId, comments, user?.id]);
   const addComment = useAddComment(user?.id);
   const deleteComment = useDeleteComment();
-
+  const toggleCommentLike = useToggleCommentLike(user?.id);
   const isAnon = p.anonymous === true;
   const liked = postId ? userLikedIds.has(postId) : false;
   const saved = postId ? userSavedIds.has(postId) : false;
@@ -371,7 +376,7 @@ export default function CommunityFeedPost({
       {expanded && postId && (
         <div
           id={`post-thread-${postId}`}
-          className="mt-2 rounded-md border border-border/60 bg-white/[0.03] p-2.5"
+          className="mt-2 rounded-md border border-border/70 bg-background p-3"
           role="region"
           aria-label="Comments and replies"
         >
@@ -380,7 +385,7 @@ export default function CommunityFeedPost({
           ) : roots.length === 0 && replyCount > 0 ? (
             <p className="text-xs text-muted-foreground">Couldn’t load replies. Refresh the page.</p>
           ) : roots.length > 0 ? (
-            <ul className="list-none m-0 p-0 space-y-4 mb-2">
+            <ul className="list-none m-0 p-0 space-y-3 mb-3">
               {roots.map((c: EnrichedComment, rootIdx: number) => {
                 const cid = safeString(c.id);
                 const name = sameUser(c.user_id, user?.id) && !c.anonymous
@@ -389,7 +394,7 @@ export default function CommunityFeedPost({
                 const childReplies = repliesByParentId.get(threadIdKey(c.id)) ?? [];
                 const createdLabel = safeFormatDate(c.created_at, "d MMM, h:mm a");
                 return (
-                  <li key={cid || `root-${rootIdx}`} className="rounded-sm border border-border/50 bg-white/[0.02] p-3">
+                  <li key={cid || `root-${rootIdx}`} className="rounded-sm border border-border/60 bg-card/70 p-3">
   <div className="flex gap-2 justify-between items-start text-[12px]">
     <div className="flex-1 min-w-0">
       <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0">
@@ -417,15 +422,37 @@ export default function CommunityFeedPost({
                         </button>
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleReplyTo(cid)}
-                        className="font-heading text-[9px] font-bold uppercase tracking-wider text-primary hover:underline"
-                      >
-                        {replyingToId === cid ? "Cancel" : "Reply"}
-                      </button>
-                    </div>
+                    <div className="flex flex-wrap items-center gap-3 mt-1">
+  <button
+    type="button"
+    onClick={() => {
+      if (!user?.id) {
+        openAuthModal();
+        return;
+      }
+
+      toggleCommentLike.mutate({
+        commentId: cid,
+        postId,
+        liked: Boolean(c.user_liked),
+      });
+    }}
+    disabled={toggleCommentLike.isPending}
+    className={`font-heading text-[9px] font-bold uppercase tracking-wider hover:underline ${
+      c.user_liked ? "text-primary" : "text-muted-foreground"
+    }`}
+  >
+    {Number(c.likes_count ?? 0)} RESPECT
+  </button>
+
+  <button
+    type="button"
+    onClick={() => toggleReplyTo(cid)}
+    className="font-heading text-[9px] font-bold uppercase tracking-wider text-primary hover:underline"
+  >
+    {replyingToId === cid ? "Cancel" : "Reply"}
+  </button>
+</div>
                     {replyingToId === cid && user && (
                       <div className="flex flex-col gap-1.5 pt-0.5">
                         {replyingToLabel && (
@@ -462,7 +489,7 @@ export default function CommunityFeedPost({
                               : safeDisplayName(r.author_label, DEFAULT_DISPLAY_FALLBACK);
                           const rCreated = safeFormatDate(r.created_at, "d MMM, h:mm a");
                           return (
-                            <li key={rid || `reply-${rootIdx}-${replyIdx}`} className="flex gap-2 justify-between items-start text-[11px] text-foreground/75">
+                            <li key={rid || `reply-${rootIdx}-${replyIdx}`} className="flex gap-2 justify-between items-start text-[11px] text-foreground/75 border-l-2 border-primary/30 pl-3">
                               <span className="flex-1 min-w-0 space-y-1">
                                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
                                   <span className="font-heading font-bold text-foreground/85">{rName}</span>
@@ -472,7 +499,33 @@ export default function CommunityFeedPost({
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-foreground/75 leading-relaxed">{safeString(r.content)}</p>
+                                <p className="text-foreground/75 leading-relaxed">
+  {safeString(r.content)}
+</p>
+
+<div className="flex items-center gap-2 mt-1">
+  <button
+    type="button"
+    onClick={() => {
+      if (!user?.id) {
+        openAuthModal();
+        return;
+      }
+
+      toggleCommentLike.mutate({
+        commentId: rid,
+        postId,
+        liked: Boolean(r.user_liked),
+      });
+    }}
+    disabled={toggleCommentLike.isPending}
+    className={`font-heading text-[9px] font-bold uppercase tracking-wider hover:underline ${
+      r.user_liked ? "text-primary" : "text-muted-foreground"
+    }`}
+  >
+    {Number(r.likes_count ?? 0)} RESPECT
+  </button>
+</div>
                               </span>
                               {sameUser(user?.id, r.user_id) && (
                                 <button

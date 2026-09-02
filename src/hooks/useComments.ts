@@ -15,6 +15,8 @@ export type EnrichedComment = {
   content: string;
   anonymous?: boolean;
   created_at?: string;
+  likes_count?: number;
+user_liked?: boolean;
   /** null = top-level; set = reply to that comment (max depth 1 in UI) */
   parent_id?: string | null;
   /** display_name from user_profile, or anonymous label when anonymous */
@@ -39,6 +41,10 @@ export function threadIdKey(id: unknown): string {
     .toLowerCase();
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 /** Split flat list into roots + replies grouped by parent (1 level). */
 export function groupCommentThreads(flat: EnrichedComment[]) {
   const roots = flat.filter(isTopLevelComment).sort(byCreatedAt);
@@ -56,7 +62,7 @@ export function groupCommentThreads(flat: EnrichedComment[]) {
   return { roots, repliesByParentId };
 }
 
-export function useComments(postId: string | null) {
+export function useComments(postId: string | null, sessionUserId?: string) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -77,6 +83,17 @@ export function useComments(postId: string | null) {
           queryClient.invalidateQueries({ queryKey: ["community"] });
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "comment_likes",
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["comments", postId] });
+        }
+      )
       .subscribe();
 
     return () => {
@@ -86,14 +103,18 @@ export function useComments(postId: string | null) {
 
   return useQuery({
     queryKey: ["comments", postId],
+
     queryFn: async (): Promise<EnrichedComment[]> => {
       if (!postId) return [];
+
       const { data, error } = await supabase
         .from("comments")
         .select("*")
         .eq("post_id", postId)
         .order("created_at", { ascending: true });
+
       if (error) throw error;
+
       const rows = (data ?? []) as Array<{
         id: string;
         user_id: string;
@@ -103,35 +124,114 @@ export function useComments(postId: string | null) {
         created_at?: string;
         parent_id?: string | null;
       }>;
-      const ids = [...new Set(rows.map((r) => String(r.user_id)))];
+
+      if (rows.length === 0) {
+        return [];
+      }
+
+      // ----------------------------------
+      // AUTHOR PROFILE DATA
+      // ----------------------------------
+
+      const ids = [
+        ...new Set(
+          rows.map((r) => String(r.user_id))
+        ),
+      ];
+
       let profileByUser = new Map<string, string | null>();
+
       if (ids.length > 0) {
         const { data: profiles, error: pErr } = await supabase
           .from("user_profile")
           .select("user_id, display_name")
           .in("user_id", ids);
-        // RLS only returns the current user's row for others' ids — never fail the whole thread
+
+        // RLS may only expose permitted profile rows.
+        // Do not fail the whole thread if profile lookup fails.
         if (!pErr && profiles) {
           profileByUser = new Map(
-            (profiles as { user_id: string; display_name: string | null }[]).map((p) => [
+            (
+              profiles as {
+                user_id: string;
+                display_name: string | null;
+              }[]
+            ).map((p) => [
               threadIdKey(p.user_id),
               p.display_name,
             ])
           );
         }
       }
+
+      // ----------------------------------
+      // COMMENT LIKES
+      // ----------------------------------
+
+      const commentIds = rows.map((r) => String(r.id));
+
+      const { data: commentLikes, error: likesError } = await supabase
+        .from("comment_likes")
+        .select("comment_id,user_id")
+        .in("comment_id", commentIds);
+
+      if (likesError) throw likesError;
+
+      const likeCounts = new Map<string, number>();
+      const userLikedIds = new Set<string>();
+
+      for (const like of commentLikes ?? []) {
+        const commentId = String(like.comment_id);
+
+        likeCounts.set(
+          commentId,
+          (likeCounts.get(commentId) ?? 0) + 1
+        );
+
+        if (
+          sessionUserId &&
+          String(like.user_id) === String(sessionUserId)
+        ) {
+          userLikedIds.add(commentId);
+        }
+      }
+
+      // ----------------------------------
+      // FINAL ENRICHED COMMENTS
+      // ----------------------------------
+
       return rows.map((r) => {
         const anon = r.anonymous === true;
-        const fromProfile = profileByUser.get(threadIdKey(r.user_id));
-        const author_label = anon ? ANONYMOUS_AUTHOR_NAME : (fromProfile?.trim() || DEFAULT_DISPLAY_FALLBACK);
+
+        const fromProfile = profileByUser.get(
+          threadIdKey(r.user_id)
+        );
+
+        const author_label = anon
+          ? ANONYMOUS_AUTHOR_NAME
+          : fromProfile?.trim() || DEFAULT_DISPLAY_FALLBACK;
+
         const rawParent = r.parent_id;
+
         const normalizedParent =
-          rawParent != null && String(rawParent).trim() !== "" && String(rawParent) !== "undefined"
+          rawParent != null &&
+          String(rawParent).trim() !== "" &&
+          String(rawParent) !== "undefined"
             ? String(rawParent).trim()
             : null;
-        return { ...r, parent_id: normalizedParent, author_label };
+
+        const commentId = String(r.id);
+
+        return {
+          ...r,
+          parent_id: normalizedParent,
+          author_label,
+          likes_count: likeCounts.get(commentId) ?? 0,
+          user_liked: userLikedIds.has(commentId),
+        };
       });
     },
+
     enabled: !!postId,
   });
 }
@@ -253,5 +353,65 @@ export function useDeleteComment() {
     },
     onError: (e: unknown) =>
       toast.error(e instanceof Error ? e.message : String(e) || "Could not delete reply"),
+  });
+}
+
+export function useToggleCommentLike(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      commentId,
+      postId,
+      liked,
+    }: {
+      commentId: string;
+      postId: string;
+      liked: boolean;
+    }) => {
+      if (!userId) throw new Error("Not authenticated");
+      if (!isUuid(commentId)) throw new Error("Invalid comment");
+
+      if (liked) {
+        const { error } = await supabase
+          .from("comment_likes")
+          .delete()
+          .eq("user_id", userId)
+          .eq("comment_id", commentId);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("comment_likes")
+          .upsert({
+            user_id: userId,
+            comment_id: commentId,
+          }, { onConflict: "user_id,comment_id", ignoreDuplicates: true });
+
+        if (error) throw error;
+      }
+
+      trackEvent("comment_like_clicked", {
+        action: liked ? "unlike" : "like",
+        comment_id: commentId,
+        post_id: postId,
+      });
+    },
+
+    onSettled: (_data, _error, variables) => {
+      if (!variables) return;
+
+      queryClient.invalidateQueries({
+        queryKey: ["comments", variables.postId],
+      });
+    },
+
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not update respect"
+      );
+    },
   });
 }
