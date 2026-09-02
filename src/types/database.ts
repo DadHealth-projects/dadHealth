@@ -83,6 +83,7 @@ export type NotificationType =
   | "journal_prompt"
   | "milestone_anniversary"
   | "community_reply"
+  | "community_like"
   | "co_parent_event_added"
   | "present_dad_mode_complete";
 
