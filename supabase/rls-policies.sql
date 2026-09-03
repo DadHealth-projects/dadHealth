@@ -11,6 +11,7 @@ alter table mood_logs enable row level security;
 alter table sleep_logs enable row level security;
 alter table workout_sessions enable row level security;
 alter table workouts enable row level security;
+alter table ai_workout_generation_claims enable row level security;
 alter table workout_completions enable row level security;
 alter table user_profile enable row level security;
 alter table user_streaks enable row level security;
@@ -107,6 +108,18 @@ drop policy if exists "Users can delete own ai workouts" on workouts;
 create policy "Users can delete own ai workouts"
 on workouts for delete
 using (auth.uid() = user_id and source = 'ai_generated');
+
+-- AI workout allowance claims are server-owned. No direct client access.
+revoke all on table ai_workout_generation_claims from public, anon, authenticated;
+grant select, insert, update, delete on table ai_workout_generation_claims to service_role;
+
+revoke all on function public.claim_ai_workout_generation(uuid, text) from public, anon, authenticated;
+revoke all on function public.complete_ai_workout_generation(uuid, text, integer, text, text, jsonb) from public, anon, authenticated;
+revoke all on function public.fail_ai_workout_generation(uuid) from public, anon, authenticated;
+
+grant execute on function public.claim_ai_workout_generation(uuid, text) to service_role;
+grant execute on function public.complete_ai_workout_generation(uuid, text, integer, text, text, jsonb) to service_role;
+grant execute on function public.fail_ai_workout_generation(uuid) to service_role;
 
 -- workout_completions: users can CRUD own completions
 drop policy if exists "Users can CRUD own workout_completions" on workout_completions;
