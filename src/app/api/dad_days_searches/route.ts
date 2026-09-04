@@ -30,6 +30,7 @@ type Body = {
   budget: Budget
   radius?: number
   childAge: ChildAge
+  quickFilters?: string[]
   userId?: string
 }
 
@@ -79,8 +80,18 @@ function buildPrompt(params: {
   budget: Budget
   radius: number
   childAge: ChildAge
+  quickFilters: string[]
 }) {
-  const { latitude, longitude, postcode, budget, radius, childAge } = params
+  const { latitude, longitude, postcode, budget, radius, childAge, quickFilters } = params
+  const quickFilterCopy: Record<string, string> = {
+    '60_minutes': 'activities that fit within about 60 minutes',
+    under_20: 'activities costing £20 or less',
+    raining: 'indoor or weather-proof activities suitable for rainy weather',
+    active: 'active and energetic activities',
+    creative: 'creative, making, or arts-based activities',
+    at_home: 'at-home activities or activities that can be done at home',
+  }
+  const preferences = quickFilters.map((filter) => quickFilterCopy[filter]).filter(Boolean)
 
   return `
 Find 10 real dad and child activities within ${radius} miles of
@@ -88,6 +99,7 @@ ${postcode || `coordinates ${latitude}, ${longitude}`}.
 
 Budget: ${budgetMap[budget]}.
 Child age: ${ageMap[childAge]}.
+${preferences.length ? `Quick preferences: ${preferences.join('; ')}.` : ''}
 
 Include a mix of:
 - parks
@@ -233,6 +245,7 @@ export async function POST(req: NextRequest) {
 
     const budget = body.budget as Budget | undefined
     const childAge = body.childAge as ChildAge | undefined
+    const quickFilters = Array.isArray(body.quickFilters) ? body.quickFilters.filter((filter): filter is string => typeof filter === 'string').slice(0, 6) : []
 
     if (!budget || !childAge) {
       return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
@@ -316,6 +329,7 @@ export async function POST(req: NextRequest) {
       budget,
       radius,
       childAge,
+      quickFilters,
     })
 
     const anthropic = new Anthropic({

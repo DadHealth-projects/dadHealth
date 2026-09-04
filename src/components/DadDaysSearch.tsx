@@ -16,6 +16,14 @@ interface DadDaysSearchProps {
 
 const RADIUS_OPTIONS = [5, 10, 20, 50] as const;
 const SEARCHES_PER_MONTH = 3;
+const QUICK_FILTERS = [
+  ["60_minutes", "I have 60 minutes"],
+  ["under_20", "I have £20"],
+  ["raining", "It’s raining"],
+  ["active", "Active"],
+  ["creative", "Creative"],
+  ["at_home", "At-home"],
+] as const;
 
 const DadDaysSearch = ({ userId, onResultsSaved }: DadDaysSearchProps) => {
   const { isPro, showPaywall } = useProStatus();
@@ -29,6 +37,7 @@ const DadDaysSearch = ({ userId, onResultsSaved }: DadDaysSearchProps) => {
   const [budget, setBudget] = useState<DadDaysBudget | null>(null);
   const [radius, setRadius] = useState<number>(20);
   const [childAgeOverride, setChildAgeOverride] = useState<DadDaysChildAge | null>(null);
+  const [quickFilters, setQuickFilters] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -173,6 +182,7 @@ const DadDaysSearch = ({ userId, onResultsSaved }: DadDaysSearchProps) => {
           budget,
           radius,
           childAge: finalChildAge,
+          quickFilters,
           userId,
         }),
       });
@@ -210,6 +220,7 @@ const DadDaysSearch = ({ userId, onResultsSaved }: DadDaysSearchProps) => {
         budget,
         radius,
         childAge: finalChildAge,
+        quickFilters,
         resultCount: data.results.length,
         isPro,
       });
@@ -304,6 +315,18 @@ const DadDaysSearch = ({ userId, onResultsSaved }: DadDaysSearchProps) => {
             </button>
             <span className="text-xs text-muted-foreground flex items-center">Or enter a postcode below</span>
           </div>
+
+          {hasLocation && (
+            <div>
+              <label className="text-xs font-heading font-bold tracking-wide uppercase text-muted-foreground mb-2 block">Quick filters</label>
+              <div className="flex gap-2 flex-wrap">
+                {QUICK_FILTERS.map(([value, label]) => {
+                  const selected = quickFilters.includes(value);
+                  return <button key={value} onClick={() => { setQuickFilters((current) => selected ? current.filter((item) => item !== value) : [...current, value]); if (value === "under_20" && !selected) setBudget("under_20"); }} disabled={searching} className={`px-3 py-1.5 border rounded-full font-heading text-[11px] font-bold tracking-wide uppercase cursor-pointer transition-all disabled:opacity-50 ${selected ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-primary hover:text-primary"}`}>{label}</button>;
+                })}
+              </div>
+            </div>
+          )}
 
           {locationMethod === "postcode" && (
             <div className="flex gap-2">
@@ -488,11 +511,12 @@ const DadDaysSearch = ({ userId, onResultsSaved }: DadDaysSearchProps) => {
               Activities Found ({results.length})
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {results.map((result) => (
+              {results.map((result, index) => (
                 <div
                   key={result.name}
-                  className="border border-border p-4 rounded-lg hover:border-primary transition-all group"
+                  className={`${index === 0 ? "border-primary/60 bg-primary/[0.06]" : "border-border"} border p-4 rounded-lg hover:border-primary transition-all group`}
                 >
+                  {index === 0 ? <div className="text-[10px] font-heading font-bold uppercase tracking-wide text-primary mb-2">Featured family day</div> : null}
                   <h4 className="font-heading text-sm font-bold text-foreground mb-1 group-hover:text-primary transition-colors">
                     {result.name}
                   </h4>
