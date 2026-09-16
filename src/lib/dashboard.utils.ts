@@ -36,11 +36,23 @@ export function getScoreBreakdown(dashboard: DashboardData | null | undefined, h
   };
 }
 
-export function getLastSevenDayKeys() {
+export function toLocalDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Calendar-week keys for charts with Monday–Sunday weekday labels. */
+export function getCurrentWeekDayKeys(now = new Date()) {
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    return d.toISOString().slice(0, 10);
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return toLocalDateKey(d);
   });
 }
 

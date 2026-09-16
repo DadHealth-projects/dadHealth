@@ -11,6 +11,7 @@ import { ProGate } from "@/components/ProProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMind } from "@/hooks/useMind";
 import { trackEvent } from "@/lib/analytics";
+import { getCurrentWeekDayKeys } from "@/lib/dashboard.utils";
 
 const BREATH_AUDIO_VERSION = "2026-04-23-2";
 
@@ -29,11 +30,7 @@ const MindPage = () => {
   const [breathActive, setBreathActive] = useState(false);
   const [breathMuted, setBreathMuted] = useState(false);
 
-  const last7 = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    return d.toISOString().slice(0, 10);
-  });
+  const last7 = getCurrentWeekDayKeys();
   const moodMap = new Map(moodLogs.map((m: { date: string; mood_value: number }) => [m.date, m.mood_value]));
   const moodWeekData = last7.map((d) => moodMap.get(d) ?? 0);
   const displayMood = user ? moodWeekData : [0, 0, 0, 0, 0, 0, 0];
