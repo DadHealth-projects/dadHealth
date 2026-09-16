@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProgress } from "@/hooks/useProgress";
 import { toast } from "@/hooks/use-toast";
+import { getCurrentWeekDayKeys } from "@/lib/dashboard.utils";
 
 const ProgressPage = () => {
   const { user } = useAuth();
@@ -27,10 +28,8 @@ const ProgressPage = () => {
     ? (scoreData?.breakdown ?? { mind: null, body: null, bond: null })
     : { mind: null, body: null, bond: null };
 
-  const last7 = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    return { key: d.toISOString().slice(0, 10), day: format(d, "EEE") };
+  const last7 = getCurrentWeekDayKeys().map((key) => {
+    return { key, day: format(new Date(`${key}T00:00:00`), "EEE") };
   });
   const sleepMap = new Map(sleepLogs.map((s: { date: string; hours: number }) => [s.date, s.hours]));
   const moodMap = new Map(moodLogs.map((m: { date: string; mood_value: number }) => [m.date, m.mood_value]));
