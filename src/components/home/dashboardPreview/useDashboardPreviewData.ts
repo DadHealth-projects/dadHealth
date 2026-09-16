@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { getDashboardScore, getLastSevenDayKeys, getMoodSummary, getMoodWeek, getReportStatsList, getScoreBreakdown } from "@/lib/dashboard.utils";
+import { getCurrentWeekDayKeys, getDashboardScore, getMoodSummary, getMoodWeek, getReportStatsList, getScoreBreakdown } from "@/lib/dashboard.utils";
 import { greetingDisplayName } from "@/lib/userDisplay";
 import type { User } from "@supabase/supabase-js";
 import type { CircleItem, DadDateItem, MilestoneItem, ReminderItem, ScoreItem } from "./types";
@@ -49,7 +49,7 @@ export function useDashboardPreviewData({
   );
 
   const streak = (dashboard?.streak_count as number | undefined) ?? 0;
-  const last7 = useMemo(() => getLastSevenDayKeys(), []);
+  const last7 = useMemo(() => getCurrentWeekDayKeys(), []);
   const moodWeek = useMemo(() => getMoodWeek(moodLogs, last7), [moodLogs, last7]);
   const moodSummary = useMemo(() => getMoodSummary(moodWeek, hasUser), [moodWeek, hasUser]);
 
