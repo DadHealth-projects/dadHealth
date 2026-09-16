@@ -20,6 +20,8 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 })
 
+const FREE_SEARCH_LIMIT = 3
+
 type Budget = 'free' | 'under_20' | 'over_20'
 type ChildAge = 'toddler' | 'primary' | 'teen'
 
@@ -52,6 +54,65 @@ function startOfMonth(d = new Date()) {
 
 function oneHourAgo() {
   return new Date(Date.now() - 60 * 60 * 1000).toISOString()
+}
+
+function profileHasProAccess(profile: {
+  is_pro?: boolean | string | number | null
+  subscription_status?: string | null
+} | null): boolean {
+  return profile?.is_pro === true ||
+    profile?.is_pro === 'true' ||
+    profile?.is_pro === 1 ||
+    profile?.is_pro === '1' ||
+    isProSubscriptionStatus(profile?.subscription_status)
+}
+
+async function getRequestUser(req: NextRequest) {
+  const bearerToken = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
+  const authSupabase = await createServerSupabaseClient()
+  const authResult = bearerToken
+    ? await supabaseAdmin.auth.getUser(bearerToken)
+    : await authSupabase.auth.getUser()
+  return authResult.data.user
+}
+
+/**
+ * Returns the current user's entitlement from the same trusted source as the
+ * search action. Mobile must not fall back to a Free allowance when a direct
+ * client-side history read is unavailable during session restoration.
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const user = await getRequestUser(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const [profileResult, countResult] = await Promise.all([
+      supabaseAdmin
+        .from('user_profile')
+        .select('is_pro, subscription_status, child_age')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('dad_day_searches')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('searched_at', startOfMonth()),
+    ])
+
+    if (profileResult.error || countResult.error) {
+      return NextResponse.json({ error: 'allowance_unavailable' }, { status: 503 })
+    }
+
+    const isPro = profileHasProAccess(profileResult.data)
+    return NextResponse.json({
+      isPro,
+      searchesUsed: isPro ? null : countResult.count ?? 0,
+      limit: isPro ? null : FREE_SEARCH_LIMIT,
+      childAge: profileResult.data?.child_age ?? null,
+    })
+  } catch {
+    return NextResponse.json({ error: 'allowance_unavailable' }, { status: 503 })
+  }
 }
 
 function coerceNumber(value: unknown, fallback: number) {
@@ -251,12 +312,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
     }
 
-    const bearerToken = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
-    const authSupabase = await createServerSupabaseClient()
-    const authResult = bearerToken
-      ? await supabaseAdmin.auth.getUser(bearerToken)
-      : await authSupabase.auth.getUser()
-    const user = authResult.data.user
+    const user = await getRequestUser(req)
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -266,7 +322,6 @@ export async function POST(req: NextRequest) {
 
     const radius = coerceNumber(body.radius, 20)
 
-    const FREE_SEARCH_LIMIT = 3
     let searchesUsed: number | null = null
 
     const { count: hourlyCount } = await supabaseAdmin
@@ -290,12 +345,7 @@ export async function POST(req: NextRequest) {
       subscription_status?: string | null
     } | null
 
-    const isPro =
-      p?.is_pro === true ||
-      p?.is_pro === 'true' ||
-      p?.is_pro === 1 ||
-      p?.is_pro === '1' ||
-      isProSubscriptionStatus(p?.subscription_status)
+    const isPro = profileHasProAccess(p)
 
 
     if (isPro) {
