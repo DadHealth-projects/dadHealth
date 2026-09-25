@@ -15,6 +15,14 @@ function dailyMindScore(moodValue, stressLevel) {
     : (moodScore + (5 - stressLevel) * 25) / 2;
 }
 
+function canonicalMindScore(moodValue, stressLevel, scaleVersion) {
+  const normalizedMood = moodValue - (scaleVersion === 1 ? 1 : 0);
+  const moodScore = normalizedMood * 25;
+  return stressLevel == null
+    ? moodScore
+    : (moodScore + (5 - stressLevel) * 25) / 2;
+}
+
 test('stress extends the existing Mind score and preserves legacy check-ins', () => {
   assert.equal(dailyMindScore(3, null), 75);
   assert.equal(dailyMindScore(3, 1), 87.5);
@@ -73,4 +81,42 @@ test('period calculation and score view retain invoker security', async () => {
   assert.match(migration, /revoke all on function public\.calculate_dad_score_period/);
   assert.match(migration, /grant execute on function public\.calculate_dad_score_period[\s\S]*to authenticated, service_role/);
   assert.doesNotMatch(migration, /to anon, authenticated, service_role/);
+});
+
+test('canonical-score migration preserves legacy mood data and maps both scales equivalently', async () => {
+  const migration = await source('supabase/migrations/20260925120000_score_detail_canonical_fields.sql');
+
+  assert.match(migration, /add column if not exists mood_scale_version smallint not null default 0/);
+  assert.match(migration, /mood_scale_version = 0 and mood_value between 0 and 4/);
+  assert.match(migration, /mood_scale_version = 1 and mood_value between 1 and 5/);
+  assert.doesNotMatch(migration, /update public\.mood_logs|delete from public\.mood_logs|truncate public\.mood_logs/i);
+  for (let legacy = 0; legacy <= 4; legacy += 1) {
+    assert.equal(canonicalMindScore(legacy, null, 0), canonicalMindScore(legacy + 1, null, 1));
+    for (let stress = 1; stress <= 5; stress += 1) {
+      assert.equal(canonicalMindScore(legacy, stress, 0), canonicalMindScore(legacy + 1, stress, 1));
+    }
+  }
+});
+
+test('canonical score and trend views use complete Monday-to-Sunday weeks', async () => {
+  const migration = await source('supabase/migrations/20260925120000_score_detail_canonical_fields.sql');
+  const monday = /date_trunc\('week', current_date\)::date/;
+
+  assert.match(migration, new RegExp(`${monday.source}[\\s\\S]*\\+ 7`));
+  assert.match(migration, new RegExp(`${monday.source}[\\s\\S]*- 7`));
+  assert.match(migration, /weeks\.week_start[\s\S]*weeks\.week_start \+ 7/);
+  assert.match(migration, /current_scores\.mind_score - previous_scores\.mind_score/);
+  assert.match(migration, /current_scores\.body_score - previous_scores\.body_score/);
+  assert.match(migration, /current_scores\.bond_score - previous_scores\.bond_score/);
+});
+
+test('recommended action skips recorded activities completed today', async () => {
+  const migration = await source('supabase/migrations/20260925120000_score_detail_canonical_fields.sql');
+
+  assert.match(migration, /then 'checkin'::text/);
+  assert.match(migration, /from public\.workout_sessions w[\s\S]*w\.performed_at >= current_date::timestamptz/);
+  assert.match(migration, /from public\.journal_entries j[\s\S]*j\.created_at >= current_date::timestamptz/);
+  assert.match(migration, /from public\.bond_logs bl[\s\S]*bl\.created_at >= current_date::timestamptz/);
+  assert.match(migration, /from public\.present_dad_sessions pds[\s\S]*pds\.status = 'completed'[\s\S]*pds\.completed_at >= current_date::timestamptz/);
+  assert.match(migration, /no persisted breathing-completion record/i);
 });
