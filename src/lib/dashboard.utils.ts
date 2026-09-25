@@ -16,15 +16,9 @@ type MoodLog = {
 };
 
 export function getDashboardScore(dashboard: DashboardData | null | undefined, hasUser: boolean): number | null {
-  if (typeof dashboard?.total_score === "number") return Math.round(dashboard.total_score);
   if (!hasUser) return null;
-  const mind = dashboard?.mind_score;
-  const body = dashboard?.body_score;
-  const bond = dashboard?.bond_score;
-  if (typeof mind === "number" && typeof body === "number" && typeof bond === "number") {
-    return Math.round((mind + body + bond) / 3);
-  }
-  return null;
+  const total = typeof dashboard?.total_score === "string" ? Number(dashboard.total_score) : dashboard?.total_score;
+  return typeof total === "number" && Number.isFinite(total) ? Math.round(total) : null;
 }
 
 export function getScoreBreakdown(dashboard: DashboardData | null | undefined, hasUser: boolean) {

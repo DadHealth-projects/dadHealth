@@ -47,7 +47,7 @@ async function fetchDashboard(userId: string) {
 
   const [dashboardRes, scoreRes, moodRes, workoutsRes, journalRes, milestonesRes, milestonesListRes, challengeRes, dadDatesRes, profileRes, bodyRes, todayWorkoutsRes, remindersRes, circlesRes, bodyWeekRes, latestWorkoutRes, mealPlansRes, earnedBadgesRes] = await Promise.all([
     supabase.from("dashboard_view").select("*").eq("user_id", userId).maybeSingle(),
-    supabase.from("dad_score_view").select("mind_score, body_score, bond_score").eq("user_id", userId).maybeSingle(),
+    supabase.from("dad_score_view").select("mind_score, body_score, bond_score, total_score, weakest_pillar, recommended_action").eq("user_id", userId).maybeSingle(),
     supabase
       .from("mood_logs")
       .select("date, mood_value")
@@ -179,11 +179,7 @@ async function fetchDashboard(userId: string) {
   const mind = typeof score?.mind_score === "number" ? score.mind_score : null;
   const body = typeof score?.body_score === "number" ? score.body_score : null;
   const bond = typeof score?.bond_score === "number" ? score.bond_score : null;
-  const hasAllScores =
-    typeof mind === "number" &&
-    typeof body === "number" &&
-    typeof bond === "number";
-  const totalScore = hasAllScores ? Math.round((mind + body + bond) / 3) : null;
+  const totalScore = typeof score?.total_score === "number" ? Math.round(score.total_score) : null;
 
   const weightRows = (bodyRes.data ?? []) as { value: number }[];
   const prevWeight = weightRows[1]?.value;
@@ -237,6 +233,8 @@ async function fetchDashboard(userId: string) {
     body_score: body,
     bond_score: bond,
     total_score: totalScore,
+    weakest_pillar: score?.weakest_pillar ?? null,
+    recommended_action: score?.recommended_action ?? null,
     mood_logs: moodLogs,
     month_workouts: monthWorkouts,
     reportStats: {
