@@ -95,6 +95,32 @@ export interface SubscriptionSummary {
   canPurchase: boolean;
 }
 
+export async function getCanonicalWeekStart(admin: AdminClient, userId: string): Promise<string> {
+  const { data, error } = await admin
+    .from("dad_score_history_view")
+    .select("week_start")
+    .eq("user_id", userId)
+    .order("week_start", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (typeof data?.week_start !== "string") throw new Error("Canonical score week is unavailable");
+  return data.week_start;
+}
+
+export async function getCurrentWeekFreezeState(admin: AdminClient, userId: string) {
+  const weekStart = await getCanonicalWeekStart(admin, userId);
+  const { data, error } = await admin
+    .from("user_streak_freezes")
+    .select("missed_date")
+    .eq("user_id", userId)
+    .eq("week_start", weekStart)
+    .maybeSingle();
+  if (error) throw error;
+  const freezeUsedThisWeek = Boolean(data);
+  return { freezeUsedThisWeek, freezesRemaining: freezeUsedThisWeek ? 0 : 1 };
+}
+
 function databaseBoolean(value: unknown): boolean {
   return value === true || value === 1 || value === "1" || value === "true";
 }
@@ -103,7 +129,11 @@ export async function getSubscriptionSummary(
   admin: AdminClient,
   userId: string,
 ): Promise<SubscriptionSummary> {
-  const [{ data: profile, error: profileError }, { data: rows, error: entitlementsError }] =
+  const [
+    { data: profile, error: profileError },
+    { data: rows, error: entitlementsError },
+    { data: canonicalProAccess, error: accessError },
+  ] =
     await Promise.all([
       admin
         .from("user_profile")
@@ -111,10 +141,12 @@ export async function getSubscriptionSummary(
         .eq("user_id", userId)
         .maybeSingle(),
       admin.from("subscription_entitlements").select("*").eq("user_id", userId),
+      admin.rpc("user_has_pro_access", { p_user_id: userId }),
     ]);
 
   if (profileError) throw profileError;
   if (entitlementsError) throw entitlementsError;
+  if (accessError) throw accessError;
 
   const entitlements = (rows ?? []) as SubscriptionEntitlementRow[];
   const active = entitlements
@@ -129,7 +161,9 @@ export async function getSubscriptionSummary(
   const legacyStripeAccess =
     Boolean(profile?.stripe_customer_id) && (legacyStatus === "active" || legacyStatus === "trialing");
   const primary = active[0] ?? null;
-  const isPro = manual || Boolean(primary) || legacyStripeAccess;
+  // The database predicate is also used by authoritative streak processing.
+  // Keep this server summary as the shared resolver for API and UI consumers.
+  const isPro = canonicalProAccess === true;
 
   return {
     isPro,
