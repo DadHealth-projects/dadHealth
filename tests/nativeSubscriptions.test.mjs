@@ -88,3 +88,22 @@ test('existing Stripe profile sync mirrors lifecycle into the provider-neutral l
   assert.match(sync, /stripe_subscription_id/);
   assert.match(sync, /subscription_status/);
 });
+
+test('the shared Pro summary delegates its decision to the database entitlement predicate', async () => {
+  const [store, predicate] = await Promise.all([
+    source('src/lib/native-subscriptions/store.ts'),
+    source('supabase/migrations/20260927120000_canonical_pro_insights_and_streak_freeze.sql'),
+  ]);
+  assert.match(store, /rpc\("user_has_pro_access"/);
+  assert.match(store, /canonicalProAccess === true/);
+  assert.match(predicate, /status in \('active', 'trialing', 'grace_period'\)/);
+  assert.match(predicate, /current_period_end is null or entitlement\.current_period_end > now\(\)/);
+  assert.match(predicate, /profile\.is_pro/);
+  assert.match(predicate, /profile\.stripe_customer_id is not null/);
+});
+
+test('web subscription presentation uses the same canonical server summary', async () => {
+  const route = await source('src/app/api/stripe/subscription/route.ts');
+  assert.match(route, /getSubscriptionSummary\(createAdminSupabaseClient\(\), user\.id\)/);
+  assert.doesNotMatch(route, /stripe\.subscriptions\.(retrieve|list)/);
+});
