@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
-import { isProfilePro } from '@/lib/stripe/subscription'
+import { getSubscriptionSummary } from '@/lib/native-subscriptions/store'
+import { createAdminSupabaseClient } from '@/utils/supabase/admin'
 import { createServerSupabaseClient } from '@/utils/supabase/server'
 
 const CATEGORY_RULES: Array<{ category: string; keywords: string[] }> = [
@@ -592,16 +593,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized', requestId }, { status: 401 })
     }
 
-    const profileClient = bearerToken ? nativeSupabase : authSupabase
-    const { data: profile } = await profileClient
-      .from('user_profile')
-      .select('is_pro, subscription_status')
-      .eq('user_id', user.id)
-      .maybeSingle()
+    let isPro: boolean
+    try {
+      isPro = (await getSubscriptionSummary(createAdminSupabaseClient(), user.id)).isPro
+    } catch (error) {
+      console.error('[generate-meal-plan] entitlement lookup failed', error)
+      return NextResponse.json(
+        { error: 'We could not verify your Pro access. Please try again.' },
+        { status: 503 },
+      )
+    }
 
-    if (!isProfilePro(profile as { is_pro?: boolean | string | number | null; subscription_status?: string | null } | null)) {
+    if (!isPro) {
       // Every dad gets the first three AI meal plans. After that it is Pro.
-      const { count, error: usageError } = await profileClient
+      const usageClient = bearerToken ? nativeSupabase : authSupabase
+      const { count, error: usageError } = await usageClient
         .from('meal_plans')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)

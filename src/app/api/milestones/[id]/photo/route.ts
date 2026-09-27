@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
-import { isProfilePro } from "@/lib/stripe/subscription";
+import { getSubscriptionSummary } from "@/lib/native-subscriptions/store";
 import {
   MILESTONE_PHOTO_BUCKET,
   MILESTONE_PHOTO_MAX_EDGE,
@@ -24,14 +24,14 @@ async function requireProUser(req: NextRequest) {
 
   if (!user) return { error: "Not authenticated", status: 401 as const };
 
-  const profileClient = bearerToken ? admin : supabase;
-  const { data: profile } = await profileClient
-    .from("user_profile")
-    .select("is_pro,subscription_status")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  let subscription;
+  try {
+    subscription = await getSubscriptionSummary(admin, user.id);
+  } catch {
+    return { error: "Unable to verify Pro access", status: 503 as const };
+  }
 
-  if (!isProfilePro(profile)) {
+  if (!subscription.isPro) {
     return { error: "Milestone photos are a Pro feature", status: 403 as const };
   }
 
