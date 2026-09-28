@@ -110,6 +110,7 @@ interface CircleItem {
   id: string;
   icon: string;
   name: string;
+  description: string | null;
   members_count: number | null;
 }
 
@@ -1360,7 +1361,7 @@ const CIRCLE_ICON_OPTIONS = [
   { value: "journal", label: "Journal" },
 ] as const;
 
-const BLANK_CIRCLE_FORM = { name: "", icon: "community" };
+const BLANK_CIRCLE_FORM = { name: "", description: "", icon: "community" };
 
 function CirclesTab() {
   const [items, setItems] = useState<CircleItem[]>([]);
@@ -1409,13 +1410,14 @@ function CirclesTab() {
   const startEdit = (item: CircleItem) => {
     setError(null);
     setNotice(null);
-    setForm({ name: item.name, icon: item.icon });
+    setForm({ name: item.name, description: item.description ?? "", icon: item.icon });
     setEditId(item.id);
     setShowForm(true);
   };
 
   const handleSave = async () => {
     const name = form.name.trim();
+    const description = form.description.trim();
     if (!name) {
       setError("Enter a Circle name before saving.");
       return;
@@ -1427,7 +1429,7 @@ function CirclesTab() {
     try {
       const response = await adminFetch("/api/admin/circles", {
         method: editId ? "PATCH" : "POST",
-        body: JSON.stringify(editId ? { id: editId, name, icon: form.icon } : { name, icon: form.icon }),
+        body: JSON.stringify(editId ? { id: editId, name, description, icon: form.icon } : { name, description, icon: form.icon }),
       });
       if (!response.ok) {
         setError(await adminErrorMessage(
@@ -1523,6 +1525,16 @@ function CirclesTab() {
               </select>
             </div>
           </div>
+          <div>
+            <label className={labelCls}>Description</label>
+            <textarea
+              className={inputCls}
+              value={form.description}
+              onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+              placeholder="Add a description for this Dad Circle"
+              rows={3}
+            />
+          </div>
           <div className="flex items-center gap-3 rounded-lg border border-border bg-background p-3">
             <DashboardIcon icon={form.icon} size="lg" />
             <div>
@@ -1554,6 +1566,7 @@ function CirclesTab() {
                   <div className="mt-1 text-xs text-muted-foreground">
                     {(item.members_count ?? 0).toLocaleString()} {(item.members_count ?? 0) === 1 ? "member" : "members"}
                   </div>
+                  {item.description ? <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{item.description}</p> : null}
                 </div>
               </div>
               <div className="mt-4 flex gap-2">

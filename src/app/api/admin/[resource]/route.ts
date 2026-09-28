@@ -37,7 +37,7 @@ const CIRCLE_ICON_KEYS = new Set([
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type CircleWriteResult =
-  | { ok: true; value: { id?: string; name: string; icon: string } }
+  | { ok: true; value: { id?: string; name: string; icon: string; description: string | null } }
   | { ok: false; error: string };
 
 type ChallengeWriteResult =
@@ -50,21 +50,25 @@ function parseCircleWrite(body: unknown, requireId: boolean): CircleWriteResult 
   }
 
   const record = body as Record<string, unknown>;
-  const allowedKeys = new Set(requireId ? ["id", "name", "icon"] : ["name", "icon"]);
+  const allowedKeys = new Set(requireId ? ["id", "name", "icon", "description"] : ["name", "icon", "description"]);
   if (Object.keys(record).some((key) => !allowedKeys.has(key))) {
-    return { ok: false, error: "Only Circle name and icon can be changed." };
+    return { ok: false, error: "Only Circle name, description and icon can be changed." };
   }
 
   const name = typeof record.name === "string" ? record.name.trim() : "";
   const icon = typeof record.icon === "string" ? record.icon.trim() : "";
+  if (record.description != null && typeof record.description !== "string") {
+    return { ok: false, error: "Circle description must be text." };
+  }
+  const description = typeof record.description === "string" ? record.description.trim() || null : null;
   if (!name) return { ok: false, error: "Circle name is required." };
   if (!CIRCLE_ICON_KEYS.has(icon)) return { ok: false, error: "Choose a supported Circle icon." };
 
-  if (!requireId) return { ok: true, value: { name, icon } };
+  if (!requireId) return { ok: true, value: { name, icon, description } };
 
   const id = typeof record.id === "string" ? record.id.trim() : "";
   if (!UUID_PATTERN.test(id)) return { ok: false, error: "A valid Circle ID is required." };
-  return { ok: true, value: { id, name, icon } };
+  return { ok: true, value: { id, name, icon, description } };
 }
 
 function parseCircleId(body: unknown): { ok: true; id: string } | { ok: false; error: string } {
@@ -244,7 +248,7 @@ export async function GET(
       case "circles": {
         const { data, error } = await supabase
           .from("circles")
-          .select("id, name, icon, members_count")
+          .select("id, name, description, icon, members_count")
           .order("name", { ascending: true });
         if (error) throw error;
         return NextResponse.json(data ?? []);
@@ -443,7 +447,7 @@ export async function POST(
         const { data, error } = await supabase
           .from("circles")
           .insert(parsed.value)
-          .select("id, name, icon, members_count")
+          .select("id, name, description, icon, members_count")
           .single();
         if (error) throw error;
         return NextResponse.json(data, { status: 201 });
@@ -548,7 +552,7 @@ export async function PATCH(
         .from("circles")
         .update(updates)
         .eq("id", id!)
-        .select("id, name, icon, members_count")
+        .select("id, name, description, icon, members_count")
         .maybeSingle();
       if (error) throw error;
       if (!data) return NextResponse.json({ error: "This Circle no longer exists." }, { status: 404 });
