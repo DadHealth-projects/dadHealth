@@ -40,6 +40,7 @@ export type CircleItem = {
   id: string;
   icon?: string;
   name: string;
+  description?: string | null;
   members_count?: number;
 };
 

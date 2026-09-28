@@ -93,6 +93,7 @@ async function processPresentDadCompletions(admin: ReturnType<typeof createAdmin
     .from("present_dad_sessions")
     .select("id,user_id")
     .eq("status", "completed")
+    .gte("completed_duration_seconds", 3600)
     .is("notification_attempted_at", null)
     .is("notification_sent_at", null)
     .limit(100);
