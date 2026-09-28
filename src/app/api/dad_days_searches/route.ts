@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     const [profileResult, countResult] = await Promise.all([
       supabaseAdmin
         .from('user_profile')
-        .select('is_pro, subscription_status, child_age')
+        .select('is_pro, subscription_status')
         .eq('user_id', user.id)
         .maybeSingle(),
       supabaseAdmin
@@ -100,6 +100,10 @@ export async function GET(req: NextRequest) {
     ])
 
     if (profileResult.error || countResult.error) {
+      console.error('[dad-days/allowance] read failed', {
+        profileCode: profileResult.error?.code,
+        countCode: countResult.error?.code,
+      })
       return NextResponse.json({ error: 'allowance_unavailable' }, { status: 503 })
     }
 
@@ -108,7 +112,8 @@ export async function GET(req: NextRequest) {
       isPro,
       searchesUsed: isPro ? null : countResult.count ?? 0,
       limit: isPro ? null : FREE_SEARCH_LIMIT,
-      childAge: profileResult.data?.child_age ?? null,
+      // Age is selected per search; it is not an account-profile entitlement field.
+      childAge: null,
     })
   } catch {
     return NextResponse.json({ error: 'allowance_unavailable' }, { status: 503 })
