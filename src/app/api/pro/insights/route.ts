@@ -15,7 +15,7 @@ function json(payload: unknown, status = 200) {
   });
 }
 
-type InsightKind = "score-history" | "mood-correlation" | "weekly-report" | "monthly-report";
+type InsightKind = "score-history" | "manual-activity-trends" | "mood-correlation" | "weekly-report" | "monthly-report";
 
 function asDate(value: Date): string {
   return value.toISOString().slice(0, 10);
@@ -89,6 +89,16 @@ export async function GET(request: Request) {
       if (error) throw error;
       const points = (data ?? []).filter((point) => point.mind_has_data || point.body_has_data || point.bond_has_data);
       return json({ points });
+    }
+
+    if (kind === "manual-activity-trends") {
+      const { data, error } = await context.admin
+        .from("dad_manual_activity_history_view")
+        .select("week_start,mind_manual_points,body_manual_points,bond_manual_points")
+        .eq("user_id", context.userId)
+        .order("week_start", { ascending: true });
+      if (error) throw error;
+      return json({ points: data ?? [] });
     }
 
     if (kind === "mood-correlation") {
