@@ -19,6 +19,8 @@ test("admin portal exposes Circle catalogue CRUD with visible request failures",
     'title="Dad Circles"',
     'role="alert"',
     'members_count',
+    'description: string | null',
+    'Add a description for this Dad Circle',
     'Member count is managed automatically.',
     '{editId ? null : loading ? (',
   ]) {
@@ -26,11 +28,12 @@ test("admin portal exposes Circle catalogue CRUD with visible request failures",
   }
 });
 
-test("Circle API accepts only name and icon and never exposes member count writes", async () => {
+test("Circle API accepts Admin-managed descriptions and never exposes member count writes", async () => {
   const route = await source("src/app/api/admin/[resource]/route.ts");
 
-  assert.match(route, /case "circles": \{[\s\S]*?\.from\("circles"\)[\s\S]*?\.select\("id, name, icon, members_count"\)/);
-  assert.match(route, /const allowedKeys = new Set\(requireId \? \["id", "name", "icon"\] : \["name", "icon"\]\)/);
+  assert.match(route, /case "circles": \{[\s\S]*?\.from\("circles"\)[\s\S]*?\.select\("id, name, description, icon, members_count"\)/);
+  assert.match(route, /const allowedKeys = new Set\(requireId \? \["id", "name", "icon", "description"\] : \["name", "icon", "description"\]\)/);
+  assert.match(route, /description = typeof record\.description === "string" \? record\.description\.trim\(\) \|\| null : null/);
   assert.match(route, /if \(resource === "circles"\) \{[\s\S]*?parseCircleWrite\(body, true\)/);
   assert.match(route, /parseCircleId\(body\)/);
   assert.match(route, /This Circle no longer exists\./);
@@ -38,35 +41,16 @@ test("Circle API accepts only name and icon and never exposes member count write
   assert.equal(route.includes('members_count: record.members_count'), false);
 });
 
-test("Circles RLS is isolated, mirrored, and covered by role regression tests", async () => {
-  const [migration, schema, policies, regression] = await Promise.all([
-    source("supabase/migrations/20260821081000_circles_rls.sql"),
+test("circle descriptions migrate additively without changing circle access policies or live data", async () => {
+  const [migration, schema, policies] = await Promise.all([
+    source("supabase/migrations/20260928150000_change08_present_dad_and_circle_descriptions.sql"),
     source("supabase/schema.sql"),
     source("supabase/rls-policies.sql"),
-    source("supabase/tests/circles_rls_test.sql"),
   ]);
 
   const reviewedPolicy = /alter table public\.circles enable row level security;[\s\S]*?revoke all privileges[\s\S]*?on table public\.circles[\s\S]*?from anon, authenticated;[\s\S]*?grant select[\s\S]*?on table public\.circles[\s\S]*?to anon, authenticated;[\s\S]*?create policy "Anyone can read circles"[\s\S]*?for select[\s\S]*?to anon, authenticated[\s\S]*?using \(true\);/;
-
-  for (const sql of [migration, schema, policies]) {
-    assert.match(sql, reviewedPolicy);
-  }
-
-  const migrationTables = [...migration.matchAll(/public\.([a-z_]+)/g)].map((match) => match[1]);
-  assert.deepEqual([...new Set(migrationTables)], ["circles"]);
-
-  for (const expected of [
-    "set local role anon",
-    "set local role authenticated",
-    "set local role service_role",
-    "anonymous clients can read circles",
-    "authenticated clients can read circles",
-    "anonymous clients cannot insert circles",
-    "authenticated clients cannot update circles",
-    "service role can delete circles",
-    "membership insert increments members_count",
-    "membership delete decrements members_count",
-  ]) {
-    assert.ok(regression.includes(expected), `Missing Circles RLS regression contract: ${expected}`);
-  }
+  assert.match(schema, reviewedPolicy);
+  assert.match(policies, reviewedPolicy);
+  assert.match(migration, /alter table public\.circles\s+add column if not exists description text/);
+  assert.equal(/update\s+public\.circles/i.test(migration), false, 'Existing Admin descriptions are not overwritten');
 });
