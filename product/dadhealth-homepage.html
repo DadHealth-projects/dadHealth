@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dad Health | How are you doing, Dad?</title>
+<meta name="description" content="One score for your Mind, Body and Bond. One thing to do today. Dad Health is the mental health, fitness and parenting app built for dads. Free on iPhone and Android.">
+<meta property="og:title" content="Dad Health | How are you doing, Dad?">
+<meta property="og:description" content="One score for your Mind, Body and Bond. One thing to do today.">
+<!-- TODO: add og:image (share image) and favicon -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0a;
+  --panel:#151515;
+  --alt:#121212;
+  --line:#222;
+  --white:#f2f2f2;
+  --grey:#bdbdbd;
+  --dim:#a8a8a8;
+  --lime:#c9f25b; /* swap for the exact lime already used on the live site */
+  --display:'Barlow Condensed','Arial Narrow',Impact,sans-serif;
+  --body:'Barlow',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{background:var(--bg);color:var(--white);font-family:var(--body);font-size:18px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+a:hover{color:var(--lime)}
+:focus-visible{outline:3px solid var(--lime);outline-offset:3px}
+img,svg{max-width:100%}
+.wrap{max-width:1280px;margin:0 auto;padding:0 clamp(20px,5.5vw,80px)}
+h1,h2,h3,.disp{font-family:var(--display);font-weight:900;text-transform:uppercase}
+h1{font-size:clamp(4.4rem,9vw,8rem);line-height:.9;letter-spacing:-.01em}
+h2{font-size:clamp(3.2rem,5.6vw,5rem);line-height:.9}
+.eyebrow{font-family:var(--display);font-weight:800;font-size:1rem;letter-spacing:.28em;text-transform:uppercase;color:var(--lime)}
+.eyebrow.dim{color:var(--dim)}
+.lime{color:var(--lime)}
+.btn{display:inline-block;background:var(--lime);color:#0a0a0a;font-family:var(--display);font-weight:800;font-size:1.1rem;letter-spacing:.09em;text-transform:uppercase;padding:16px 28px}
+.btn:hover{color:#0a0a0a;filter:brightness(1.08)}
+
+/* header */
+.site-header{border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:10}
+.site-header .wrap{display:flex;align-items:center;justify-content:space-between;height:96px;gap:20px}
+.logo{display:flex;flex-direction:column;width:196px;flex:none}
+.logo .box{border:3px solid var(--white);border-bottom:none;padding:8px 16px 6px;font-family:var(--display);font-weight:900;font-size:2rem;letter-spacing:.02em;line-height:1;text-transform:uppercase}
+.logo .box span{color:var(--lime)}
+.logo .gap{display:flex;justify-content:space-between}
+.logo .gap i{display:block;width:30%;height:3px;background:var(--white)}
+.menu a,.btn{white-space:nowrap}
+.menu{display:flex;gap:40px;font-family:var(--display);font-weight:600;font-size:1.1rem;letter-spacing:.12em;text-transform:uppercase}
+.head-cta{display:flex;align-items:center;gap:8px}
+.menu-btn{display:none;width:44px;height:44px;background:none;border:0;cursor:pointer;align-items:center;justify-content:center}
+.menu-btn svg{width:26px;height:18px}
+
+/* hero */
+.hero{display:flex;align-items:center;gap:80px;padding:96px 0 88px}
+.hero-copy{flex:1;display:flex;flex-direction:column;gap:28px;max-width:700px}
+.hero-copy p.sub{font-size:1.4rem;line-height:1.5;color:var(--grey);max-width:560px}
+.stores{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}
+.store{display:flex;flex-direction:column;justify-content:center;border:2px solid var(--white);padding:10px 24px;min-width:180px}
+.store small{font-size:.8rem;color:var(--grey)}
+.store b{font-family:var(--display);font-weight:800;font-size:1.6rem;line-height:1;text-transform:uppercase}
+.note{font-size:.95rem;color:var(--dim)}
+
+/* phone mock */
+.phone{width:340px;height:690px;flex:none;border:10px solid #1e1e1e;border-radius:52px;background:var(--bg);padding:40px 22px 24px;display:flex;flex-direction:column;gap:18px;box-shadow:0 0 0 1px #333}
+.phone .hi{font-family:var(--display);font-weight:600;font-size:.8rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase}
+.phone .q{font-family:var(--display);font-weight:900;font-size:1.6rem;line-height:1;text-transform:uppercase}
+.p-score{display:flex;align-items:center;gap:18px;background:var(--panel);padding:18px;border-radius:16px}
+.ring{width:104px;height:104px;position:relative;flex:none}
+.ring .c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring .c b{font-family:var(--display);font-weight:900;font-size:2.5rem;line-height:1}
+.ring .c span{font-size:.62rem;letter-spacing:.2em;color:var(--dim)}
+.pillars-mini{flex:1;display:flex;flex-direction:column;gap:8px;font-family:var(--display);font-weight:600;font-size:1rem;letter-spacing:.06em}
+.pillars-mini div{display:flex;justify-content:space-between}
+.pillars-mini .weak{background:var(--lime);color:#0a0a0a;margin:0 -8px;padding:2px 8px}
+.p-card{background:var(--panel);padding:14px 18px;border-radius:16px;display:flex;justify-content:space-between;align-items:center}
+.p-card.focus{flex-direction:column;align-items:flex-start;gap:6px;padding:16px 18px}
+.p-card .lbl{font-family:var(--display);font-weight:800;font-size:1.1rem;text-transform:uppercase}
+.p-card .meta{font-size:.8rem;color:var(--dim)}
+.p-card .tiny{font-family:var(--display);font-weight:800;font-size:.75rem;letter-spacing:.2em;color:var(--lime)}
+.p-card .big{font-family:var(--display);font-weight:800;font-size:1.25rem;line-height:1.1;text-transform:uppercase}
+
+/* pillars band */
+.band{background:var(--lime);color:#0a0a0a;padding:88px 0}
+.band .top{display:flex;justify-content:space-between;align-items:flex-end;gap:40px;flex-wrap:wrap;margin-bottom:48px}
+.band .top p{max-width:420px;font-size:1.2rem;line-height:1.5;color:#1a1a1a}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:2px solid #0a0a0a}
+.three>div{padding:32px 32px 0;border-right:2px solid #0a0a0a;display:flex;flex-direction:column;gap:12px}
+.three>div:first-child{padding-left:0}
+.three>div:last-child{border-right:0;padding-right:0}
+.three h3{font-size:3.5rem;line-height:1}
+.three p{font-size:1.1rem;line-height:1.5}
+
+/* steps */
+.steps-sec{padding:104px 0}
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:48px;margin-top:56px}
+.steps>div{display:flex;flex-direction:column;gap:14px}
+.steps .n{font-family:var(--display);font-weight:900;font-size:6rem;line-height:.8;color:var(--lime)}
+.steps h3{font-size:2.5rem;line-height:1}
+.steps p{color:var(--grey);font-size:1.1rem}
+
+/* happening */
+.happening{background:var(--alt);border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:48px 0}
+.happening .wrap{display:flex;align-items:center;gap:48px}
+.h-label{display:flex;align-items:center;gap:10px;width:180px;flex:none}
+.h-label .dot{width:12px;height:12px;border-radius:50%;background:var(--lime)}
+.h-cards{flex:1;display:flex;flex-direction:column;gap:16px}
+.h-card{display:flex;align-items:center;gap:36px;background:var(--bg);border:1px solid #262626;padding:28px 36px}
+.h-card:hover{border-color:var(--lime);color:var(--white)}
+.h-date{width:110px;height:110px;flex:none;background:var(--lime);color:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--display);text-transform:uppercase}
+.h-date small{font-weight:800;font-size:1.1rem;letter-spacing:.18em;line-height:1.1}
+.h-date b{font-weight:900;font-size:3.2rem;line-height:.9}
+.h-body{flex:1;display:flex;flex-direction:column;gap:8px}
+.h-body h3{font-size:3rem;line-height:.95}
+.h-body p{color:var(--grey);font-size:1.1rem}
+.h-card .btn{flex:none}
+
+/* free/pro */
+.pro{padding:104px 0}
+.pro .wrap{display:flex;gap:80px;align-items:flex-start}
+.pro .l{width:460px;flex:none;display:flex;flex-direction:column;gap:20px}
+.pro .l p{font-size:1.2rem;color:var(--grey)}
+.tiers{flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.tier{border:2px solid #333;padding:36px;display:flex;flex-direction:column;gap:18px}
+.tier h3{font-size:2.5rem;line-height:1}
+.tier ul{list-style:none;font-size:1.05rem;line-height:1.9;color:#d0d0d0}
+.tier.pro-t{background:var(--lime);color:#0a0a0a;border-color:var(--lime)}
+.tier.pro-t ul{color:#0a0a0a}
+.tier .hd{display:flex;justify-content:space-between;align-items:baseline}
+.tier .hd .price{font-family:var(--display);font-weight:800;font-size:1.5rem}
+
+/* circles */
+.circles{padding:96px 0;border-top:1px solid var(--line)}
+.circles .top{display:flex;justify-content:space-between;align-items:flex-end;gap:40px;flex-wrap:wrap;margin-bottom:40px}
+.circles .top p{max-width:420px;font-size:1.2rem;color:var(--grey)}
+.four{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
+.four>div{border-top:4px solid var(--lime);padding-top:20px;display:flex;flex-direction:column;gap:8px}
+.four h3{font-size:1.9rem;line-height:1}
+.four p{color:var(--grey);font-size:1rem}
+
+/* about */
+.about{background:var(--alt);padding:96px 0}
+.about .wrap{display:flex;gap:80px;align-items:center}
+.about .photo{width:520px;height:400px;flex:none;background:#1e1e1e;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 24px;color:#8a8a8a;font-size:.95rem;background-size:cover;background-position:center}
+.about .txt{display:flex;flex-direction:column;gap:20px}
+.about h2{font-size:clamp(2.6rem,4.4vw,4rem);line-height:.95}
+.about p{font-size:1.2rem;line-height:1.6;color:var(--grey)}
+
+/* crisis */
+.crisis{padding:32px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.crisis .wrap{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+.crisis b.t{font-family:var(--display);font-weight:800;font-size:1.6rem;text-transform:uppercase}
+.crisis p{color:#d0d0d0}
+.crisis strong{color:var(--white)}
+
+/* footer */
+footer{padding:64px 0}
+footer .wrap{display:flex;justify-content:space-between;align-items:flex-start;gap:32px;flex-wrap:wrap}
+footer .brand{display:flex;flex-direction:column;gap:16px}
+footer .brand .disp{font-size:1.75rem}
+footer .brand small{font-size:.9rem;line-height:1.6;color:var(--dim)}
+footer nav{display:flex;gap:12px 32px;flex-wrap:wrap;font-size:1rem}
+
+/* tablet */
+@media (max-width:1200px){
+  .menu{display:none}
+  .menu-btn{display:flex}
+  .hero{flex-direction:column;align-items:flex-start;gap:56px}
+  .pro .wrap{flex-direction:column;gap:40px}
+  .happening .wrap{flex-wrap:wrap}
+  .pro .l{width:auto}
+  .tiers{width:100%}
+  .four{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .about .wrap{flex-direction:column;align-items:stretch;gap:40px}
+  .about .photo{width:100%}
+}
+/* mobile */
+@media (max-width:760px){
+  body{font-size:17px}
+  .site-header .wrap{height:76px}
+  .logo{width:138px}
+  .logo .box{border-width:2px;padding:6px 10px 4px;font-size:1.4rem}
+  .logo .gap i{height:2px}
+  .site-header .wrap{gap:10px}
+  .head-cta{gap:4px}
+  .head-cta .btn{padding:12px 10px;font-size:.85rem;letter-spacing:.05em}
+  .hero{padding:48px 0 56px;gap:40px}
+  .hero-copy{gap:22px}
+  .hero-copy p.sub{font-size:1.1rem}
+  .stores{flex-direction:column}
+  .store{flex-direction:row;justify-content:space-between;align-items:center;padding:14px 18px}
+  .store small{display:none}
+  .store b{font-size:1.4rem}
+  .store::after{content:"→"}
+  .phone{align-self:center;width:300px;height:600px;padding:34px 18px 20px;gap:14px}
+  .band{padding:56px 0}
+  .three{grid-template-columns:1fr;border-top:0}
+  .three>div,.three>div:first-child,.three>div:last-child{border-right:0;border-top:2px solid #0a0a0a;padding:20px 0}
+  .three h3{font-size:2.6rem}
+  .steps-sec{padding:64px 0}
+  .steps{grid-template-columns:1fr;gap:36px;margin-top:36px}
+  .steps>div{flex-direction:row;gap:18px;align-items:flex-start}
+  .steps .n{font-size:3.5rem;width:64px;flex:none}
+  .steps h3{font-size:1.9rem}
+  .circles,.about{padding:56px 0}
+  .pro{padding:64px 0}
+  .happening{padding:32px 0}
+  .happening .wrap{flex-direction:column;align-items:stretch;gap:16px}
+  .h-label{width:auto}
+  .h-card{flex-direction:column;align-items:stretch;gap:14px;padding:20px}
+  .h-date{width:72px;height:72px}
+  .h-date small{font-size:.8rem}
+  .h-date b{font-size:2.1rem}
+  .h-body h3{font-size:2rem}
+  .h-body p{font-size:1rem}
+  .h-card .btn{text-align:center}
+  .tiers{grid-template-columns:1fr}
+  .tier{padding:24px}
+  .four{gap:24px 16px}
+  .four h3{font-size:1.4rem}
+  .about .photo{height:260px}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="logo" href="/" aria-label="Dad Health home">
+      <div class="box"><span>Dad</span> Health</div>
+      <div class="gap"><i></i><i></i></div>
+    </a>
+    <nav class="menu" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#pro">Free &amp; Pro</a>
+      <a href="#community">Community</a>
+      <a href="/business">Corporate</a>
+      <a href="#about">About</a>
+    </nav>
+    <div class="head-cta">
+      <!-- TODO: link to the download section (#download) or the correct store -->
+      <a class="btn" href="#download">Get the app →</a>
+      <button class="menu-btn" aria-label="Open menu" aria-expanded="false" id="menuBtn">
+        <svg viewBox="0 0 26 18" aria-hidden="true"><path d="M1 1h24M1 9h24M1 17h24" stroke="#f2f2f2" stroke-width="2.5" fill="none"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+<!-- 1. HERO -->
+<section id="top">
+  <div class="wrap hero">
+    <div class="hero-copy">
+      <div class="eyebrow">Built for dads, by dads</div>
+      <h1>How are you <span class="lime">doing,</span> Dad?</h1>
+      <p class="sub">One score for your Mind, Body and Bond. One thing to do today. Free on iPhone and Android.</p>
+      <div class="stores" id="download">
+        <!-- TODO: replace both with the official Apple and Google badges and the real store URLs -->
+        <a class="store" href="#"><small>Download on the</small><b>App Store</b></a>
+        <a class="store" href="#"><small>Get it on</small><b>Google Play</b></a>
+      </div>
+      <div class="note">Free forever. Pro when you want it personal.</div>
+    </div>
+
+    <!-- Phone mock. Replace with a real screenshot of the rebuilt Today screen when available -->
+    <div class="phone" aria-hidden="true">
+      <div>
+        <div class="hi">Good morning, Tom</div>
+        <div class="q">How are you today?</div>
+      </div>
+      <div class="p-score">
+        <div class="ring">
+          <svg width="104" height="104" viewBox="0 0 104 104"><circle cx="52" cy="52" r="44" fill="none" stroke="#2a2a2a" stroke-width="10"/><circle cx="52" cy="52" r="44" fill="none" stroke="#c9f25b" stroke-width="10" stroke-linecap="round" stroke-dasharray="199 277" transform="rotate(-90 52 52)"/></svg>
+          <div class="c"><b>72</b><span>DAD SCORE</span></div>
+        </div>
+        <div class="pillars-mini">
+          <div><span>MIND</span><span>68 <span class="lime">↑</span></span></div>
+          <div><span>BODY</span><span>81 <span class="lime">↑</span></span></div>
+          <div class="weak"><span>BOND</span><span>64 ↓</span></div>
+        </div>
+      </div>
+      <div class="p-card focus">
+        <div class="tiny">YOUR ONE FOCUS</div>
+        <div class="big">60 minutes. Phone down. Just you and them.</div>
+        <div class="meta">Present Dad Mode · logs to your Bond score</div>
+      </div>
+      <div class="p-card"><span class="lbl">Daily check-in</span><span class="meta">3 questions · 1 min</span></div>
+      <div class="p-card"><span class="lbl">14-day streak</span><span class="disp lime" style="font-size:1.25rem">14</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. THREE PILLARS -->
+<section class="band" id="how">
+  <div class="wrap">
+    <div class="top">
+      <h2>Three pillars.<br>One score.</h2>
+      <p>The Dad Health Score reflects how you are actually living, not how much you use the app. Log any workout, any time with the kids, any conversation that helped.</p>
+    </div>
+    <div class="three">
+      <div><h3>Mind</h3><p>A 1-minute daily check-in, a breathing reset when you need it, and a journal that stays yours.</p></div>
+      <div><h3>Body</h3><p>Workouts built around your day, a meal planner, and credit for whatever training you already do.</p></div>
+      <div><h3>Bond</h3><p>Present Dad Mode, Dad Days out, cooking together. The time with your kids counts.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. EVERY DAY, THREE STEPS -->
+<section class="steps-sec">
+  <div class="wrap">
+    <div class="eyebrow dim">Every day, three steps</div>
+    <div class="steps">
+      <div><div class="n">01</div><div><h3>Check in</h3><p>Three honest questions. One minute. Your Mind score updates straight away.</p></div></div>
+      <div><div class="n">02</div><div><h3>See your score</h3><p>Mind, Body and Bond out of 100, with the one that needs you most flagged.</p></div></div>
+      <div><div class="n">03</div><div><h3>Do one thing</h3><p>Not a to-do list. One action for today, then get on with your life.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. HAPPENING. One to three cards, posted by Jamie from a phone form. Hide the whole section when nothing is live. Each card hides itself after its "show until" date. -->
+<section class="happening" id="happening">
+  <div class="wrap">
+    <div class="h-label"><span class="dot"></span><span class="eyebrow">Happening</span></div>
+    <div class="h-cards">
+      <a class="h-card" href="#">
+        <div class="h-date"><small>SUN</small><b>4</b><small>OCT</small></div>
+        <div class="h-body">
+          <h3>Q&amp;A with [name]</h3>
+          <p>[One line: what it is, time and where to join. Example only.]</p>
+        </div>
+        <span class="btn">Save my place →</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- 5. FREE & PRO. Copy must match the confirmed entitlement split in the app milestone. -->
+<section class="pro" id="pro">
+  <div class="wrap">
+    <div class="l">
+      <h2>Free is the real thing.</h2>
+      <p>Pro makes it personal: what's driving your score, how it's trending, and what to do about it.</p>
+    </div>
+    <div class="tiers">
+      <div class="tier">
+        <h3>Free</h3>
+        <ul>
+          <li>Dad Health Score</li>
+          <li>Daily check-in</li>
+          <li>Breathing, journal &amp; crisis support</li>
+          <li>Log any workout or time with the kids</li>
+          <li>Full community access</li>
+        </ul>
+      </div>
+      <div class="tier pro-t">
+        <div class="hd"><h3>Pro</h3><span class="price">£49.99/yr</span></div>
+        <ul>
+          <li>Everything in Free, plus:</li>
+          <li>Weekly trends &amp; score insights</li>
+          <li>Personalised plans &amp; AI workouts</li>
+          <li>Unlimited Dad Days</li>
+          <li>Your Sunday weekly report</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. COMMUNITY -->
+<section class="circles" id="community">
+  <div class="wrap">
+    <div class="top">
+      <h2>Dad Circles</h2>
+      <p>Find dads going through the same chapter as you.</p>
+    </div>
+    <div class="four">
+      <div><h3>New Dad Crew</h3><p>Newborn to toddler years</p></div>
+      <div><h3>Single Dads</h3><p>Solo parenting and co-parenting</p></div>
+      <div><h3>Dad Strength</h3><p>Fitness and performance</p></div>
+      <div><h3>Every Kind of Dad</h3><p>Stepdads, grandads, adoptive dads and every dad figure</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 7. WHY DAD HEALTH -->
+<section class="about" id="about">
+  <div class="wrap">
+    <div class="photo">PHOTO: Jamie, founder. A real, unposed shot</div>
+    <div class="txt">
+      <div class="eyebrow">Why Dad Health</div>
+      <h2>The advice we wish we'd had sooner.</h2>
+      <p>[Two or three sentences from Jamie in first person: why you started it, who it's for, what you want dads to feel.]</p>
+    </div>
+  </div>
+</section>
+
+<!-- 8. CRISIS LINE. Must stay visible on the homepage and Support page. -->
+<section class="crisis">
+  <div class="wrap">
+    <b class="t">Struggling right now?</b>
+    <p>Call Samaritans free on <strong>116 123</strong>, any time. In an emergency, call <strong>999</strong>.</p>
+  </div>
+</section>
+</main>
+
+<!-- 9. FOOTER -->
+<footer>
+  <div class="wrap">
+    <div class="brand">
+      <div class="disp"><span class="lime">Dad</span> Health</div>
+      <small>Dad Health Ltd · Company No. 17407334<br>66 Paul Street, London EC2A 4NA</small>
+    </div>
+    <nav aria-label="Footer">
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="#">Instagram</a>
+      <a href="mailto:jamie@dadhealth.co.uk">Contact</a>
+      <a href="/business">Corporate</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+/* Mobile menu: simple toggle that shows the five links under the header */
+(function(){
+  var btn=document.getElementById('menuBtn'),menu=document.querySelector('.menu');
+  if(!btn||!menu)return;
+  btn.addEventListener('click',function(){
+    var open=menu.style.display==='flex';
+    if(open){menu.removeAttribute('style');btn.setAttribute('aria-expanded','false');}
+    else{
+      menu.style.cssText='display:flex;flex-direction:column;gap:0;position:absolute;left:0;right:0;top:100%;background:#0a0a0a;border-bottom:1px solid #222;padding:8px clamp(20px,5.5vw,80px) 16px';
+      menu.querySelectorAll('a').forEach(function(a){a.style.padding='14px 0';a.addEventListener('click',function(){menu.removeAttribute('style');btn.setAttribute('aria-expanded','false');});});
+      btn.setAttribute('aria-expanded','true');
+    }
+  });
+})();
+</script>
+</body>
+</html>

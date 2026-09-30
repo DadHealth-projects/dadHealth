@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dad Health for Business | Support the dads on your team</title>
+<meta name="description" content="Dad Health for Business gives your working dads Pro access to a mental health, fitness and parenting app, with anonymous team insights for HR. Your own branded version for 100+ eligible sign-ups.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --black:#000;
+  --panel:#101010;
+  --line:#2a2a2a;
+  --white:#f5f5f2;
+  --grey:#a3a3a0;
+  --lime:#c9f25b; /* swap for the exact Dad Health lime used on the live site */
+  --display:'Barlow Condensed','Arial Narrow',Impact,sans-serif;
+  --body:'Barlow',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--black);color:var(--white);font-family:var(--body);font-size:18px;line-height:1.6;-webkit-font-smoothing:antialiased}
+img,svg{max-width:100%}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--lime);outline-offset:3px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+h1,h2,h3{font-family:var(--display);font-weight:900;line-height:.95;letter-spacing:.01em;text-transform:uppercase}
+h1{font-size:clamp(3.2rem,9vw,6.4rem)}
+h2{font-size:clamp(2.2rem,5vw,3.6rem);margin-bottom:20px}
+h3{font-size:1.6rem;line-height:1.05;margin-bottom:8px}
+p{max-width:62ch}
+.muted{color:var(--grey)}
+
+/* nav */
+nav{display:flex;justify-content:space-between;align-items:center;padding:22px 0}
+.logo{font-family:var(--display);font-weight:900;font-size:1.7rem;letter-spacing:.04em;text-decoration:none;text-transform:uppercase}
+.logo span{color:var(--lime)}
+.nav-links{display:flex;gap:22px;align-items:center;font-size:.95rem}
+.nav-links a{text-decoration:none;color:var(--grey)}
+.nav-links a:hover{color:var(--white)}
+
+/* buttons */
+.btn{display:inline-block;background:var(--lime);color:#000;font-family:var(--display);font-weight:800;font-size:1.25rem;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;padding:16px 30px;border:0;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--white);border:2px solid var(--line)}
+.btn.ghost:hover{border-color:var(--lime);color:var(--lime)}
+
+/* hero */
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center;padding:56px 0 88px}
+.hero h1 em{font-style:normal;color:var(--lime)}
+.hero p.lead{font-size:1.25rem;margin:28px 0 34px;color:#dcdcd8}
+.hero .cta{display:flex;flex-wrap:wrap;gap:14px}
+
+/* dashboard mock */
+.dash{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:24px;box-shadow:10px 10px 0 var(--lime)}
+.dash-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:22px}
+.dash-top b{font-family:var(--display);font-size:1.4rem;text-transform:uppercase;letter-spacing:.04em}
+.dash-top small{color:var(--grey);font-size:.8rem;display:block;line-height:1.3}
+.tag{font-size:.75rem;border:1px solid var(--line);color:var(--grey);padding:3px 9px;border-radius:99px;white-space:nowrap}
+.dash-main{display:flex;align-items:center;gap:22px;margin-bottom:22px}
+.ring{width:118px;height:118px;border-radius:50%;background:conic-gradient(var(--lime) 0 71%,#262626 71% 100%);display:grid;place-items:center;flex:none}
+.ring div{width:90px;height:90px;border-radius:50%;background:var(--panel);display:grid;place-items:center;text-align:center}
+.ring strong{font-family:var(--display);font-size:2.6rem;line-height:1}
+.ring span{font-size:.7rem;color:var(--grey);margin-top:-14px;display:block}
+.bars{flex:1;display:grid;gap:12px}
+.bar label{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:4px}
+.bar i{display:block;height:8px;background:#262626;border-radius:4px;overflow:hidden}
+.bar i b{display:block;height:100%;background:var(--lime)}
+.up{color:var(--lime)}.down{color:#ff8a5c}
+.dash-foot{display:grid;grid-template-columns:1fr 1fr;gap:12px;border-top:1px solid var(--line);padding-top:16px;font-size:.85rem;color:var(--grey)}
+.dash-foot strong{display:block;color:var(--white);font-family:var(--display);font-size:1.5rem;line-height:1.1}
+
+/* sections */
+section{padding:88px 0;border-top:1px solid var(--line)}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:40px}
+.col{border-left:3px solid var(--lime);padding:4px 0 4px 20px}
+.col p{color:var(--grey);font-size:1rem}
+
+/* two-up split */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start}
+.checks{list-style:none;margin-top:24px;display:grid;gap:14px}
+.checks li{padding-left:34px;position:relative}
+.checks li::before{content:"";position:absolute;left:0;top:.35em;width:18px;height:10px;border-left:3px solid var(--lime);border-bottom:3px solid var(--lime);transform:rotate(-45deg) scale(.9)}
+.privacy{background:var(--panel);border:1px solid var(--line);padding:32px}
+.privacy h3{color:var(--lime)}
+.privacy .never{margin-top:22px;border-top:1px solid var(--line);padding-top:18px}
+.never ul{list-style:none;display:grid;gap:8px;margin-top:8px;color:var(--grey);font-size:1rem}
+.never li::before{content:"✕ ";color:#ff8a5c}
+
+/* branded */
+.brand-demo{display:flex;gap:28px;align-items:center;justify-content:center;flex-wrap:wrap}
+.phone{width:210px;height:400px;border:3px solid var(--line);border-radius:30px;background:var(--panel);padding:22px 16px;display:flex;flex-direction:column;gap:12px}
+.phone .pill{font-size:.7rem;color:var(--grey)}
+.phone .hello{font-family:var(--display);font-weight:800;font-size:1.5rem;line-height:1;text-transform:uppercase}
+.phone .sc{width:96px;height:96px;border-radius:50%;margin:6px auto;display:grid;place-items:center;font-family:var(--display);font-weight:900;font-size:2rem}
+.phone .row{height:38px;border-radius:6px;background:#1c1c1c}
+.phone .cta-b{margin-top:auto;height:42px;border-radius:6px;display:grid;place-items:center;font-family:var(--display);font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#000}
+.phone.dh .sc{background:conic-gradient(var(--lime) 0 71%,#262626 0);color:var(--white)}
+.phone.dh .sc span{background:var(--panel);width:74px;height:74px;border-radius:50%;display:grid;place-items:center}
+.phone.dh .cta-b{background:var(--lime)}
+.phone.co{border-color:#4aa3ff}
+.phone.co .sc{background:conic-gradient(#4aa3ff 0 71%,#262626 0);color:var(--white)}
+.phone.co .sc span{background:var(--panel);width:74px;height:74px;border-radius:50%;display:grid;place-items:center}
+.phone.co .cta-b{background:#4aa3ff}
+.phone.co .brandmark{font-family:var(--display);font-weight:900;font-size:1.05rem;letter-spacing:.06em;color:#4aa3ff;text-transform:uppercase}
+.caption{text-align:center;font-size:.85rem;color:var(--grey);margin-top:10px}
+.arrow{font-family:var(--display);font-size:2.4rem;color:var(--lime)}
+
+/* steps */
+.steps{list-style:none;counter-reset:s;display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:40px}
+.steps li{counter-increment:s;border-top:3px solid var(--lime);padding-top:16px}
+.steps li::before{content:counter(s);font-family:var(--display);font-weight:900;font-size:2.4rem;color:var(--lime);line-height:1;display:block;margin-bottom:6px}
+.steps p{color:var(--grey);font-size:1rem}
+.steps.three{grid-template-columns:repeat(3,1fr)}
+
+/* plans */
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:40px}
+.plan{border:1px solid var(--line);background:var(--panel);padding:34px;display:flex;flex-direction:column}
+.plan.feat{border-color:var(--lime)}
+.plan .size{font-family:var(--display);font-weight:800;font-size:1.3rem;color:var(--lime);margin-bottom:6px}
+.plan .price{font-family:var(--display);font-weight:900;font-size:2.4rem;text-transform:uppercase;margin:14px 0 4px;line-height:1}
+.plan ul{list-style:none;display:grid;gap:10px;margin:20px 0 30px;font-size:1rem;color:#dcdcd8}
+.plan ul li::before{content:"+ ";color:var(--lime);font-weight:600}
+.plan .btn{margin-top:auto;text-align:center}
+.terms{margin-top:22px;color:var(--grey);font-size:.95rem}
+
+/* contact */
+.contact{display:grid;grid-template-columns:1fr 1fr;gap:56px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:.9rem;color:var(--grey);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--white);font:inherit;padding:13px 14px;border-radius:4px}
+.field textarea{min-height:110px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--lime);outline:none}
+.note{font-size:.85rem;color:var(--grey);margin-top:12px}
+
+footer{border-top:1px solid var(--line);padding:36px 0 48px;color:var(--grey);font-size:.9rem}
+footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px}
+.crisis{max-width:60ch}
+
+@media (max-width:900px){
+  .hero,.split,.contact{grid-template-columns:1fr;gap:40px}
+  .cols,.plans{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr 1fr}
+  .steps.three{grid-template-columns:1fr}
+  .nav-links a:not(.btn){display:none}
+  section{padding:64px 0}
+  .dash{box-shadow:6px 6px 0 var(--lime)}
+}
+@media (max-width:520px){.steps{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav aria-label="Main">
+    <a class="logo" href="/">Dad <span>Health</span></a>
+    <div class="nav-links">
+      <a href="#what-you-get">What you get</a>
+      <a href="#your-brand">Your brand</a>
+      <a href="#pricing">Pricing</a>
+      <a class="btn" style="padding:10px 20px;font-size:1rem;color:#000" href="#contact">Talk to us</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <h1>Look after the dads on <em>your team.</em></h1>
+      <p class="lead">Dad Health is the mental health, fitness and parenting app built for fathers. Give your working dads full Pro access as a staff benefit, and see how the team is doing without ever seeing who is who.</p>
+      <div class="cta">
+        <a class="btn" href="#contact">Book a call</a>
+        <a class="btn ghost" href="#pricing">See how it works</a>
+      </div>
+    </div>
+
+    <div class="dash" role="img" aria-label="Example employer dashboard showing anonymous team scores">
+      <div class="dash-top">
+        <div><b>Acme Logistics</b><small>Team overview, anonymised</small></div>
+        <span class="tag">Example data</span>
+      </div>
+      <div class="dash-main">
+        <div class="ring"><div><div><strong>71</strong><span>avg score</span></div></div></div>
+        <div class="bars">
+          <div class="bar"><label><span>Mind</span><span class="up">68 ↑</span></label><i><b style="width:68%"></b></i></div>
+          <div class="bar"><label><span>Body</span><span class="up">74 ↑</span></label><i><b style="width:74%"></b></i></div>
+          <div class="bar"><label><span>Bond</span><span class="down">72 ↓</span></label><i><b style="width:72%"></b></i></div>
+        </div>
+      </div>
+      <div class="dash-foot">
+        <div><strong>62 of 100</strong>seats active</div>
+        <div><strong>+4</strong>average score this month</div>
+      </div>
+    </div>
+  </header>
+</div>
+
+<section id="what-you-get">
+  <div class="wrap">
+    <h2>A benefit dads will actually use</h2>
+    <p class="muted">Most wellbeing perks are built for everyone, so many men never touch them. Dad Health speaks to fathers directly, in a few minutes a day.</p>
+    <div class="cols">
+      <div class="col"><h3>Mind</h3><p>Breathing resets, guided reflection, daily check-ins and a journal, with support one tap away when a dad needs it.</p></div>
+      <div class="col"><h3>Body</h3><p>Workouts built around his time and equipment, and any activity he already does can be logged, from CrossFit to a walk.</p></div>
+      <div class="col"><h3>Bond</h3><p>Ideas for days out, cooking together and Present Dad Mode: sixty minutes, phone down, just him and his kids.</p></div>
+    </div>
+    <p style="margin-top:36px">Every dad gets a Dad Health Score across the three pillars, a streak to keep him coming back, and the full Pro experience, paid for by you.</p>
+  </div>
+</section>
+
+<section id="privacy">
+  <div class="wrap split">
+    <div>
+      <h2>Real insight. Zero snooping.</h2>
+      <p class="muted">Dads only use a tool like this if they trust it. So your team's data stays theirs, and you get the picture without the detail.</p>
+      <ul class="checks">
+        <li>Team-level averages for Mind, Body and Bond</li>
+        <li>Seats used and engagement over time</li>
+        <li>Month-by-month trends you can share with HR and leadership</li>
+        <li>Nothing is shown until a group is large enough that no one can be identified</li>
+      </ul>
+    </div>
+    <div class="privacy">
+      <h3>What you never see</h3>
+      <p class="muted" style="font-size:1rem">An employer cannot see any individual dad's:</p>
+      <div class="never">
+        <ul>
+          <li>Check-ins, mood or journal entries</li>
+          <li>Scores or activity logs</li>
+          <li>Name against any result</li>
+        </ul>
+      </div>
+      <div class="never"><p style="font-size:1rem">Dads are told this in the app when they join with their company code.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="your-brand">
+  <div class="wrap">
+    <h2>Your own version of Dad Health</h2>
+    <p class="muted">For organisations with 100 or more eligible sign-ups we can put your name on it: your logo, your colours and a welcome from your team, so it feels like part of your benefits package.</p>
+    <div class="brand-demo" style="margin-top:44px">
+      <div>
+        <div class="phone dh" aria-hidden="true">
+          <span class="pill">Dad Health</span>
+          <div class="hello">Good morning, Sam</div>
+          <div class="sc"><span>71</span></div>
+          <div class="row"></div><div class="row"></div>
+          <div class="cta-b">Start check-in</div>
+        </div>
+        <p class="caption">Standard</p>
+      </div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div>
+        <div class="phone co" aria-hidden="true">
+          <span class="brandmark">Acme Logistics</span>
+          <div class="hello">Good morning, Sam</div>
+          <div class="sc"><span>71</span></div>
+          <div class="row"></div><div class="row"></div>
+          <div class="cta-b">Start check-in</div>
+        </div>
+        <p class="caption">Branded for your company (illustrative)</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li><h3>We talk</h3><p>A short call to understand your team and pick the right plan.</p></li>
+      <li><h3>We set you up</h3><p>Your company code, your dashboard and, on the branded plan, your look and feel.</p></li>
+      <li><h3>Dads join</h3><p>They download the app, enter your code and get Pro. Already a Dad Health member? Their existing account is added to your company's membership using the email they already use.</p></li>
+      <li><h3>You see the picture</h3><p>Anonymous team insights, updated as your dads use the app.</p></li>
+    </ol>
+  </div>
+</section>
+
+<section id="leavers">
+  <div class="wrap">
+    <h2>When a dad moves on, his progress goes with him</h2>
+    <p class="muted">If someone leaves your company, he isn't left with nothing. He's offered the chance to move to his own personal Dad Health account and carry on, and we guide him through it in the app.</p>
+    <ol class="steps three">
+      <li><h3>We get in touch</h3><p>Your company lets us know when a dad leaves. We contact him, explain his options in plain English and talk about staying on.</p></li>
+      <li><h3>We walk him through it</h3><p>A few simple screens move him to a personal account. His score, streak and history come with him.</p></li>
+      <li><h3>He carries on</h3><p>He continues on his own subscription. If he'd rather not, he keeps a free account.</p></li>
+    </ol>
+    <p class="terms">All we ask is that your company tells us when a dad leaves, so we can reach him in time. In return, his seat is freed up straight away, and a dad who has had a good experience leaves as an advocate for your company.</p>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <h2>Pricing</h2>
+    <p class="muted">Priced per employee, tailored to your organisation. All plans run for a minimum of 12 months.</p>
+    <div class="plans">
+      <div class="plan">
+        <span class="size">From 25 eligible sign-ups</span>
+        <h3>Team</h3>
+        <p class="muted" style="font-size:1rem">Dad Health Pro as a staff benefit.</p>
+        <div class="price">Price on application</div>
+        <ul>
+          <li>Pro access for every dad on your team</li>
+          <li>Company code for easy sign-up</li>
+          <li>Anonymous team dashboard</li>
+          <li>Onboarding support and launch materials</li>
+        </ul>
+        <a class="btn ghost" href="#contact">Get a quote</a>
+      </div>
+      <div class="plan feat">
+        <span class="size">From 100 eligible sign-ups</span>
+        <h3>Branded</h3>
+        <p class="muted" style="font-size:1rem">Your own skin of Dad Health.</p>
+        <div class="price">Price on application</div>
+        <ul>
+          <li>Everything in Team</li>
+          <li>Your logo and colours throughout the app</li>
+          <li>Branded welcome screen and your own web address</li>
+          <li>Dedicated account contact</li>
+        </ul>
+        <a class="btn" href="#contact">Get a quote</a>
+      </div>
+    </div>
+    <p class="terms">Minimum 12-month contract on every plan. Branded plans require a minimum of 100 eligible sign-ups, meaning the number of employees you make Dad Health available to.</p>
+  </div>
+</section>
+
+<section id="contact">
+  <div class="wrap contact">
+    <div>
+      <h2>Let's talk</h2>
+      <p class="muted">Tell us a little about your organisation and we'll come back within two working days with a plan and a price.</p>
+      <p style="margin-top:22px">Or email <a href="mailto:jamie@dadhealth.co.uk" style="color:var(--lime)">jamie@dadhealth.co.uk</a></p>
+    </div>
+    <div id="enquiry">
+      <div class="field"><label for="name">Your name</label><input id="name" autocomplete="name"></div>
+      <div class="field"><label for="company">Company</label><input id="company" autocomplete="organization"></div>
+      <div class="field"><label for="email">Work email</label><input id="email" type="email" autocomplete="email"></div>
+      <div class="field"><label for="size">Roughly how many employees would Dad Health be available to?</label>
+        <select id="size"><option>Under 25</option><option>25–99</option><option>100–249</option><option>250+</option></select>
+      </div>
+      <div class="field"><label for="msg">Anything we should know?</label><textarea id="msg"></textarea></div>
+      <button class="btn" type="button" id="send">Send enquiry</button>
+      <p class="note">This opens your email app with the details filled in.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>Dad Health Ltd · Company No. 17407334 · <a href="mailto:jamie@dadhealth.co.uk">jamie@dadhealth.co.uk</a></div>
+    <div class="crisis">Dad Health is not an emergency service. If you or someone you know is in crisis, call 999, or Samaritans on 116 123 (UK, free, 24/7).</div>
+  </div>
+</footer>
+
+<script>
+document.getElementById('send').addEventListener('click',function(){
+  var v=function(id){return document.getElementById(id).value.trim()};
+  var body=['Name: '+v('name'),'Company: '+v('company'),'Work email: '+v('email'),'Eligible employees: '+v('size'),'','Message:',v('msg')].join('\n');
+  window.location.href='mailto:jamie@dadhealth.co.uk?subject='+encodeURIComponent('Dad Health for Business enquiry'+(v('company')?' - '+v('company'):''))+'&body='+encodeURIComponent(body);
+});
+</script>
+</body>
+</html>
