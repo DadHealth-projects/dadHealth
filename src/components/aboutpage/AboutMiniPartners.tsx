@@ -8,7 +8,7 @@ export default function AboutMiniPartners() {
           <p className="mt-6 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">Hyrox-style parent and child workouts at Train, powered by Dad Health.</p>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">Times, ages and booking details are pending.</p>
         </div>
-        <div className="flex min-h-72 items-center justify-center bg-muted p-8 text-center sm:min-h-96 lg:min-h-72 xl:min-h-80 min-[1440px]:min-h-96">
+        <div className="flex min-h-72 items-center justify-center rounded-2xl border border-border bg-muted p-8 text-center shadow-[0_0_20px_hsl(var(--primary)/0.04)] sm:min-h-96 lg:min-h-72 xl:min-h-80 min-[1440px]:min-h-96">
           <p className="max-w-xs text-sm text-muted-foreground">Mini Partners session photo is pending.</p>
         </div>
       </div>

@@ -31,14 +31,14 @@ export default function HomepagePlans() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <article className="border border-border p-6 sm:p-7">
+          <article className="rounded-2xl border border-border bg-card p-6 shadow-[0_0_20px_hsl(var(--primary)/0.04)] sm:p-7">
             <h3 className="font-heading text-3xl font-extrabold uppercase">Free</h3>
             <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
               {freeFeatures.map((feature) => <li key={feature}>{feature}</li>)}
             </ul>
           </article>
 
-          <article className="bg-primary p-6 text-primary-foreground sm:p-7">
+          <article className="rounded-2xl border border-primary bg-primary p-6 text-primary-foreground shadow-[0_0_24px_hsl(var(--primary)/0.12)] sm:p-7">
             <div className="flex items-start justify-between gap-4">
               <h3 className="font-heading text-3xl font-extrabold uppercase">Pro</h3>
               <p className="font-heading text-lg font-extrabold">£49.99/year</p>

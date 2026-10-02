@@ -35,8 +35,8 @@ export default async function LegalDocument({ sourceFile }: { sourceFile: LegalS
           <article
             className="max-w-none text-sm leading-relaxed text-muted-foreground sm:text-base
               [&_.meta]:mb-8 [&_.meta]:text-sm [&_.meta]:text-muted-foreground
-              [&_.note]:my-6 [&_.note]:border [&_.note]:border-primary/40 [&_.note]:bg-primary/5 [&_.note]:p-5
-              [&_.warning]:my-6 [&_.warning]:border [&_.warning]:border-primary/40 [&_.warning]:bg-primary/5 [&_.warning]:p-5
+              [&_.note]:my-6 [&_.note]:rounded-2xl [&_.note]:border [&_.note]:border-primary/40 [&_.note]:bg-primary/5 [&_.note]:p-5 [&_.note]:shadow-[0_0_18px_hsl(var(--primary)/0.04)]
+              [&_.warning]:my-6 [&_.warning]:rounded-2xl [&_.warning]:border [&_.warning]:border-primary/40 [&_.warning]:bg-primary/5 [&_.warning]:p-5 [&_.warning]:shadow-[0_0_18px_hsl(var(--primary)/0.04)]
               [&_a]:break-words [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-4
               [&_h1]:mb-6 [&_h1]:font-heading [&_h1]:text-4xl [&_h1]:font-extrabold [&_h1]:leading-none [&_h1]:text-foreground sm:[&_h1]:text-5xl
               [&_.legal-document-title]:mt-0

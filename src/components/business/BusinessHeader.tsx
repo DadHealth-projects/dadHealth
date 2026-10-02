@@ -38,7 +38,7 @@ export default function BusinessHeader() {
 
         <Link
           href="/business/contact"
-          className="ml-auto inline-flex min-h-11 items-center justify-center bg-primary px-4 font-heading text-sm font-extrabold uppercase tracking-[0.08em] text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:-mr-2 lg:ml-4 lg:min-h-12 lg:px-5 xl:-mr-3 xl:ml-6 xl:min-h-[3.25rem] xl:px-6 min-[1440px]:-mr-4 min-[1440px]:ml-8 min-[1440px]:min-h-14 min-[1440px]:px-7"
+          className="ml-auto inline-flex min-h-11 items-center justify-center rounded-xl border border-primary bg-primary px-4 font-heading text-sm font-extrabold uppercase tracking-[0.08em] text-primary-foreground shadow-[0_0_18px_hsl(var(--primary)/0.10)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:-mr-2 lg:ml-4 lg:min-h-12 lg:px-5 xl:-mr-3 xl:ml-6 xl:min-h-[3.25rem] xl:px-6 min-[1440px]:-mr-4 min-[1440px]:ml-8 min-[1440px]:min-h-14 min-[1440px]:px-7"
         >
           Talk to us <span aria-hidden="true" className="ml-2">&rarr;</span>
         </Link>
@@ -49,7 +49,7 @@ export default function BusinessHeader() {
           aria-controls="business-mobile-navigation"
           aria-label={menuOpen ? "Close menu" : "Open menu"}
           onClick={() => setMenuOpen((open) => !open)}
-          className="flex size-11 shrink-0 flex-col items-center justify-center gap-1.5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:hidden"
+          className="flex size-11 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:hidden"
         >
           <span className="h-0.5 w-6 bg-current" />
           <span className="h-0.5 w-6 bg-current" />
@@ -61,7 +61,7 @@ export default function BusinessHeader() {
         <nav
           id="business-mobile-navigation"
           aria-label="Mobile navigation"
-          className="absolute inset-x-0 top-full border-y border-border bg-background px-4 py-3 lg:hidden"
+          className="absolute inset-x-0 top-full rounded-b-xl border-y border-border bg-background px-4 py-3 shadow-[0_10px_24px_hsl(var(--background)/0.35)] lg:hidden"
         >
           {navigation.map((item) => (
             <Link

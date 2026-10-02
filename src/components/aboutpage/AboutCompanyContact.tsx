@@ -16,7 +16,7 @@ export default function AboutCompanyContact() {
             Questions, press or partnerships:{" "}
             <a className="text-foreground underline decoration-primary underline-offset-4" href="mailto:hello@dadhealth.co.uk">hello@dadhealth.co.uk</a>
           </p>
-          <Link href="/support" className="mt-6 inline-flex min-h-11 items-center font-heading text-sm font-extrabold uppercase tracking-[0.12em] text-primary transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <Link href="/support" className="mt-6 inline-flex min-h-11 items-center rounded-xl border border-primary/40 bg-card px-4 font-heading text-sm font-extrabold uppercase tracking-[0.12em] text-primary shadow-[0_0_16px_hsl(var(--primary)/0.04)] transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             Visit support <span aria-hidden="true" className="ml-2">&rarr;</span>
           </Link>
         </div>

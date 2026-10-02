@@ -26,7 +26,7 @@ export default function HowItWorksScore() {
         <div
           role="img"
           aria-label="Illustrative Dad Health Score of 72, with Mind 68 rising, Body 81 rising, Bond 64 falling, and Bond highlighted"
-          className="rounded-3xl bg-card p-5 sm:p-8 lg:p-6 xl:p-7 min-[1440px]:p-8"
+          className="rounded-3xl border border-border bg-card p-5 shadow-[0_0_24px_hsl(var(--primary)/0.06)] sm:p-8 lg:p-6 xl:p-7 min-[1440px]:p-8"
         >
           <div className="flex items-center gap-4 sm:gap-7">
             <div className="relative size-24 shrink-0 sm:size-32">
@@ -44,7 +44,7 @@ export default function HowItWorksScore() {
               {pillars.map((pillar) => (
                 <div
                   key={pillar.label}
-                  className={`flex min-h-10 items-center justify-between px-2 font-heading text-base font-extrabold uppercase sm:min-h-11 sm:text-xl ${pillar.highlighted ? "bg-primary text-primary-foreground" : "text-foreground"}`}
+                  className={`flex min-h-10 items-center justify-between rounded-lg px-2 font-heading text-base font-extrabold uppercase sm:min-h-11 sm:text-xl ${pillar.highlighted ? "bg-primary text-primary-foreground" : "text-foreground"}`}
                 >
                   <span>{pillar.label}</span>
                   <span>

@@ -29,7 +29,7 @@ export default function LegalHero({ title, currentPath }: LegalHeroProps) {
                 key={route.href}
                 href={route.href}
                 aria-current={active ? "page" : undefined}
-                className={`inline-flex min-h-11 items-center justify-center border px-5 font-heading text-sm font-extrabold uppercase tracking-[0.08em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                className={`inline-flex min-h-11 items-center justify-center rounded-xl border px-5 font-heading text-sm font-extrabold uppercase tracking-[0.08em] shadow-[0_0_16px_hsl(var(--primary)/0.04)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                   active
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-border text-foreground hover:border-primary hover:text-primary"

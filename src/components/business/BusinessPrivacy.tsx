@@ -32,7 +32,7 @@ export default function BusinessPrivacy() {
           </ul>
         </div>
 
-        <div className="self-start border border-border bg-card p-6 sm:p-8">
+        <div className="self-start rounded-2xl border border-border bg-card p-6 shadow-[0_0_20px_hsl(var(--primary)/0.04)] sm:p-8">
           <h3 className="font-heading text-3xl font-extrabold uppercase leading-none text-primary sm:text-4xl">
             What you never see
           </h3>

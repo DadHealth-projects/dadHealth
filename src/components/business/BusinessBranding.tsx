@@ -25,13 +25,13 @@ function BrandPhone({ brand, caption, branded = false }: BrandPhoneProps) {
 
   return (
     <figure className="w-52">
-      <div className={`flex h-96 flex-col gap-4 rounded-3xl border-4 bg-card p-5 ${borderColour}`}>
+      <div className={`flex h-96 flex-col gap-4 rounded-3xl border-4 bg-card p-5 shadow-[0_0_24px_hsl(var(--primary)/0.06)] ${borderColour}`}>
         <p className={`font-heading text-sm font-extrabold uppercase tracking-[0.06em] ${brandColour}`}>{brand}</p>
         <p className="font-heading text-2xl font-extrabold uppercase leading-none">Good morning, Sam</p>
         <ScoreRing branded={branded} />
-        <div className="h-10 bg-muted" />
-        <div className="h-10 bg-muted" />
-        <div className={`mt-auto grid min-h-11 place-items-center font-heading text-sm font-extrabold uppercase tracking-[0.05em] text-primary-foreground ${buttonColour}`}>
+        <div className="h-10 rounded-xl border border-border bg-muted" />
+        <div className="h-10 rounded-xl border border-border bg-muted" />
+        <div className={`mt-auto grid min-h-11 place-items-center rounded-xl font-heading text-sm font-extrabold uppercase tracking-[0.05em] text-primary-foreground ${buttonColour}`}>
           Start check-in
         </div>
       </div>

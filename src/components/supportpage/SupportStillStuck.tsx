@@ -6,7 +6,7 @@ export default function SupportStillStuck() {
         <p className="mt-5 text-sm leading-relaxed text-muted-foreground sm:text-base">Email us and we will come back to you.</p>
         <a
           href="mailto:hello@dadhealth.co.uk"
-          className="mt-7 inline-flex min-h-12 items-center justify-center bg-primary px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="mt-7 inline-flex min-h-12 items-center justify-center rounded-xl border border-primary bg-primary px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] text-primary-foreground shadow-[0_0_18px_hsl(var(--primary)/0.10)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           Email support <span aria-hidden="true" className="ml-2">&rarr;</span>
         </a>

@@ -5,6 +5,7 @@ import HappeningStrip from "@/components/homepage/HappeningStrip";
 import HomepagePlans from "@/components/homepage/HomepagePlans";
 import HomepageCircles from "@/components/homepage/HomepageCircles";
 import HomepageFounder from "@/components/homepage/HomepageFounder";
+import HomepageFinalCta from "@/components/homepage/HomepageFinalCta";
 import HomepageCrisis from "@/components/homepage/HomepageCrisis";
 import HomepageFooter from "@/components/homepage/HomepageFooter";
 import { getLiveHappenings } from "@/lib/happenings";
@@ -28,11 +29,12 @@ export default async function Homepage() {
       <HomepageHeader />
       <main>
         <HomepageHero />
+        <HomepageFounder />
         <HomepageHowItWorks />
         <HappeningStrip items={happenings} />
         <HomepagePlans />
         <HomepageCircles />
-        <HomepageFounder />
+        <HomepageFinalCta />
         <HomepageCrisis />
       </main>
       <HomepageFooter />

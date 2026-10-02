@@ -49,7 +49,7 @@ export default function BusinessEnquiry() {
     }
   }
 
-  const inputClasses = "mt-2 min-h-12 w-full border border-input bg-card px-4 py-3 text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
+  const inputClasses = "mt-2 min-h-12 w-full rounded-xl border border-input bg-background px-4 py-3 text-foreground shadow-[0_0_16px_hsl(var(--primary)/0.03)] focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
 
   return (
     <section id="contact" className="scroll-mt-14 border-t border-border bg-card text-foreground">
@@ -64,7 +64,7 @@ export default function BusinessEnquiry() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="rounded-2xl border border-border bg-card p-5 shadow-[0_0_20px_hsl(var(--primary)/0.04)] sm:p-7">
           <label className="block text-sm text-muted-foreground">
             Your name
             <input name="name" autoComplete="name" required maxLength={100} className={inputClasses} />
@@ -93,7 +93,7 @@ export default function BusinessEnquiry() {
           <button
             type="submit"
             disabled={submitState === "sending"}
-            className="mt-5 inline-flex min-h-12 items-center justify-center bg-primary px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-5 inline-flex min-h-12 items-center justify-center rounded-xl border border-primary bg-primary px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] text-primary-foreground shadow-[0_0_18px_hsl(var(--primary)/0.10)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitState === "sending" ? "Sending..." : "Send enquiry"}
           </button>

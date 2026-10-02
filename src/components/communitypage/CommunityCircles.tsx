@@ -31,7 +31,7 @@ export default function CommunityCircles() {
 
         <div className="mt-10 grid gap-5 md:grid-cols-2">
           {circles.map((circle) => (
-            <article key={circle.title} className="border-t-4 border-primary bg-card p-6 sm:p-8 lg:p-10">
+            <article key={circle.title} className="rounded-2xl border border-border border-t-4 border-t-primary bg-card p-6 shadow-[0_0_20px_hsl(var(--primary)/0.04)] sm:p-8 lg:p-10">
               <h3 className="font-heading text-3xl font-extrabold uppercase leading-none sm:text-4xl">
                 {circle.title}
               </h3>

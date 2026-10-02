@@ -50,9 +50,9 @@ export default function HappeningStrip({ items }: HappeningStripProps) {
 
         <div className="grid flex-1 gap-4">
           {liveItems.map((item) => (
-            <article key={item.id} className="flex flex-col gap-4 border border-border bg-background p-5 sm:flex-row sm:items-center">
+            <article key={item.id} className="flex flex-col gap-4 rounded-2xl border border-border bg-background p-5 shadow-[0_0_18px_hsl(var(--primary)/0.04)] sm:flex-row sm:items-center">
               <div className="flex w-full gap-3 sm:w-auto">
-                <div className="flex size-20 shrink-0 items-center justify-center bg-primary text-primary-foreground">
+                <div className="flex size-20 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                   <EventDate value={item.event_at} />
                 </div>
                 {item.image_url && (
@@ -62,7 +62,7 @@ export default function HappeningStrip({ items }: HappeningStripProps) {
                     width={320}
                     height={200}
                     sizes="(min-width: 640px) 128px, calc(100vw - 148px)"
-                    className="h-20 min-w-0 flex-1 object-cover sm:w-32 sm:flex-none"
+                    className="h-20 min-w-0 flex-1 rounded-xl object-cover sm:w-32 sm:flex-none"
                   />
                 )}
               </div>
@@ -73,7 +73,7 @@ export default function HappeningStrip({ items }: HappeningStripProps) {
               {item.button_label && item.button_url && (
                 <a
                   href={item.button_url}
-                  className="inline-flex min-h-11 shrink-0 items-center justify-center bg-primary px-5 font-heading text-sm font-extrabold uppercase tracking-[0.08em] text-primary-foreground"
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-primary bg-primary px-5 font-heading text-sm font-extrabold uppercase tracking-[0.08em] text-primary-foreground shadow-[0_0_18px_hsl(var(--primary)/0.10)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   {item.button_label} <span aria-hidden="true" className="ml-2">→</span>
                 </a>

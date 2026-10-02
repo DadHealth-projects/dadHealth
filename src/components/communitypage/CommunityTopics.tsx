@@ -20,7 +20,7 @@ export default function CommunityTopics({ topics }: CommunityTopicsProps) {
         </h2>
         <div className="mt-10 grid gap-5 lg:grid-cols-3">
           {approvedTopics.map((topic) => (
-            <article key={topic.id} className="bg-card p-6 sm:p-8">
+            <article key={topic.id} className="rounded-2xl border border-border bg-card p-6 shadow-[0_0_20px_hsl(var(--primary)/0.04)] sm:p-8">
               <p className="font-heading text-xs font-bold uppercase tracking-[0.22em] text-primary">
                 Dad Health · Official prompt
               </p>

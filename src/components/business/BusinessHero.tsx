@@ -17,14 +17,14 @@ function EmployerDashboard() {
     <div
       role="img"
       aria-label="Example employer dashboard showing anonymous team scores"
-      className="border border-border border-r-4 border-r-primary bg-card p-5 shadow-[8px_8px_0_0_hsl(var(--primary))] sm:p-7 lg:p-5 xl:p-6 min-[1440px]:p-7"
+      className="rounded-2xl border border-border border-r-4 border-r-primary bg-card p-5 shadow-[0_0_24px_hsl(var(--primary)/0.08)] sm:p-7 lg:p-5 xl:p-6 min-[1440px]:p-7"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-heading text-xl font-extrabold uppercase tracking-[0.04em]">Acme Logistics</p>
           <p className="text-xs text-muted-foreground">Team overview, anonymised</p>
         </div>
-        <span className="whitespace-nowrap border border-border px-2 py-1 text-[10px] text-muted-foreground">Example data</span>
+        <span className="whitespace-nowrap rounded-lg border border-border bg-background px-2 py-1 text-[10px] text-muted-foreground">Example data</span>
       </div>
 
       <div className="mt-6 grid items-center gap-6 sm:grid-cols-[8rem_1fr] lg:gap-4 xl:gap-5 min-[1440px]:gap-6">
@@ -103,8 +103,8 @@ export default function BusinessHero() {
             Dad Health is the mental health, fitness and parenting app built for fathers. Give your working dads full Pro access as a staff benefit, and see how the team is doing without ever seeing who is who.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a href="/business/contact" className="inline-flex min-h-12 items-center justify-center bg-primary px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Book a call</a>
-            <a href="/howitworks" className="inline-flex min-h-12 items-center justify-center border-2 border-border px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">See how it works</a>
+            <a href="/business/contact" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-primary bg-primary px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] text-primary-foreground shadow-[0_0_18px_hsl(var(--primary)/0.10)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Book a call</a>
+            <a href="/howitworks" className="inline-flex min-h-12 items-center justify-center rounded-xl border-2 border-border bg-card px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] shadow-[0_0_18px_hsl(var(--primary)/0.04)] transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">See how it works</a>
           </div>
         </div>
         <EmployerDashboard />
