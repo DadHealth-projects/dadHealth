@@ -18,6 +18,7 @@ interface AuthModalProps {
   open: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  returnTo?: string;
 }
 
 type AuthMode = "login" | "signup" | "forgot";
@@ -27,7 +28,7 @@ const OAUTH_PROVIDERS: { provider: Provider; label: string }[] = [
   { provider: "apple", label: "Continue with Apple" },
 ];
 
-export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
+export default function AuthModal({ open, onClose, onSuccess, returnTo }: AuthModalProps) {
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -69,7 +70,13 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
     setOauthLoading(provider);
     try {
       // Prefer the current origin so OAuth redirects back to a client subdomain.
-      const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`;
+      const safeReturnTo = returnTo?.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
+      const callbackPath = safeReturnTo
+        ? `/auth/callback?next=${encodeURIComponent(safeReturnTo)}`
+        : "/auth/callback";
+      const redirectTo = typeof window !== "undefined"
+        ? `${window.location.origin}${callbackPath}`
+        : `${process.env.NEXT_PUBLIC_SITE_URL}${callbackPath}`;
 
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider,
@@ -101,10 +108,14 @@ export default function AuthModal({ open, onClose, onSuccess }: AuthModalProps) 
 
     try {
       if (mode === "signup") {
+        const safeReturnTo = returnTo?.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
+        const emailRedirectTo = safeReturnTo
+          ? getRedirectUrl(`/auth/callback?next=${encodeURIComponent(safeReturnTo)}`)
+          : typeof window !== "undefined" ? window.location.origin : undefined;
         const { error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined },
+          options: { emailRedirectTo },
         });
         if (signUpError) throw signUpError;
         trackEvent("sign_up", {

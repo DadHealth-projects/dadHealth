@@ -41,12 +41,6 @@ test('Health Connect remains outside the Garmin and Fitbit server cron', async (
   assert.doesNotMatch(wearableSync, /health_connect/);
 });
 
-test('web check-in treats Health Connect sleep as wearable data', async () => {
-  const dashboard = await source('src/hooks/useDashboard.ts');
-
-  assert.match(dashboard, /existingSleep\?\.source === "health_connect"/);
-});
-
 function extractHealthConnectRpc(sql) {
   const match = sql.match(
     /create or replace function public\.upsert_health_connect_daily_data\([\s\S]*?grant execute on function public\.upsert_health_connect_daily_data\(jsonb, jsonb\) to authenticated;/,

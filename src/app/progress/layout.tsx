@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Progress",
-  description: "Dad Health Score, report card, badges, sleep tracker.",
+  description: "Your current Dad Health Score across Mind, Body and Bond.",
   robots: { index: false, follow: false },
 };
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: "Dad Health Pro — full access to workouts, meal planner, mood graphs and more.",
+  description: "Manage Dad Health Pro subscription and billing.",
   robots: { index: false, follow: false },
 };
 

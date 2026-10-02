@@ -1,18 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { useRouter } from "next/navigation";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import AuthModal from "@/components/AuthModal";
 
 export default function CoParentInviteAccept({
   token,
-  invitedByUserId,
   invitedByName,
 }: {
   token: string;
-  invitedByUserId?: string;
   invitedByName?: string | null;
 }) {
 
@@ -20,10 +19,9 @@ export default function CoParentInviteAccept({
   const { user } = useAuth();
 
   const [invitedByNameState] = useState<string>(invitedByName ?? "Someone");
-  const [invalidInvite, setInvalidInvite] = useState(false);
-
-
   const [submitting, setSubmitting] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const returnTo = `/bond?section=coparenting&token=${encodeURIComponent(token)}`;
 
   async function handleAccept() {
 
@@ -100,14 +98,7 @@ window.location.replace("/bond?section=coparenting");
           <button
             type="button"
             disabled={submitting}
-            onClick={() => {
-              // After auth, Bond page will re-detect the token from the URL.
-              router.push(
-                `/auth/login?next=${encodeURIComponent(
-                  `/bond?section=coparenting&token=${encodeURIComponent(token)}`
-                )}`
-              );
-            }}
+            onClick={() => setAuthOpen(true)}
             className="flex-1 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:brightness-110 disabled:opacity-50"
           >
             Accept and create account
@@ -124,6 +115,12 @@ window.location.replace("/bond?section=coparenting");
       </div>
 
       <p className="text-xs text-muted-foreground mt-5">This invite link expires in 7 days.</p>
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onSuccess={() => setAuthOpen(false)}
+        returnTo={returnTo}
+      />
     </div>
   );
 }

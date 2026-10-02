@@ -100,31 +100,6 @@ async function initOneSignalOnce(oneSignal: any, appId: string): Promise<void> {
   await window.__onesignalInitPromise;
 }
 
-export function requestOneSignalPermission() {
-  if (typeof window === "undefined") return;
-  if (!canUseOneSignalOnCurrentOrigin()) return;
-  const appId = getOneSignalAppId();
-  if (!appId) {
-    console.warn("[OneSignal] requestOneSignalPermission called but NEXT_PUBLIC_ONESIGNAL_APP_ID is not set.");
-    return;
-  }
-  ensureOneSignalScript(appId);
-
-  queueOneSignal(async (OneSignal) => {
-    await initOneSignalOnce(OneSignal, appId);
-
-    // v16 path
-    if (OneSignal?.Notifications?.requestPermission) {
-      await OneSignal.Notifications.requestPermission();
-      return;
-    }
-    // Older fallbacks
-    if (typeof OneSignal?.showSlidedownPrompt === "function") OneSignal.showSlidedownPrompt();
-    else if (typeof OneSignal?.registerForPushNotifications === "function") OneSignal.registerForPushNotifications();
-    else if (typeof OneSignal?.showNativePrompt === "function") OneSignal.showNativePrompt();
-  });
-}
-
 export default function OneSignalManager() {
   const { user } = useAuth();
   const { data: profile } = useUserProfile(user?.id);
