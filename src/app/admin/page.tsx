@@ -11,6 +11,7 @@ import {
   Flag,
   Heart,
   LogOut,
+  Megaphone,
   Plus,
   RefreshCw,
   Shield,
@@ -22,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { DashboardIcon } from "@/components/DashboardIcon";
+import HappeningAdminTab from "@/components/admin/HappeningAdminTab";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,7 @@ type Tab =
   | "workouts"
   | "therapists"
   | "dad_dates"
+  | "happenings"
   | "expert_events"
   | "circles"
   | "moderation";
@@ -1780,6 +1783,7 @@ const NAV_ITEMS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "workouts", label: "Workouts", icon: <Dumbbell className="h-4 w-4" /> },
   { id: "therapists", label: "Therapists", icon: <Stethoscope className="h-4 w-4" /> },
   { id: "dad_dates", label: "Dad Dates", icon: <Heart className="h-4 w-4" /> },
+  { id: "happenings", label: "Happening", icon: <Megaphone className="h-4 w-4" /> },
   { id: "expert_events", label: "Expert Q&A", icon: <CalendarDays className="h-4 w-4" /> },
   { id: "circles", label: "Circles", icon: <Users className="h-4 w-4" /> },
   { id: "moderation", label: "Moderation", icon: <Flag className="h-4 w-4" /> },
@@ -1827,6 +1831,7 @@ export default function AdminPage() {
       case "workouts": return <WorkoutsTab />;
       case "therapists": return <TherapistsTab />;
       case "dad_dates": return <DadDatesTab />;
+      case "happenings": return <HappeningAdminTab />;
       case "expert_events": return <ExpertEventsTab />;
       case "circles": return <CirclesTab />;
       case "moderation": return <ModerationTab />;
