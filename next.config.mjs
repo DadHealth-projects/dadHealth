@@ -39,6 +39,15 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      { source: "/minipartners", destination: "/about", permanent: true },
+      { source: "/terms_files/policy.html", destination: "/privacy", permanent: true },
+      { source: "/terms_files/terms.html", destination: "/terms", permanent: true },
+      { source: "/terms_files/EULA.html", destination: "/eula", permanent: true },
+      { source: "/terms_files/cookies.html", destination: "/cookies", permanent: true },
+    ];
+  },
   webpack: (config) => {
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
