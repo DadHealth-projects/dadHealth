@@ -13,6 +13,7 @@ export async function sendEmail(args: {
   to: string;
   subject: string;
   html: string;
+  replyTo?: string;
 }): Promise<void> {
   const apiKey = requiredEnv("RESEND_API_KEY");
   const from = requiredEnv("RESEND_FROM_EMAIL");
@@ -28,6 +29,7 @@ export async function sendEmail(args: {
       to: [args.to],
       subject: args.subject,
       html: args.html,
+      ...(args.replyTo ? { reply_to: args.replyTo } : {}),
     }),
   });
 
