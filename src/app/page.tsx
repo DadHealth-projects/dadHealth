@@ -1,37 +1,41 @@
-'use client';
+import HomepageHeader from "@/components/homepage/HomepageHeader";
+import HomepageHero from "@/components/homepage/HomepageHero";
+import HomepageHowItWorks from "@/components/homepage/HomepageHowItWorks";
+import HappeningStrip from "@/components/homepage/HappeningStrip";
+import HomepagePlans from "@/components/homepage/HomepagePlans";
+import HomepageCircles from "@/components/homepage/HomepageCircles";
+import HomepageFounder from "@/components/homepage/HomepageFounder";
+import HomepageCrisis from "@/components/homepage/HomepageCrisis";
+import HomepageFooter from "@/components/homepage/HomepageFooter";
+import { getLiveHappenings } from "@/lib/happenings";
+import { createMarketingMetadata } from "@/lib/marketingMetadata";
 
-import SitePageShell from "@/components/SitePageShell";
-import SiteFooter from "@/components/SiteFooter";
-import DashboardPreview from "@/components/home/DashboardPreview";
-import { IMAGES } from "@/lib/images";
-import HeroSection from "@/components/home/HeroSection";
-import StatsBar from "@/components/home/StatsBar";
-import WhoWeAre from "@/components/home/WhoWeAre";
-import PillarsSection from "@/components/home/PillarsSection";
-import DadStrengthSection from "@/components/home/DadStrengthSection";
+export const metadata = createMarketingMetadata({
+  title: "Dad Health | How are you doing, Dad?",
+  description:
+    "One score for your Mind, Body and Bond. One thing to do today. Dad Health is built for dads.",
+  path: "/",
+  absoluteTitle: true,
+});
 
-// Removed: useAuth + loading guard.
-// The public landing page has no auth-dependent content — it renders the same
-// for logged-in and logged-out visitors. Blocking the entire page behind
-// auth.loading caused a 300–800ms spinner on every first load because the
-// Supabase session check hadn't resolved yet.
-// The header handles the sign-in/avatar state independently and does not
-// block page render.
+export const dynamic = "force-dynamic";
 
-const PILLAR_IMAGES = [IMAGES.gym, IMAGES.run, IMAGES.food, IMAGES.bond];
+export default async function Homepage() {
+  const happenings = await getLiveHappenings();
 
-const Index = () => {
   return (
-    <SitePageShell>
-      <HeroSection heroImg={IMAGES.hero} />
-      <WhoWeAre gymImg={IMAGES.gym} />
-      <DashboardPreview />
-      <StatsBar />
-      <PillarsSection pillarImages={PILLAR_IMAGES} />
-      <DadStrengthSection workoutImg={IMAGES.workout} />
-      <SiteFooter />
-    </SitePageShell>
+    <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+      <HomepageHeader />
+      <main>
+        <HomepageHero />
+        <HomepageHowItWorks />
+        <HappeningStrip items={happenings} />
+        <HomepagePlans />
+        <HomepageCircles />
+        <HomepageFounder />
+        <HomepageCrisis />
+      </main>
+      <HomepageFooter />
+    </div>
   );
-};
-
-export default Index;
+}
