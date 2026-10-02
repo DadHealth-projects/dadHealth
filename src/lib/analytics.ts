@@ -4,10 +4,23 @@ import posthog from "posthog-js";
 
 type EventProperties = Record<string, unknown>;
 
+export type AnalyticsConsentValue = "granted" | "denied";
+export const ANALYTICS_CONSENT_KEY = "dadhealth.analytics-consent";
+
 let initialized = false;
 
+function hasAnalyticsConsent() {
+  if (typeof window === "undefined") return false;
+
+  try {
+    return window.localStorage.getItem(ANALYTICS_CONSENT_KEY) === "granted";
+  } catch {
+    return false;
+  }
+}
+
 function canUseAnalytics() {
-  return typeof window !== "undefined" && Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY);
+  return hasAnalyticsConsent() && Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY);
 }
 
 export function initAnalytics() {
