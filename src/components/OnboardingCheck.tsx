@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile, type UserProfileRow } from "@/hooks/useUserProfile";
 import OnboardingModal from "./OnboardingModal";
@@ -20,10 +21,12 @@ function isPhase1Complete(profile: UserProfileRow | null | undefined): boolean {
 }
 
 export default function OnboardingCheck() {
+  const pathname = usePathname();
   const { user } = useAuth();
   const { data: profile, isLoading } = useUserProfile(user?.id);
   const [dismissed, setDismissed] = useState(false);
 
+  if (pathname === "/") return null;
   if (!user?.id || isLoading) return null;
 
   // Phase 1 blocks everything else — it must complete before the home screen

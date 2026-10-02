@@ -17,6 +17,6 @@ export const IMAGES = {
   therapy: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=600&q=80",
 } as const;
 
-/** Same hero photo, wider for Open Graph / Twitter cards */
+/** First-party image used for Open Graph / Twitter cards. */
 export const OG_HERO_IMAGE =
-  "https://images.unsplash.com/photo-1516534775068-ba3e7458af70?w=1200&q=80";
+  "/hero-dad.jpg";
