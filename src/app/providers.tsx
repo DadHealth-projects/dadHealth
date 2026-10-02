@@ -10,8 +10,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import OnboardingCheck from "@/components/OnboardingCheck";
 import ClientBrandProvider from "@/components/ClientBrandProvider";
 import OneSignalManager from "@/components/OneSignalManager";
-import { initAnalytics } from "@/lib/analytics";
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 function makeQueryClient() {
   return new QueryClient({
@@ -34,10 +33,6 @@ export default function Providers({ children }: { children: ReactNode }) {
   // QueryClient inside useState so it is created once per client mount and
   // never shared across SSR renders or recreated on re-renders.
   const [queryClient] = useState(() => makeQueryClient());
-
-  useEffect(() => {
-    initAnalytics();
-  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
