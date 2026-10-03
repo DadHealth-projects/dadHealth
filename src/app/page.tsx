@@ -8,6 +8,7 @@ import HomepageFounder from "@/components/homepage/HomepageFounder";
 import HomepageFinalCta from "@/components/homepage/HomepageFinalCta";
 import HomepageCrisis from "@/components/homepage/HomepageCrisis";
 import HomepageFooter from "@/components/homepage/HomepageFooter";
+import WebsiteStructuredData from "@/components/marketing/WebsiteStructuredData";
 import { getLiveHappenings } from "@/lib/happenings";
 import { createMarketingMetadata } from "@/lib/marketingMetadata";
 
@@ -26,6 +27,7 @@ export default async function Homepage() {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+      <WebsiteStructuredData />
       <HomepageHeader />
       <main>
         <HomepageHero />
