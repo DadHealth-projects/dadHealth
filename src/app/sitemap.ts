@@ -8,6 +8,7 @@ const routes = [
   "/dad-circles",
   "/about",
   "/business",
+  "/business/contact",
   "/support",
   "/privacy",
   "/terms",

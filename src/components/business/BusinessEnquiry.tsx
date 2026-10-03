@@ -9,7 +9,7 @@ function fieldValue(form: FormData, name: string) {
   return String(form.get(name) ?? "").trim();
 }
 
-export default function BusinessEnquiry() {
+export default function BusinessEnquiry({ headingLevel: Heading = "h2" }: { headingLevel?: "h1" | "h2" }) {
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -55,7 +55,7 @@ export default function BusinessEnquiry() {
     <section id="contact" className="scroll-mt-14 border-t border-border bg-card text-foreground">
       <div className="mx-auto grid max-w-7xl gap-10 px-5 py-16 sm:px-6 sm:py-20 lg:grid-cols-2 lg:gap-8 xl:gap-12 min-[1440px]:gap-16 lg:px-8 lg:py-16 xl:py-20 min-[1440px]:py-24">
         <div>
-          <h2 className="font-heading text-5xl font-extrabold uppercase leading-none tracking-[-0.025em] sm:text-6xl lg:text-5xl xl:text-[3.25rem] min-[1440px]:text-6xl">Let&apos;s talk</h2>
+          <Heading className="font-heading text-5xl font-extrabold uppercase leading-none tracking-[-0.025em] sm:text-6xl lg:text-5xl xl:text-[3.25rem] min-[1440px]:text-6xl">Let&apos;s talk</Heading>
           <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
             Tell us a little about your organisation and we&apos;ll come back within two working days with a plan and a price.
           </p>
