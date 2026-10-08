@@ -1,3 +1,5 @@
+import { marketingBodyClass, marketingSectionClass } from "@/components/marketing/marketingStyles";
+
 const pillars = [
   {
     title: "Mind",
@@ -33,7 +35,7 @@ const pillars = [
 export default function HowItWorksPillars() {
   return (
     <section className="bg-card text-foreground">
-      <div className="mx-auto max-w-7xl px-5 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-16 xl:py-20 min-[1440px]:py-24">
+      <div className={marketingSectionClass}>
         <p className="font-heading text-xs font-bold uppercase tracking-[0.3em] text-muted-foreground">
           What sits behind each pillar
         </p>
@@ -46,7 +48,7 @@ export default function HowItWorksPillars() {
               </h2>
               <ul className="mt-6 space-y-4">
                 {pillar.features.map((feature) => (
-                  <li key={feature} className="flex gap-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
+                  <li key={feature} className={`flex gap-3 ${marketingBodyClass}`}>
                     <span aria-hidden="true" className="mt-2 size-2 shrink-0 bg-primary" />
                     <span>{feature}</span>
                   </li>
