@@ -1,4 +1,4 @@
-import StoreDownloadButtons from "@/components/marketing/StoreDownloadButtons";
+import HomepagePrimaryButton from "@/components/homepage/HomepagePrimaryButton";
 
 function TodayPhone() {
   return (
@@ -54,21 +54,21 @@ function TodayPhone() {
 export default function HomepageHero() {
   return (
     <section id="top" className="bg-background">
-      <div className="mx-auto grid max-w-7xl items-center gap-10 px-5 pb-12 pt-8 sm:px-6 sm:pb-14 sm:pt-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-12 lg:px-8 lg:pb-14 lg:pt-10 xl:gap-16 xl:pb-16 xl:pt-12 min-[1440px]:gap-24 min-[1440px]:pb-20 min-[1440px]:pt-16">
-        <div className="max-w-3xl">
+      <div className="mx-auto grid max-w-7xl items-start gap-10 px-5 pb-12 pt-8 sm:px-6 sm:pb-14 sm:pt-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-12 lg:px-8 lg:pb-6 lg:pt-7 xl:gap-16 xl:pb-6 xl:pt-9 min-[1440px]:gap-24 min-[1440px]:pb-8 min-[1440px]:pt-10">
+        <div className="max-w-3xl lg:pt-16 xl:pt-10 min-[1440px]:pt-24">
           <p className="font-heading text-xs font-bold uppercase tracking-[0.3em] text-primary sm:text-sm">Built for dads, by dads</p>
           <h1 className="mt-6 font-heading text-[3.6rem] font-extrabold uppercase leading-[0.84] tracking-[-0.035em] sm:text-7xl lg:text-[5.25rem] xl:text-[5.5rem] min-[1440px]:text-[6.5rem]">
             How are you <span className="text-primary">doing,</span> Dad?
           </h1>
           <p className="mt-7 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-xl">
-            One score for your Mind, Body and Bond. One thing to do today. Free on iPhone and Android.
+            One score for your Mind, Body and Bond. One thing to do today.
           </p>
-
-          <StoreDownloadButtons id="download" prelaunch />
-
-          <p className="mt-5 min-h-11 pl-14 text-sm leading-[2.75rem] text-muted-foreground sm:pl-0">
-            Free forever. Pro when you want it personal.
-          </p>
+         <HomepagePrimaryButton href="#waitlist" className="mt-7">
+  Join the waitlist
+  <span aria-hidden="true" className="ml-2">
+    →
+  </span>
+</HomepagePrimaryButton>
         </div>
 
         <TodayPhone />
