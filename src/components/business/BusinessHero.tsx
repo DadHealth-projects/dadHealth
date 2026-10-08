@@ -1,3 +1,8 @@
+import {
+  marketingContainerClass,
+  marketingPageHeroClass,
+} from "@/components/marketing/marketingStyles";
+
 type DashboardPillar = {
   label: "Mind" | "Body" | "Bond";
   score: number;
@@ -21,7 +26,8 @@ function EmployerDashboard() {
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-heading text-xl font-extrabold uppercase tracking-[0.04em]">Acme Logistics</p>
+          <p className="font-heading text-[10px] font-bold uppercase tracking-[0.14em] text-primary">In partnership with Dad Health</p>
+          <p className="mt-1 font-heading text-xl font-extrabold uppercase tracking-[0.04em]">Acme Logistics</p>
           <p className="text-xs text-muted-foreground">Team overview, anonymised</p>
         </div>
         <span className="whitespace-nowrap rounded-lg border border-border bg-background px-2 py-1 text-[10px] text-muted-foreground">Example data</span>
@@ -93,18 +99,23 @@ function EmployerDashboard() {
 export default function BusinessHero() {
   return (
     <section className="bg-background text-foreground">
-      <div className="mx-auto grid max-w-7xl gap-12 px-5 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-8 xl:gap-12 min-[1440px]:gap-16 lg:px-8 lg:py-16 xl:py-20 min-[1440px]:py-24">
+      <div className={`${marketingContainerClass} grid gap-12 py-14 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-8 lg:py-16 xl:gap-12 min-[1440px]:gap-16 min-[1440px]:py-20`}>
         <div>
           <p className="font-heading text-xs font-bold uppercase tracking-[0.3em] text-primary sm:text-sm">Dad Health for Business</p>
-          <h1 className="mt-6 max-w-3xl font-heading text-[3.6rem] font-extrabold uppercase leading-[0.84] tracking-[-0.035em] sm:text-7xl lg:text-[4.5rem] xl:text-[5rem] min-[1440px]:text-[5.5rem] 2xl:text-[6.5rem]">
+          <h1 className={`mt-6 max-w-3xl ${marketingPageHeroClass}`}>
             Look after the dads on <span className="text-primary">your team.</span>
           </h1>
           <p className="mt-7 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
             Dad Health is the mental health, fitness and parenting app built for fathers. Give your working dads full Pro access as a staff benefit, and see how the team is doing without ever seeing who is who.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a href="/business/contact" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-primary bg-primary px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] text-primary-foreground shadow-[0_0_18px_hsl(var(--primary)/0.10)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Book a call</a>
-            <a href="/howitworks" className="inline-flex min-h-12 items-center justify-center rounded-xl border-2 border-border bg-card px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] shadow-[0_0_18px_hsl(var(--primary)/0.04)] transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">See how it works</a>
+            <a href="/business/contact" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-primary bg-primary px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] text-primary-foreground shadow-[0_0_18px_hsl(var(--primary)/0.10)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Talk to us</a>
+            <a
+  href="/howitworks"
+  className="inline-flex min-h-12 items-center justify-center rounded-xl border-2 border-border bg-card px-6 font-heading text-lg font-extrabold uppercase tracking-[0.06em] shadow-[0_0_18px_hsl(var(--primary)/0.04)] transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+>
+  See how it works
+</a>
           </div>
         </div>
         <EmployerDashboard />
