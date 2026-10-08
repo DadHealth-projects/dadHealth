@@ -36,10 +36,13 @@ export async function POST(req: Request) {
     const file = (await req.formData()).get("file");
     if (!(file instanceof File)) return NextResponse.json({ error: "Image is required." }, { status: 400 });
     if (!EXTENSIONS[file.type]) {
-      return NextResponse.json({ error: "Use a JPEG, PNG or WebP image." }, { status: 400 });
+      return NextResponse.json({ error: "Unsupported processed image type. Use JPEG, PNG or WebP." }, { status: 400 });
     }
-    if (file.size === 0 || file.size > MAX_BYTES) {
-      return NextResponse.json({ error: "Image must be between 1 byte and 5MB." }, { status: 400 });
+    if (file.size === 0) {
+      return NextResponse.json({ error: "Image file is empty." }, { status: 400 });
+    }
+    if (file.size > MAX_BYTES) {
+      return NextResponse.json({ error: "Image must be under 5 MB." }, { status: 400 });
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -58,7 +61,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ url: data.publicUrl }, { status: 201 });
   } catch (error) {
     console.error("[admin happenings upload]", error);
-    return NextResponse.json({ error: "Image could not be uploaded." }, { status: 500 });
+    return NextResponse.json({ error: "Upload failed. Please check your connection and try again." }, { status: 500 });
   }
 }
 
