@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 import type { FormEvent } from "react";
+import {
+  marketingBodyClass,
+  marketingCardSurfaceClass,
+  marketingContainerClass,
+  marketingSectionHeadingClass,
+} from "@/components/marketing/marketingStyles";
 
 type SubmitState = "idle" | "sending" | "success" | "error";
 
@@ -53,18 +59,18 @@ export default function BusinessEnquiry({ headingLevel: Heading = "h2" }: { head
 
   return (
     <section id="contact" className="scroll-mt-14 border-t border-border bg-card text-foreground">
-      <div className="mx-auto grid max-w-7xl gap-10 px-5 py-16 sm:px-6 sm:py-20 lg:grid-cols-2 lg:gap-8 xl:gap-12 min-[1440px]:gap-16 lg:px-8 lg:py-16 xl:py-20 min-[1440px]:py-24">
+      <div className={`${marketingContainerClass} grid gap-10 py-14 sm:py-16 lg:grid-cols-2 lg:gap-8 lg:py-16 xl:gap-12 min-[1440px]:gap-16 min-[1440px]:py-20`}>
         <div>
-          <Heading className="font-heading text-5xl font-extrabold uppercase leading-none tracking-[-0.025em] sm:text-6xl lg:text-5xl xl:text-[3.25rem] min-[1440px]:text-6xl">Let&apos;s talk</Heading>
-          <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+          <Heading className={marketingSectionHeadingClass}>Let&apos;s talk</Heading>
+          <p className={`mt-5 max-w-xl ${marketingBodyClass}`}>
             Tell us a little about your organisation and we&apos;ll come back within two working days with a plan and a price.
           </p>
-          <p className="mt-6 text-sm sm:text-base">
+          <p className="mt-6 text-[15px] sm:text-base">
             Or email <span className="text-primary">hello@dadhealth.co.uk</span>
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="rounded-2xl border border-border bg-card p-5 shadow-[0_0_20px_hsl(var(--primary)/0.04)] sm:p-7">
+        <form onSubmit={handleSubmit} className={`${marketingCardSurfaceClass} p-5 sm:p-7`}>
           <label className="block text-sm text-muted-foreground">
             Your name
             <input name="name" autoComplete="name" required maxLength={100} className={inputClasses} />
