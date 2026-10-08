@@ -5,7 +5,7 @@ import HappeningStrip from "@/components/homepage/HappeningStrip";
 import HomepagePlans from "@/components/homepage/HomepagePlans";
 import HomepageCircles from "@/components/homepage/HomepageCircles";
 import HomepageFounder from "@/components/homepage/HomepageFounder";
-import HomepageFinalCta from "@/components/homepage/HomepageFinalCta";
+import HomepageWaitlist from "@/components/homepage/HomepageWaitlist";
 import HomepageCrisis from "@/components/homepage/HomepageCrisis";
 import HomepageFooter from "@/components/homepage/HomepageFooter";
 import WebsiteStructuredData from "@/components/marketing/WebsiteStructuredData";
@@ -32,11 +32,11 @@ export default async function Homepage() {
       <main>
         <HomepageHero />
         <HomepageFounder />
+        <HomepageCircles />
         <HomepageHowItWorks />
         <HappeningStrip items={happenings} />
         <HomepagePlans />
-        <HomepageCircles />
-        <HomepageFinalCta />
+        <HomepageWaitlist />
         <HomepageCrisis />
       </main>
       <HomepageFooter />
