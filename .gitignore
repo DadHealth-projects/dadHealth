@@ -34,3 +34,36 @@ AuthKey_*.p8
 # macOS junk files
 ._*
 .DS_Store
+
+
+# ==========================================
+# Dad Health - Private client documents
+# ==========================================
+
+# Client-provided briefs, designs, contracts and legal drafts
+/product/
+/public/product/
+
+# Private documentation and reference material
+/client-docs/
+/client-files/
+/private/
+/references/
+
+# Local backups and temporary exports
+/backups/
+/tmp/
+*.bak
+*.backup
+*.orig
+
+# Environment secrets
+.env.*
+!.env.local.example
+
+# Private certificates and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision

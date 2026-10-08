@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Logo from "@/components/Logo";
+import CookieSettingsButton from "@/components/analytics/CookieSettingsButton";
 import { marketingContainerClass } from "@/components/marketing/marketingStyles";
 
 const footerLinks = [
@@ -8,6 +9,7 @@ const footerLinks = [
   { label: "Terms", href: "/terms" },
   { label: "EULA", href: "/eula" },
   { label: "Cookies", href: "/cookies" },
+  { label: "Cookie Settings", action: "cookie-settings" },
   { label: "Instagram" },
   { label: "Contact", href: "mailto:hello@dadhealth.co.uk" },
   { label: "Corporate", href: "/business" },
@@ -46,6 +48,8 @@ export default function HomepageFooter() {
                 <Link key={item.label} href={item.href} className={className}>
                   {item.label}
                 </Link>
+              ) : item.action === "cookie-settings" ? (
+                <CookieSettingsButton key={item.label} className={className} />
               ) : (
                 <span key={item.label} className="inline-flex min-h-11 items-center text-sm text-muted-foreground">
                   {item.label}

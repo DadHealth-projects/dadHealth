@@ -6,8 +6,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   ANALYTICS_CONSENT_KEY,
+  ANALYTICS_SETTINGS_EVENT,
   initAnalytics,
   type AnalyticsConsentValue,
+  withdrawAnalyticsConsent,
 } from "@/lib/analytics";
 
 type ConsentState = AnalyticsConsentValue | "loading" | "unset";
@@ -15,6 +17,7 @@ type ConsentState = AnalyticsConsentValue | "loading" | "unset";
 export default function AnalyticsConsent() {
   const pathname = usePathname();
   const [consent, setConsent] = useState<ConsentState>("loading");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -32,6 +35,15 @@ export default function AnalyticsConsent() {
     setConsent("unset");
   }, []);
 
+  useEffect(() => {
+    function openSettings() {
+      setSettingsOpen(true);
+    }
+
+    window.addEventListener(ANALYTICS_SETTINGS_EVENT, openSettings);
+    return () => window.removeEventListener(ANALYTICS_SETTINGS_EVENT, openSettings);
+  }, []);
+
   function chooseConsent(value: AnalyticsConsentValue) {
     try {
       window.localStorage.setItem(ANALYTICS_CONSENT_KEY, value);
@@ -40,8 +52,20 @@ export default function AnalyticsConsent() {
       return;
     }
 
+    const withdrawing = consent === "granted" && value === "denied";
+
     setConsent(value);
-    if (value === "granted") initAnalytics();
+    setSettingsOpen(false);
+
+    if (value === "granted") {
+      initAnalytics();
+      return;
+    }
+
+    if (withdrawing) {
+      withdrawAnalyticsConsent();
+      window.location.reload();
+    }
   }
 
   return (
@@ -56,7 +80,7 @@ export default function AnalyticsConsent() {
         />
       )}
 
-      {consent === "unset" && (
+      {(consent === "unset" || settingsOpen) && (
         <section
           aria-label="Analytics cookie choices"
           className={`${pathname === "/cookies" ? "relative mx-auto mb-4 w-[calc(100%-2rem)]" : "fixed inset-x-4 bottom-4 mx-auto"} z-50 max-w-3xl rounded-2xl border border-border bg-card p-5 text-foreground shadow-[0_0_24px_hsl(var(--primary)/0.08)] sm:flex sm:items-center sm:gap-6`}
@@ -67,6 +91,7 @@ export default function AnalyticsConsent() {
               Cookie Policy
             </Link>
             .
+            {settingsOpen && consent !== "unset" ? ` Current choice: ${consent === "granted" ? "allowed" : "rejected"}.` : ""}
           </p>
           <div className="mt-4 flex gap-3 sm:mt-0">
             <button
