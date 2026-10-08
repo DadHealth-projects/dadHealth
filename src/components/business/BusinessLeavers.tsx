@@ -1,3 +1,9 @@
+import {
+  marketingBodyClass,
+  marketingSectionClass,
+  marketingSectionHeadingClass,
+} from "@/components/marketing/marketingStyles";
+
 const steps = [
   {
     title: "We get in touch",
@@ -16,11 +22,11 @@ const steps = [
 export default function BusinessLeavers() {
   return (
     <section id="leavers" className="border-t border-border bg-card text-foreground">
-      <div className="mx-auto max-w-7xl px-5 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-16 xl:py-20 min-[1440px]:py-24">
-        <h2 className="max-w-5xl font-heading text-5xl font-extrabold uppercase leading-none tracking-[-0.025em] sm:text-6xl lg:text-5xl xl:text-[3.25rem] min-[1440px]:text-6xl">
+      <div className={marketingSectionClass}>
+        <h2 className={`max-w-5xl ${marketingSectionHeadingClass}`}>
           When a dad moves on, his progress goes with him
         </h2>
-        <p className="mt-5 max-w-5xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+        <p className={`mt-5 max-w-5xl ${marketingBodyClass}`}>
           If someone leaves your company, he isn&apos;t left with nothing. He&apos;s offered the chance to move to his own personal Dad Health account and carry on, and we guide him through it in the app.
         </p>
 
@@ -29,14 +35,10 @@ export default function BusinessLeavers() {
             <li key={step.title} className="border-t-4 border-primary pt-4">
               <p className="font-heading text-4xl font-extrabold leading-none text-primary">{index + 1}</p>
               <h3 className="mt-2 font-heading text-2xl font-extrabold uppercase leading-none">{step.title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{step.copy}</p>
+              <p className={`mt-3 ${marketingBodyClass}`}>{step.copy}</p>
             </li>
           ))}
         </ol>
-
-        <p className="mt-8 text-sm leading-relaxed text-muted-foreground sm:text-base">
-          All we ask is that your company tells us when a dad leaves, so we can reach him in time. In return, his seat is freed up straight away, and a dad who has had a good experience leaves as an advocate for your company.
-        </p>
       </div>
     </section>
   );
