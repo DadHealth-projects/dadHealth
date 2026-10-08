@@ -2,6 +2,7 @@
 
 import Script from "next/script";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   ANALYTICS_CONSENT_KEY,
@@ -12,6 +13,7 @@ import {
 type ConsentState = AnalyticsConsentValue | "loading" | "unset";
 
 export default function AnalyticsConsent() {
+  const pathname = usePathname();
   const [consent, setConsent] = useState<ConsentState>("loading");
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export default function AnalyticsConsent() {
       {consent === "unset" && (
         <section
           aria-label="Analytics cookie choices"
-          className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-3xl border border-border bg-card p-5 text-foreground shadow-2xl sm:flex sm:items-center sm:gap-6"
+          className={`${pathname === "/cookies" ? "relative mx-auto mb-4 w-[calc(100%-2rem)]" : "fixed inset-x-4 bottom-4 mx-auto"} z-50 max-w-3xl rounded-2xl border border-border bg-card p-5 text-foreground shadow-[0_0_24px_hsl(var(--primary)/0.08)] sm:flex sm:items-center sm:gap-6`}
         >
           <p className="flex-1 text-sm leading-relaxed text-muted-foreground">
             We use optional analytics to understand how Dad Health is used. Read our{" "}

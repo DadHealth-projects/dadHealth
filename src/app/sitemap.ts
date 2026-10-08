@@ -7,6 +7,7 @@ const routes = [
   "/free-and-pro",
   "/dad-circles",
   "/about",
+  "/waitlist",
   "/business",
   "/business/contact",
   "/support",
