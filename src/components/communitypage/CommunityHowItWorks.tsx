@@ -1,3 +1,8 @@
+import {
+  marketingBodyClass,
+  marketingSectionClass,
+} from "@/components/marketing/marketingStyles";
+
 const steps = [
   {
     number: "01",
@@ -19,7 +24,7 @@ const steps = [
 export default function CommunityHowItWorks() {
   return (
     <section className="bg-card text-foreground">
-      <div className="mx-auto max-w-7xl px-5 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-16 xl:py-20 min-[1440px]:py-24">
+      <div className={marketingSectionClass}>
         <p className="font-heading text-xs font-bold uppercase tracking-[0.3em] text-muted-foreground">
           How it works
         </p>
@@ -34,7 +39,7 @@ export default function CommunityHowItWorks() {
                 <h2 className="font-heading text-2xl font-extrabold uppercase leading-none sm:text-3xl">
                   {step.title}
                 </h2>
-                <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                <p className={`mt-3 max-w-sm ${marketingBodyClass}`}>
                   {step.copy}
                 </p>
               </div>
