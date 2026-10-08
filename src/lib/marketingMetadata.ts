@@ -3,10 +3,10 @@ import type { Metadata } from "next";
 export const SITE_URL = new URL("https://www.dadhealth.co.uk");
 
 const SOCIAL_IMAGE = {
-  url: "/hero-dad.jpg",
-  width: 1920,
-  height: 1080,
-  alt: "A dad with his daughter outdoors",
+  url: "/LOGO.png",
+  width: 1200,
+  height: 630,
+  alt: "Dad Health",
 };
 
 interface MarketingMetadataOptions {
