@@ -1,5 +1,6 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
+import { marketingSectionClass } from "@/components/marketing/marketingStyles";
 
 export type LegalSourceFile = "policy.html" | "terms.html" | "EULA.html" | "cookies.html";
 
@@ -30,10 +31,10 @@ export default async function LegalDocument({ sourceFile }: { sourceFile: LegalS
 
   return (
     <section className="bg-card text-foreground">
-      <div className="mx-auto max-w-7xl px-5 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-16 xl:py-20 min-[1440px]:py-24">
+      <div className={marketingSectionClass}>
         <div className="overflow-x-auto">
           <article
-            className="max-w-none text-sm leading-relaxed text-muted-foreground sm:text-base
+            className="max-w-none text-[15px] leading-relaxed text-muted-foreground sm:text-base
               [&_.meta]:mb-8 [&_.meta]:text-sm [&_.meta]:text-muted-foreground
               [&_.note]:my-6 [&_.note]:rounded-2xl [&_.note]:border [&_.note]:border-primary/40 [&_.note]:bg-primary/5 [&_.note]:p-5 [&_.note]:shadow-[0_0_18px_hsl(var(--primary)/0.04)]
               [&_.warning]:my-6 [&_.warning]:rounded-2xl [&_.warning]:border [&_.warning]:border-primary/40 [&_.warning]:bg-primary/5 [&_.warning]:p-5 [&_.warning]:shadow-[0_0_18px_hsl(var(--primary)/0.04)]
