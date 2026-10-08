@@ -1,13 +1,25 @@
+import Image from "next/image";
+import {
+  marketingContainerClass,
+  marketingSectionHeadingClass,
+} from "@/components/marketing/marketingStyles";
+
 export default function AboutFounder() {
   return (
     <section className="bg-card text-foreground">
-      <div className="mx-auto grid max-w-7xl gap-10 px-5 py-16 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-start lg:gap-12 lg:px-8 lg:py-16 xl:gap-16 xl:py-20 min-[1440px]:gap-20 min-[1440px]:py-24">
-        <div className="flex aspect-[4/5] min-h-72 items-center justify-center rounded-2xl border border-border bg-muted p-8 text-center shadow-[0_0_20px_hsl(var(--primary)/0.04)] sm:min-h-96 lg:min-h-0">
-          <p className="max-w-xs text-sm text-muted-foreground">Jamie&rsquo;s founder photo is pending.</p>
+      <div className={`${marketingContainerClass} grid gap-10 py-14 sm:py-16 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-start lg:gap-12 lg:py-16 xl:gap-16 min-[1440px]:gap-20 min-[1440px]:py-20`}>
+        <div className="relative aspect-[4/5] min-h-72 overflow-hidden rounded-2xl border border-border bg-muted shadow-[0_0_20px_hsl(var(--primary)/0.04)] sm:min-h-96 lg:min-h-0">
+          <Image
+            src="/Mental health image.JPG"
+            alt="Two men embracing after a fitness event"
+            fill
+            sizes="(max-width: 1023px) calc(100vw - 2.5rem), 32rem"
+            className="object-cover object-center"
+          />
         </div>
         <article className="max-w-2xl">
           <p className="font-heading text-xs font-bold uppercase tracking-[0.3em] text-primary sm:text-sm">From Jamie, founder</p>
-          <h2 className="mt-5 font-heading text-5xl font-extrabold uppercase leading-none tracking-[-0.025em] sm:text-6xl lg:text-5xl xl:text-[3.25rem] min-[1440px]:text-6xl">Why I built Dad Health</h2>
+          <h2 className={`mt-5 ${marketingSectionHeadingClass}`}>Why I built Dad Health</h2>
           <div className="mt-7 space-y-5 text-base leading-relaxed text-muted-foreground">
             <p>I&apos;m Jamie, and I&apos;m a dad.</p>
             <p>Five years ago I wasn&apos;t looking after myself. I was obese, drinking most days, and I had no real idea how to look after my body or my head. I had mental health struggles I&apos;d never dealt with. I trained now and then, but I couldn&apos;t stay consistent, and the snooze button usually won.</p>
