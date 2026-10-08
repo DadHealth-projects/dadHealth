@@ -12,6 +12,9 @@ import {
 } from "@/components/marketing/marketingStyles";
 
 type SubmitState = "idle" | "sending" | "success" | "error";
+type FieldErrors = Partial<Record<"email" | "requestType" | "details", string>>;
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const requestTypes = [
   { value: "access", label: "Access my personal data" },
@@ -23,6 +26,49 @@ const requestTypes = [
 export default function PrivacyRequestForm() {
   const [state, setState] = useState<SubmitState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+  function validateField(name: keyof FieldErrors, value: string) {
+    const trimmedValue = value.trim();
+
+    if (name === "email") {
+      if (!trimmedValue) return "Enter your email address.";
+      if (trimmedValue.length > 254 || !EMAIL_PATTERN.test(trimmedValue)) {
+        return "Enter a valid email address.";
+      }
+    }
+
+    if (name === "requestType" && !trimmedValue) {
+      return "Select a request type.";
+    }
+
+    if (name === "details" && trimmedValue.length > 2000) {
+      return "Details must be 2,000 characters or fewer.";
+    }
+
+    return "";
+  }
+
+  function validateForm(form: FormData) {
+    const errors: FieldErrors = {};
+
+    (["email", "requestType", "details"] as const).forEach((name) => {
+      const error = validateField(name, String(form.get(name) ?? ""));
+      if (error) errors[name] = error;
+    });
+
+    return errors;
+  }
+
+  function clearCorrectedError(name: keyof FieldErrors, value: string) {
+    if (!fieldErrors[name] || validateField(name, value)) return;
+
+    setFieldErrors((current) => {
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,13 +76,18 @@ export default function PrivacyRequestForm() {
     if (state === "sending") return;
 
     const formElement = event.currentTarget;
-
-    if (!formElement.reportValidity()) return;
-
     const form = new FormData(formElement);
+    const errors = validateForm(form);
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setState("idle");
+      return;
+    }
 
     setState("sending");
     setErrorMessage("");
+    setFieldErrors({});
 
     try {
       const response = await fetch("/api/privacy-request", {
@@ -200,6 +251,7 @@ export default function PrivacyRequestForm() {
               method="post"
               action="/api/privacy-request"
               onSubmit={handleSubmit}
+              noValidate
               className="grid gap-5"
             >
               <div>
@@ -217,8 +269,16 @@ export default function PrivacyRequestForm() {
                   required
                   maxLength={254}
                   autoComplete="email"
-                  className={inputClass}
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  aria-describedby={fieldErrors.email ? "privacy-email-error" : undefined}
+                  onChange={(event) => clearCorrectedError("email", event.target.value)}
+                  className={`${inputClass} ${fieldErrors.email ? "border-destructive focus:border-destructive focus:ring-destructive" : ""}`}
                 />
+                {fieldErrors.email && (
+                  <p id="privacy-email-error" role="alert" className="mt-2 text-sm text-destructive">
+                    {fieldErrors.email}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -234,7 +294,10 @@ export default function PrivacyRequestForm() {
                   name="requestType"
                   required
                   defaultValue=""
-                  className={inputClass}
+                  aria-invalid={Boolean(fieldErrors.requestType)}
+                  aria-describedby={fieldErrors.requestType ? "privacy-request-type-error" : undefined}
+                  onChange={(event) => clearCorrectedError("requestType", event.target.value)}
+                  className={`${inputClass} ${fieldErrors.requestType ? "border-destructive focus:border-destructive focus:ring-destructive" : ""}`}
                 >
                   <option value="" disabled>
                     Select a request type
@@ -246,6 +309,11 @@ export default function PrivacyRequestForm() {
                     </option>
                   ))}
                 </select>
+                {fieldErrors.requestType && (
+                  <p id="privacy-request-type-error" role="alert" className="mt-2 text-sm text-destructive">
+                    {fieldErrors.requestType}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -264,8 +332,16 @@ export default function PrivacyRequestForm() {
                   name="details"
                   rows={6}
                   maxLength={2000}
-                  className={inputClass}
+                  aria-invalid={Boolean(fieldErrors.details)}
+                  aria-describedby={fieldErrors.details ? "privacy-details-error" : undefined}
+                  onChange={(event) => clearCorrectedError("details", event.target.value)}
+                  className={`${inputClass} ${fieldErrors.details ? "border-destructive focus:border-destructive focus:ring-destructive" : ""}`}
                 />
+                {fieldErrors.details && (
+                  <p id="privacy-details-error" role="alert" className="mt-2 text-sm text-destructive">
+                    {fieldErrors.details}
+                  </p>
+                )}
               </div>
 
               <div className="sr-only" aria-hidden="true">

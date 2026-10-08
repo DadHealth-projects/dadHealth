@@ -11,6 +11,11 @@ import {
 } from "@/components/marketing/marketingStyles";
 
 type SubmitState = "idle" | "sending" | "success" | "error";
+type FieldName = "name" | "company" | "email" | "size" | "message";
+type FieldErrors = Partial<Record<FieldName, string>>;
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMPLOYEE_OPTIONS = ["Under 25", "25–99", "100–249", "250+"] as const;
 
 function fieldValue(form: FormData, name: string) {
   return String(form.get(name) ?? "").trim();
@@ -23,6 +28,62 @@ export default function BusinessEnquiry({
 }) {
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+  function validateField(name: FieldName, value: string) {
+    const trimmedValue = value.trim();
+
+    if (name === "name") {
+      if (!trimmedValue) return "Enter your name.";
+      if (trimmedValue.length > 100) return "Name must be 100 characters or fewer.";
+    }
+
+    if (name === "company") {
+      if (!trimmedValue) return "Enter your company.";
+      if (trimmedValue.length > 150) return "Company must be 150 characters or fewer.";
+    }
+
+    if (name === "email") {
+      if (!trimmedValue) return "Enter your work email.";
+      if (trimmedValue.length > 254 || !EMAIL_PATTERN.test(trimmedValue)) {
+        return "Enter a valid work email.";
+      }
+    }
+
+    if (
+      name === "size" &&
+      !EMPLOYEE_OPTIONS.includes(trimmedValue as (typeof EMPLOYEE_OPTIONS)[number])
+    ) {
+      return "Select an employee range.";
+    }
+
+    if (name === "message" && trimmedValue.length > 4000) {
+      return "Message must be 4,000 characters or fewer.";
+    }
+
+    return "";
+  }
+
+  function validateForm(form: FormData) {
+    const errors: FieldErrors = {};
+
+    (["name", "company", "email", "size", "message"] as const).forEach((name) => {
+      const error = validateField(name, fieldValue(form, name));
+      if (error) errors[name] = error;
+    });
+
+    return errors;
+  }
+
+  function clearCorrectedError(name: FieldName, value: string) {
+    if (!fieldErrors[name] || validateField(name, value)) return;
+
+    setFieldErrors((current) => {
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,13 +91,18 @@ export default function BusinessEnquiry({
     if (submitState === "sending") return;
 
     const formElement = event.currentTarget;
-
-    if (!formElement.reportValidity()) return;
-
     const form = new FormData(formElement);
+    const errors = validateForm(form);
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setSubmitState("idle");
+      return;
+    }
 
     setSubmitState("sending");
     setErrorMessage("");
+    setFieldErrors({});
 
     try {
       const response = await fetch("/api/business/enquiry", {
@@ -182,6 +248,7 @@ export default function BusinessEnquiry({
               method="post"
               action="/api/business/enquiry"
               onSubmit={handleSubmit}
+              noValidate
             >
               <label className="block text-sm text-muted-foreground">
                 Your name
@@ -190,8 +257,16 @@ export default function BusinessEnquiry({
                   autoComplete="name"
                   required
                   maxLength={100}
-                  className={inputClasses}
+                  aria-invalid={Boolean(fieldErrors.name)}
+                  aria-describedby={fieldErrors.name ? "business-name-error" : undefined}
+                  onChange={(event) => clearCorrectedError("name", event.target.value)}
+                  className={`${inputClasses} ${fieldErrors.name ? "border-destructive focus:border-destructive focus:ring-destructive" : ""}`}
                 />
+                {fieldErrors.name && (
+                  <span id="business-name-error" role="alert" className="mt-2 block text-sm text-destructive">
+                    {fieldErrors.name}
+                  </span>
+                )}
               </label>
 
               <label className="mt-4 block text-sm text-muted-foreground">
@@ -201,8 +276,16 @@ export default function BusinessEnquiry({
                   autoComplete="organization"
                   required
                   maxLength={150}
-                  className={inputClasses}
+                  aria-invalid={Boolean(fieldErrors.company)}
+                  aria-describedby={fieldErrors.company ? "business-company-error" : undefined}
+                  onChange={(event) => clearCorrectedError("company", event.target.value)}
+                  className={`${inputClasses} ${fieldErrors.company ? "border-destructive focus:border-destructive focus:ring-destructive" : ""}`}
                 />
+                {fieldErrors.company && (
+                  <span id="business-company-error" role="alert" className="mt-2 block text-sm text-destructive">
+                    {fieldErrors.company}
+                  </span>
+                )}
               </label>
 
               <label className="mt-4 block text-sm text-muted-foreground">
@@ -213,8 +296,16 @@ export default function BusinessEnquiry({
                   autoComplete="email"
                   required
                   maxLength={254}
-                  className={inputClasses}
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  aria-describedby={fieldErrors.email ? "business-email-error" : undefined}
+                  onChange={(event) => clearCorrectedError("email", event.target.value)}
+                  className={`${inputClasses} ${fieldErrors.email ? "border-destructive focus:border-destructive focus:ring-destructive" : ""}`}
                 />
+                {fieldErrors.email && (
+                  <span id="business-email-error" role="alert" className="mt-2 block text-sm text-destructive">
+                    {fieldErrors.email}
+                  </span>
+                )}
               </label>
 
               <label className="mt-4 block text-sm text-muted-foreground">
@@ -223,13 +314,26 @@ export default function BusinessEnquiry({
                 <select
                   name="size"
                   required
-                  className={inputClasses}
+                  defaultValue=""
+                  aria-invalid={Boolean(fieldErrors.size)}
+                  aria-describedby={fieldErrors.size ? "business-size-error" : undefined}
+                  onChange={(event) => clearCorrectedError("size", event.target.value)}
+                  className={`${inputClasses} ${fieldErrors.size ? "border-destructive focus:border-destructive focus:ring-destructive" : ""}`}
                 >
-                  <option>Under 25</option>
-                  <option>25–99</option>
-                  <option>100–249</option>
-                  <option>250+</option>
+                  <option value="" disabled>
+                    Select an employee range
+                  </option>
+                  {EMPLOYEE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
                 </select>
+                {fieldErrors.size && (
+                  <span id="business-size-error" role="alert" className="mt-2 block text-sm text-destructive">
+                    {fieldErrors.size}
+                  </span>
+                )}
               </label>
 
               <label className="mt-4 block text-sm text-muted-foreground">
@@ -237,8 +341,16 @@ export default function BusinessEnquiry({
                 <textarea
                   name="message"
                   maxLength={4000}
-                  className={`${inputClasses} min-h-28 resize-y`}
+                  aria-invalid={Boolean(fieldErrors.message)}
+                  aria-describedby={fieldErrors.message ? "business-message-error" : undefined}
+                  onChange={(event) => clearCorrectedError("message", event.target.value)}
+                  className={`${inputClasses} min-h-28 resize-y ${fieldErrors.message ? "border-destructive focus:border-destructive focus:ring-destructive" : ""}`}
                 />
+                {fieldErrors.message && (
+                  <span id="business-message-error" role="alert" className="mt-2 block text-sm text-destructive">
+                    {fieldErrors.message}
+                  </span>
+                )}
               </label>
 
               <button
