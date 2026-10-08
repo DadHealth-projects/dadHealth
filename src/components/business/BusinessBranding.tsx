@@ -1,3 +1,9 @@
+import {
+  marketingBodyClass,
+  marketingSectionClass,
+  marketingSectionHeadingClass,
+} from "@/components/marketing/marketingStyles";
+
 type BrandPhoneProps = {
   brand: string;
   caption: string;
@@ -18,6 +24,24 @@ function ScoreRing({ branded }: { branded: boolean }) {
   );
 }
 
+function DadHealthPhoneLogo() {
+  return (
+    <div
+      role="img"
+      aria-label="Dad Health"
+      className="relative inline-flex w-fit items-center self-center px-2 py-1.5"
+    >
+      <span aria-hidden="true" className="absolute inset-x-0 top-0 border-t border-foreground" />
+      <span aria-hidden="true" className="absolute inset-y-0 left-0 border-l border-foreground" />
+      <span aria-hidden="true" className="absolute inset-y-0 right-0 border-r border-foreground" />
+      <span aria-hidden="true" className="absolute bottom-0 left-0 w-[28%] border-b border-foreground" />
+      <span aria-hidden="true" className="absolute bottom-0 right-0 w-[28%] border-b border-foreground" />
+      <span className="font-heading text-[10px] font-extrabold uppercase leading-none tracking-[0.06em] text-primary">Dad</span>
+      <span className="ml-1 font-heading text-[10px] font-extrabold uppercase leading-none tracking-[0.06em] text-foreground">Health</span>
+    </div>
+  );
+}
+
 function BrandPhone({ brand, caption, branded = false }: BrandPhoneProps) {
   const borderColour = branded ? "border-blue-400" : "border-primary";
   const brandColour = branded ? "text-blue-400" : "text-muted-foreground";
@@ -26,7 +50,14 @@ function BrandPhone({ brand, caption, branded = false }: BrandPhoneProps) {
   return (
     <figure className="w-52">
       <div className={`flex h-96 flex-col gap-4 rounded-3xl border-4 bg-card p-5 shadow-[0_0_24px_hsl(var(--primary)/0.06)] ${borderColour}`}>
-        <p className={`font-heading text-sm font-extrabold uppercase tracking-[0.06em] ${brandColour}`}>{brand}</p>
+        {branded ? (
+          <p className={`font-heading text-sm font-extrabold uppercase tracking-[0.06em] ${brandColour}`}>{brand}</p>
+        ) : (
+          <DadHealthPhoneLogo />
+        )}
+        {branded && (
+          <p className="-mt-3 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">In partnership with Dad Health</p>
+        )}
         <p className="font-heading text-2xl font-extrabold uppercase leading-none">Good morning, Sam</p>
         <ScoreRing branded={branded} />
         <div className="h-10 rounded-xl border border-border bg-muted" />
@@ -43,11 +74,11 @@ function BrandPhone({ brand, caption, branded = false }: BrandPhoneProps) {
 export default function BusinessBranding() {
   return (
     <section id="your-brand" className="border-t border-border bg-card text-foreground">
-      <div className="mx-auto max-w-7xl px-5 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-16 xl:py-20 min-[1440px]:py-24">
-        <h2 className="font-heading text-5xl font-extrabold uppercase leading-none tracking-[-0.025em] sm:text-6xl lg:text-5xl xl:text-[3.25rem] min-[1440px]:text-6xl">
+      <div className={marketingSectionClass}>
+        <h2 className={marketingSectionHeadingClass}>
           Your own version of Dad Health
         </h2>
-        <p className="mt-5 max-w-5xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+        <p className={`mt-5 max-w-5xl ${marketingBodyClass}`}>
           For organisations with 100 or more eligible sign-ups we can put your name on it: your logo, your colours and a welcome from your team, so it feels like part of your benefits package.
         </p>
 
