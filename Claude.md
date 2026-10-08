@@ -132,7 +132,8 @@ Main navigation:
 - Community
 - Corporate
 - About
-- Get the App CTA
+- pre-launch: Join the Waitlist CTA
+- after public app launch: app-download CTA, only when launch state is confirmed
 There is no News page or `/news` route in the revised brief.
 The homepage uses a small admin-managed `Happening` announcement strip
 instead.
@@ -158,17 +159,194 @@ Before removing a route:
 4. inspect mobile dependencies;
 5. confirm its replacement;
 6. obtain approval.
+
+# Website design assets and visual source rule
+
+Website review is not complete until the supplied visual assets have been
+reviewed as well as the written brief and current code.
+
+For every website page review or implementation:
+
+1. Read the latest relevant written brief in `/product`.
+2. Review the supplied HTML/build target where present.
+3. Review the latest page mockup/screens.
+4. Review all relevant graphics, images, screenshots and other visual assets
+   supplied for that page in `/product` and `public`.
+5. Inspect the current implementation.
+6. Compare any app/product visuals against the current mobile product where
+   necessary to make sure outdated UI is not presented as current product UI.
+7. Only then propose new assets, screenshots or visual replacements.
+
+Do not assume a visual asset is missing simply because it is not currently
+rendered by the website.
+
+Do not propose creating or capturing a replacement graphic until the supplied
+assets have been checked first.
+
+When Jamie refers to a visual in feedback such as:
+
+- "this image";
+- "this screen";
+- "put this on the front";
+- "more images";
+- "change this";
+- "this looks good";
+
+use the associated recording, screenshot/mockup and supplied assets to identify
+the intended visual where possible before making an implementation decision.
+
+If the exact referenced visual cannot be identified, report that uncertainty
+instead of guessing.
+
+For each visual proposed for use, identify:
+
+- exact source file;
+- whether it is current, outdated, placeholder or duplicated;
+- intended section;
+- desktop treatment;
+- mobile treatment;
+- expected crop/object positioning;
+- aspect-ratio risks;
+- whether the source is genuinely unsuitable and needs replacement.
+
+Prefer visual sources in this order when appropriate:
+
+1. Jamie-supplied approved/current assets;
+2. current real Dad Health app UI/screens;
+3. existing approved Dad Health website assets;
+4. new assets only when none of the above are suitable and creation has been
+   approved.
+
+Do not:
+
+- fabricate app UI;
+- use outdated app screens as current product proof;
+- add random stock imagery to fill space;
+- stretch or distort supplied images;
+- create large empty containers simply to preserve an unsuitable image ratio;
+- excessively crop important subjects;
+- generate replacement imagery without approval.
+
+Try the supplied image first.
+
+Use responsive image treatment and sensible `object-fit` / `object-position`
+where appropriate. Check both desktop and mobile.
+
+If an image genuinely cannot fit the approved design cleanly, report:
+
+- the exact source image;
+- the section where it fails;
+- why normal responsive cropping cannot solve it;
+- the recommended replacement aspect ratio/dimensions.
+
+Only then should a replacement asset be requested from Jamie.
+
+When a website review includes layout, hierarchy, page-length or content
+reduction decisions, the visual audit is part of that same review.
+
+Do not recommend removing, replacing or condensing a section without checking
+whether its supplied graphic or product visual changes that decision.
+
+## Design-reference graphics versus production assets
+
+Supplied website graphics are not automatically production assets.
+
+When a supplied PNG/JPG/mockup contains:
+
+- text;
+- icons;
+- cards;
+- dividers;
+- labels;
+- score UI;
+- diagrams;
+- structured visual content that can reasonably be recreated in HTML/CSS/SVG;
+
+first determine whether the asset is intended as:
+
+1. a final production image to render directly; or
+2. a visual/design reference that should be recreated natively.
+
+Do not blindly render a flattened screenshot/graphic when doing so causes:
+
+- blurry text;
+- poor scaling;
+- oversized desktop presentation;
+- unreadable mobile content;
+- fixed baked-in copy;
+- inaccessible text;
+- awkward responsive cropping.
+
+When a supplied graphic is clearly a design reference, use it as the source of truth for:
+
+- visual hierarchy;
+- layout;
+- proportions;
+- spacing;
+- borders;
+- icon placement;
+- typography scale;
+- alignment;
+- colour treatment;
+- overall visual character.
+
+Then recreate the design using the existing application stack:
+
+- semantic HTML;
+- React components;
+- Tailwind/theme tokens;
+- SVG/CSS where appropriate;
+- existing approved icon assets where they remain sharp and suitable.
+
+Do not redesign the graphic.
+Do not invent new content.
+Do not change approved copy.
+Do not change the intended visual hierarchy.
+
+The goal is to reproduce the supplied design faithfully while making it:
+
+- responsive;
+- accessible;
+- sharp at all viewport sizes;
+- maintainable;
+- text-selectable where appropriate;
+- compatible with desktop and mobile.
+
+If the supplied individual icon asset is also low-resolution or unsuitable for responsive use, inspect whether its simple geometry can be faithfully recreated as SVG/CSS from the supplied design reference.
+
+Do not recreate branded photography, complex artwork, logos or illustrations unless explicitly approved.
+
+Example:
+
+A supplied Mind / Body / Bond strip containing three cards, icons and baked-in text should normally be treated as a design reference if rendering the full PNG causes poor responsive scaling.
+
+In that case:
+
+- preserve the wide three-column desktop design;
+- preserve the supplied icons/design language;
+- render the headings and descriptions as real HTML;
+- reproduce dividers/borders/spacing with CSS/Tailwind;
+- use responsive sizing rather than scaling the flattened image;
+- use the same structured content source across desktop and mobile where practical.
+
+Before replacing a rendered graphic with a native recreation, report the intended approach and obtain approval when the task is review-only.
 ---
 # Website implementation rule
 For each website page:
-1. review the approved brief;
-2. review its supplied HTML/mockup;
-3. inspect the current route/component;
-4. identify shared dependencies;
-5. replace presentation without disturbing backend contracts;
-6. preserve responsive behaviour;
-7. verify mobile and desktop layouts;
-8. stop for review when requested.
+For each website page:
+
+1. review the latest approved brief and later Jamie feedback;
+2. review its supplied HTML/build target;
+3. review its latest mockup/screens;
+4. audit all relevant supplied graphics/images/assets;
+5. inspect the current route/components;
+6. compare product/app visuals against the current mobile product where needed;
+7. identify shared dependencies;
+8. propose the smallest safe implementation plan;
+9. stop for approval when requested;
+10. only after approval, change presentation without disturbing backend contracts;
+11. preserve responsive behaviour;
+12. verify mobile and desktop layouts after implementation.
 Do not redesign beyond the supplied direction unless explicitly
 approved.
 ---
@@ -228,6 +406,14 @@ Refactoring must not change:
 - approved responsive design.
 Prefer readable, scoped components over both monolithic files and
 excessive fragmentation.
+
+When a supplied visual contains repeated structured content such as cards,
+pillars, steps, score items or comparison items, prefer recreating it from
+structured data and reusable markup rather than baking the entire visual into
+one raster image.
+
+Use the supplied graphic as the visual source of truth, not as an excuse to
+hard-code duplicated markup or fixed screenshot dimensions.
 # Homepage revamp
 For the new homepage:
 - treat the supplied homepage HTML/mockup as the visual/layout target;
@@ -241,6 +427,26 @@ colours;
 - use official App Store and Google Play badges;
 - Free & Pro copy must match the final approved mobile entitlement
 split.
+
+Latest Jamie feedback takes precedence over the original homepage mockup where
+it changes hierarchy or launch messaging.
+
+Current feedback direction includes:
+
+- reduce homepage length/repetition by approximately 20–30%;
+- move detailed content to its dedicated public pages;
+- make the Dad Health Score/product UI visible almost immediately;
+- use Join the Waitlist rather than Get the App/Coming Soon before launch;
+- bring a short authentic founder story onto the homepage;
+- use more appropriate real/app imagery;
+- keep consumer and Business journeys clearly separated;
+- improve mobile body-copy readability;
+- make Pro marketing outcome-led while remaining truthful to implemented
+  entitlements;
+- communicate the anti-scroll philosophy: Dad Health helps dads check in,
+  understand where they are, do one useful thing, then get back to real life.
+
+These directions do not grant permission to invent Jamie's pending final copy.
 ---
 # Happening announcements
 The revised website uses a small homepage `Happening` strip.
@@ -371,3 +577,42 @@ Preserve working infrastructure.
 Do not convert a UI revamp into a backend rewrite.
 When uncertain whether something is presentation or shared
 infrastructure, stop and inspect both repositories before changing it.
+
+---
+# Website UI Implementation Rules
+The current homepage and this consistency pass are the implemented visual
+baseline for public website work. Inspect this file and the existing homepage
+before changing public website UI.
+
+- Use `HomepagePrimaryButton` as the shared primary CTA. Preserve its compact
+  mobile sizing and slightly larger desktop sizing. Use
+  `marketingArrowClass` for equivalent CTA arrows.
+- Use the classes exported by
+  `src/components/marketing/marketingStyles.ts` for equivalent marketing UI.
+- Standard containers use `max-w-7xl px-5 sm:px-6 lg:px-8`.
+- Standard section spacing uses
+  `py-14 sm:py-16 lg:py-16 min-[1440px]:py-20`. Keep local spacing only when
+  the section has a distinct layout need.
+- Page heroes use `marketingPageHeroClass`. Standard section headings use
+  `marketingSectionHeadingClass`. Preserve distinct display treatments only
+  when the content role differs.
+- Standard body copy uses `text-[15px] sm:text-base` with relaxed leading and
+  muted colour where appropriate.
+- Normal cards use `rounded-2xl`, the standard border and card background, a
+  restrained primary-colour glow, and compact `p-5 sm:p-7` padding where the
+  card role is equivalent.
+- Build mobile-first. Keep mobile CTAs compact and readable. Use responsive
+  Tailwind breakpoints for tablet, laptop and desktop. Do not let large desktop
+  sizing start too early.
+- Treat supplied graphics as design references when practical. Recreate simple
+  structured graphics as responsive HTML, CSS or React. Do not stretch
+  low-resolution raster graphics or replace approved native homepage graphics.
+- Never fix website sizing with CSS `zoom`, `transform: scale()`, browser zoom,
+  page-wide scaling or root-font-size hacks. Reuse an existing shared value
+  instead of adding arbitrary one-off sizing.
+- Preserve intentional exceptions: Business conversion layouts and large
+  actions, highlighted lime Pro cards, Score visuals, branded phones, legal
+  tabs, and narrower legal reading content.
+- Check public website UI at 390, 435, 768, 1280, 1366, 1440 and 1920 pixels.
+  Verify readable copy, compact mobile layouts, controlled desktop scale and no
+  horizontal overflow.
