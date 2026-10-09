@@ -4,10 +4,12 @@ function requiredEnv(name: string): string {
   return v;
 }
 
+const RESEND_FROM = "Dad Health <noreply@send.dadhealth.co.uk>";
+
 /**
  * Send a transactional email via the Resend REST API.
  * Uses fetch (no SDK dependency) — same approach as the OneSignal helper.
- * Requires RESEND_API_KEY and RESEND_FROM_EMAIL.
+ * Requires RESEND_API_KEY. The sender uses the verified Resend subdomain.
  */
 export async function sendEmail(args: {
   to: string;
@@ -16,7 +18,6 @@ export async function sendEmail(args: {
   replyTo?: string;
 }): Promise<void> {
   const apiKey = requiredEnv("RESEND_API_KEY");
-  const from = requiredEnv("RESEND_FROM_EMAIL");
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -25,7 +26,7 @@ export async function sendEmail(args: {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      from,
+      from: RESEND_FROM,
       to: [args.to],
       subject: args.subject,
       html: args.html,
