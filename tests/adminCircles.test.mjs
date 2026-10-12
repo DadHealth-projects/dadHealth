@@ -28,17 +28,30 @@ test("admin portal exposes Circle catalogue CRUD with visible request failures",
   }
 });
 
-test("Circle API accepts Admin-managed descriptions and never exposes member count writes", async () => {
+test("Circle API accepts Admin-managed descriptions and visibility and never exposes member count writes", async () => {
   const route = await source("src/app/api/admin/[resource]/route.ts");
 
   assert.match(route, /case "circles": \{[\s\S]*?\.from\("circles"\)[\s\S]*?\.select\("id, name, description, icon, members_count"\)/);
-  assert.match(route, /const allowedKeys = new Set\(requireId \? \["id", "name", "icon", "description"\] : \["name", "icon", "description"\]\)/);
+  assert.match(route, /const allowedKeys = new Set\(requireId \? \["id", "name", "icon", "description", "visibility"\] : \["name", "icon", "description", "visibility"\]\)/);
+  assert.match(route, /record\.visibility !== "public" && record\.visibility !== "private"/);
   assert.match(route, /description = typeof record\.description === "string" \? record\.description\.trim\(\) \|\| null : null/);
   assert.match(route, /if \(resource === "circles"\) \{[\s\S]*?parseCircleWrite\(body, true\)/);
   assert.match(route, /parseCircleId\(body\)/);
   assert.match(route, /This Circle no longer exists\./);
   assert.equal(route.includes('members_count: body.members_count'), false);
   assert.equal(route.includes('members_count: record.members_count'), false);
+});
+
+test("Circle privacy is exposed in Admin and deletion cannot orphan posts into the global feed", async () => {
+  const [page, route, migration] = await Promise.all([
+    source("src/app/admin/page.tsx"),
+    source("src/app/api/admin/[resource]/route.ts"),
+    source("supabase/migrations/20261012130000_community_circle_posts.sql"),
+  ]);
+  assert.match(page, /className=\{labelCls\}>Visibility/);
+  assert.match(page, /Private — members only/);
+  assert.match(route, /Circle has posts\. Remove or moderate its posts before deleting the Circle/);
+  assert.match(migration, /foreign key \(circle_id\) references public\.circles\(id\) on delete restrict/i);
 });
 
 test("circle descriptions migrate additively without changing circle access policies or live data", async () => {
