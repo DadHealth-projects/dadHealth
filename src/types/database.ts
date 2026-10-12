@@ -110,6 +110,8 @@ export interface MoodLog {
   date: string;
   mood_value: number;
   stress_level?: number | null;
+  energy_level?: number | null;
+  connection_level?: number | null;
   created_at?: string;
 }
 
@@ -276,6 +278,8 @@ export interface Post {
   user_id: string | null;
   body: string;
   tag: string;
+  /** NULL for legacy/global posts; Circle posts keep their independent topic tag. */
+  circle_id?: string | null;
   anonymous: boolean;
   author_initials?: string;
   author_name?: string;
@@ -305,6 +309,7 @@ export interface Circle {
   icon: string;
   name: string;
   members_count: number;
+  visibility?: "public" | "private";
 }
 
 export interface UserCircle {
