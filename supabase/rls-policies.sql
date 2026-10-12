@@ -164,40 +164,40 @@ with check (auth.uid() = user_id);
 
 -- posts: anyone can read, auth can write, author can delete
 drop policy if exists "Allow read posts" on posts;
-create policy "Allow read posts" on posts for select using (true);
+create policy "Read global public and joined Circle posts" on posts for select to anon, authenticated using (circle_id is null or public.can_read_community_post(id));
 
 drop policy if exists "Auth can insert posts" on posts;
-create policy "Auth can insert posts" on posts for insert with check (true);
+create policy "Authenticated users can create global or joined Circle posts" on posts for insert to authenticated with check (auth.uid() is not null and (circle_id is null or public.is_circle_member(circle_id)) and ((anonymous is true and user_id is null) or (anonymous is not true and user_id = auth.uid())));
 
 drop policy if exists "Users can delete own posts" on posts;
 create policy "Users can delete own posts" on posts for delete using (auth.uid() = user_id);
 
 -- likes: anyone can read, auth can like, user can unlike
 drop policy if exists "Allow read likes" on likes;
-create policy "Allow read likes" on likes for select using (true);
+create policy "Read likes on readable posts" on likes for select to anon, authenticated using (public.can_read_community_post(post_id));
 
 drop policy if exists "Users can insert own likes" on likes;
-create policy "Users can insert own likes" on likes for insert with check (auth.uid() = user_id);
+create policy "Users can like readable posts" on likes for insert to authenticated with check (auth.uid() = user_id and public.can_read_community_post(post_id));
 
 drop policy if exists "Users can delete own likes" on likes;
 create policy "Users can delete own likes" on likes for delete using (auth.uid() = user_id);
 
 -- comments: anyone can read, auth can reply, user can delete own
 drop policy if exists "Allow read comments" on comments;
-create policy "Allow read comments" on comments for select using (true);
+create policy "Read comments on readable posts" on comments for select to anon, authenticated using (public.can_read_community_post(post_id));
 
 drop policy if exists "Users can insert own comments" on comments;
-create policy "Users can insert own comments" on comments for insert with check (auth.uid() = user_id);
+create policy "Members can comment on readable posts" on comments for insert to authenticated with check (auth.uid() = user_id and public.can_read_community_post(post_id));
 
 drop policy if exists "Users can delete own comments" on comments;
 create policy "Users can delete own comments" on comments for delete using (auth.uid() = user_id);
 
 -- saved_posts: users can CRUD own saves
 drop policy if exists "Allow read saved_posts" on saved_posts;
-create policy "Allow read saved_posts" on saved_posts for select using (true);
+create policy "Read saves on readable posts" on saved_posts for select to authenticated using (auth.uid() = user_id and public.can_read_community_post(post_id));
 
 drop policy if exists "Users can insert own saves" on saved_posts;
-create policy "Users can insert own saves" on saved_posts for insert with check (auth.uid() = user_id);
+create policy "Users can save readable posts" on saved_posts for insert to authenticated with check (auth.uid() = user_id and public.can_read_community_post(post_id));
 
 drop policy if exists "Users can delete own saves" on saved_posts;
 create policy "Users can delete own saves" on saved_posts for delete using (auth.uid() = user_id);
@@ -317,11 +317,22 @@ to anon, authenticated;
 drop policy if exists "Anyone can read circles"
 on public.circles;
 
-create policy "Anyone can read circles"
+create policy "Anyone can browse Circle directory"
 on public.circles
 for select
 to anon, authenticated
 using (true);
+
+drop policy if exists "Anyone can read circle prompts" on public.circle_prompts;
+create policy "Read prompts for public or joined Circles"
+on public.circle_prompts for select to anon, authenticated
+using (
+  exists (
+    select 1 from public.circles c
+    where c.id = circle_prompts.circle_id
+      and (c.visibility = 'public' or public.is_circle_member(c.id))
+  )
+);
 
 -- user_circles: users can CRUD own circle memberships
 drop policy if exists "Users can CRUD own user_circles" on user_circles;
