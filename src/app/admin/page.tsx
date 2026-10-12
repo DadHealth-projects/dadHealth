@@ -115,12 +115,14 @@ interface CircleItem {
   name: string;
   description: string | null;
   members_count: number | null;
+  visibility: "public" | "private";
 }
 
 interface Post {
   id: string;
   content: string;
   tag: string;
+  circle?: { name: string } | null;
   anonymous: boolean;
   author_name?: string;
   author_meta?: string;
@@ -1364,7 +1366,7 @@ const CIRCLE_ICON_OPTIONS = [
   { value: "journal", label: "Journal" },
 ] as const;
 
-const BLANK_CIRCLE_FORM = { name: "", description: "", icon: "community" };
+const BLANK_CIRCLE_FORM = { name: "", description: "", icon: "community", visibility: "public" as "public" | "private" };
 
 function CirclesTab() {
   const [items, setItems] = useState<CircleItem[]>([]);
@@ -1413,7 +1415,7 @@ function CirclesTab() {
   const startEdit = (item: CircleItem) => {
     setError(null);
     setNotice(null);
-    setForm({ name: item.name, description: item.description ?? "", icon: item.icon });
+    setForm({ name: item.name, description: item.description ?? "", icon: item.icon, visibility: item.visibility ?? "public" });
     setEditId(item.id);
     setShowForm(true);
   };
@@ -1432,7 +1434,7 @@ function CirclesTab() {
     try {
       const response = await adminFetch("/api/admin/circles", {
         method: editId ? "PATCH" : "POST",
-        body: JSON.stringify(editId ? { id: editId, name, description, icon: form.icon } : { name, description, icon: form.icon }),
+        body: JSON.stringify(editId ? { id: editId, name, description, icon: form.icon, visibility: form.visibility } : { name, description, icon: form.icon, visibility: form.visibility }),
       });
       if (!response.ok) {
         setError(await adminErrorMessage(
@@ -1456,7 +1458,7 @@ function CirclesTab() {
   const handleDelete = async (item: CircleItem) => {
     const memberCount = item.members_count ?? 0;
     const membershipCopy = memberCount === 1 ? "1 membership" : `${memberCount} memberships`;
-    if (!confirm(`Delete ${item.name}? This removes ${membershipCopy}. Community posts are not affected.`)) return;
+    if (!confirm(`Delete ${item.name}? This removes ${membershipCopy}. Circle with posts cannot be deleted, to preserve posts and privacy.`)) return;
 
     setDeletingId(item.id);
     setError(null);
@@ -1527,6 +1529,13 @@ function CirclesTab() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className={labelCls}>Visibility</label>
+              <select className={inputCls} value={form.visibility} onChange={(event) => setForm((current) => ({ ...current, visibility: event.target.value as "public" | "private" }))}>
+                <option value="public">Public — anyone can read posts</option>
+                <option value="private">Private — members only</option>
+              </select>
+            </div>
           </div>
           <div>
             <label className={labelCls}>Description</label>
@@ -1570,6 +1579,7 @@ function CirclesTab() {
                     {(item.members_count ?? 0).toLocaleString()} {(item.members_count ?? 0) === 1 ? "member" : "members"}
                   </div>
                   {item.description ? <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{item.description}</p> : null}
+                  <span className="mt-2 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">{item.visibility}</span>
                 </div>
               </div>
               <div className="mt-4 flex gap-2">
@@ -1650,7 +1660,7 @@ function ModerationTab() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-[10px] font-bold uppercase text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                    {post.tag}
+                    {post.circle?.name ? `${post.circle.name} · ${post.tag}` : post.tag}
                   </span>
                   <span className="text-[10px] text-muted-foreground">
                     {post.anonymous ? "Anonymous" : (post.author_name ?? "Unknown")}
