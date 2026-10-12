@@ -10,7 +10,7 @@ const footerLinks = [
   { label: "EULA", href: "/eula" },
   { label: "Cookies", href: "/cookies" },
   { label: "Cookie Settings", action: "cookie-settings" },
-  { label: "Instagram" },
+  { label: "Instagram", href: "https://www.instagram.com/dadhealth_app"},
   { label: "Contact", href: "mailto:hello@dadhealth.co.uk" },
   { label: "Corporate", href: "/business" },
 ];

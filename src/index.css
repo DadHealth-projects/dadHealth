@@ -195,10 +195,6 @@
     @apply border border-border p-3.5 flex gap-3 mb-2 items-start;
   }
 
-  /**
-   * Cookie policy (Termly export): each cookie is a <section> with a key/value <table>.
-   * Force real table layout so label/value columns stay side-by-side (not stacked blocks).
-   */
   .cookie-policy-content section {
     @apply mb-4 rounded-md border border-border bg-card/35 overflow-hidden last:mb-0;
   }
