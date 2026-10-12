@@ -75,6 +75,22 @@ async function actorName(admin: ReturnType<typeof createAdminSupabaseClient>, us
   return fallback?.trim() || authResult.data.user?.email?.split("@")[0]?.trim() || "Someone";
 }
 
+async function canNotifyPrivateCircleMember(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  postId: string,
+  recipientUserId: string,
+) {
+  const postResult = await admin.from("posts").select("circle_id").eq("id", postId).maybeSingle();
+  if (postResult.error) throw postResult.error;
+  if (!postResult.data?.circle_id) return true;
+  const circleResult = await admin.from("circles").select("visibility").eq("id", postResult.data.circle_id).maybeSingle();
+  if (circleResult.error) throw circleResult.error;
+  if (circleResult.data?.visibility !== "private") return true;
+  const memberResult = await admin.from("user_circles").select("id").eq("circle_id", postResult.data.circle_id).eq("user_id", recipientUserId).maybeSingle();
+  if (memberResult.error) throw memberResult.error;
+  return Boolean(memberResult.data);
+}
+
 async function communityReply(body: Extract<EventBody, { type: "community_reply" }>) {
   const admin = createAdminSupabaseClient();
   const commentResult = await admin.from("comments").select("id,user_id,post_id,parent_id").eq("id", body.record_id).maybeSingle();
@@ -100,6 +116,9 @@ async function communityReply(body: Extract<EventBody, { type: "community_reply"
   const name = await actorName(admin, body.actor_user_id || comment.user_id);
 
   recipients.delete(body.actor_user_id || comment.user_id);
+  for (const recipient of [...recipients]) {
+    if (!(await canNotifyPrivateCircleMember(admin, comment.post_id, recipient))) recipients.delete(recipient);
+  }
   console.info("[notifications/events] Community recipients resolved", {
     record: comment.id.slice(0, 8),
     recipients: recipients.size,
@@ -142,7 +161,7 @@ async function communityLike(
   if (body.target_type === "post") {
     const postResult = await admin
       .from("posts")
-      .select("id,user_id")
+      .select("id,user_id,circle_id")
       .eq("id", body.record_id)
       .maybeSingle();
 
@@ -168,6 +187,7 @@ async function communityLike(
     if (!recipientUserId || recipientUserId === body.actor_user_id) {
       return { sent: 0, skipped: 1 };
     }
+    if (!(await canNotifyPrivateCircleMember(admin, post.id, recipientUserId))) return { sent: 0, skipped: 1 };
     const name = await actorName(admin, body.actor_user_id);
 
     const result = await sendIfAllowed({
@@ -206,6 +226,7 @@ async function communityLike(
   if (!comment.user_id || comment.user_id === body.actor_user_id) {
     return { sent: 0, skipped: 1 };
   }
+  if (!(await canNotifyPrivateCircleMember(admin, comment.post_id, comment.user_id))) return { sent: 0, skipped: 1 };
   const name = await actorName(admin, body.actor_user_id);
 
   const result = await sendIfAllowed({

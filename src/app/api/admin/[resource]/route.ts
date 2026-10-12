@@ -37,7 +37,7 @@ const CIRCLE_ICON_KEYS = new Set([
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type CircleWriteResult =
-  | { ok: true; value: { id?: string; name: string; icon: string; description: string | null } }
+  | { ok: true; value: { id?: string; name: string; icon: string; description: string | null; visibility?: "public" | "private" } }
   | { ok: false; error: string };
 
 type ChallengeWriteResult =
@@ -50,9 +50,9 @@ function parseCircleWrite(body: unknown, requireId: boolean): CircleWriteResult 
   }
 
   const record = body as Record<string, unknown>;
-  const allowedKeys = new Set(requireId ? ["id", "name", "icon", "description"] : ["name", "icon", "description"]);
+  const allowedKeys = new Set(requireId ? ["id", "name", "icon", "description", "visibility"] : ["name", "icon", "description", "visibility"]);
   if (Object.keys(record).some((key) => !allowedKeys.has(key))) {
-    return { ok: false, error: "Only Circle name, description and icon can be changed." };
+    return { ok: false, error: "Only Circle name, description, icon and visibility can be changed." };
   }
 
   const name = typeof record.name === "string" ? record.name.trim() : "";
@@ -61,14 +61,18 @@ function parseCircleWrite(body: unknown, requireId: boolean): CircleWriteResult 
     return { ok: false, error: "Circle description must be text." };
   }
   const description = typeof record.description === "string" ? record.description.trim() || null : null;
+  if (record.visibility != null && record.visibility !== "public" && record.visibility !== "private") {
+    return { ok: false, error: "Choose public or private Circle visibility." };
+  }
+  const visibility = record.visibility === "private" ? "private" : "public";
   if (!name) return { ok: false, error: "Circle name is required." };
   if (!CIRCLE_ICON_KEYS.has(icon)) return { ok: false, error: "Choose a supported Circle icon." };
 
-  if (!requireId) return { ok: true, value: { name, icon, description } };
+  if (!requireId) return { ok: true, value: { name, icon, description, visibility } };
 
   const id = typeof record.id === "string" ? record.id.trim() : "";
   if (!UUID_PATTERN.test(id)) return { ok: false, error: "A valid Circle ID is required." };
-  return { ok: true, value: { id, name, icon, description } };
+  return { ok: true, value: { id, name, icon, description, ...(record.visibility == null ? {} : { visibility }) } };
 }
 
 function parseCircleId(body: unknown): { ok: true; id: string } | { ok: false; error: string } {
@@ -248,7 +252,7 @@ export async function GET(
       case "circles": {
         const { data, error } = await supabase
           .from("circles")
-          .select("id, name, description, icon, members_count")
+          .select("id, name, description, icon, members_count, visibility")
           .order("name", { ascending: true });
         if (error) throw error;
         return NextResponse.json(data ?? []);
@@ -266,7 +270,7 @@ export async function GET(
       case "posts": {
         const { data, error } = await supabase
           .from("posts")
-          .select("id, content, tag, anonymous, author_name, author_meta, created_at, user_id")
+          .select("id, content, tag, anonymous, author_name, author_meta, created_at, user_id, circle_id, circle:circles(name)")
           .order("created_at", { ascending: false })
           .limit(100);
         if (error) throw error;
@@ -447,7 +451,7 @@ export async function POST(
         const { data, error } = await supabase
           .from("circles")
           .insert(parsed.value)
-          .select("id, name, description, icon, members_count")
+          .select("id, name, description, icon, members_count, visibility")
           .single();
         if (error) throw error;
         return NextResponse.json(data, { status: 201 });
@@ -552,7 +556,7 @@ export async function PATCH(
         .from("circles")
         .update(updates)
         .eq("id", id!)
-        .select("id, name, description, icon, members_count")
+        .select("id, name, description, icon, members_count, visibility")
         .maybeSingle();
       if (error) throw error;
       if (!data) return NextResponse.json({ error: "This Circle no longer exists." }, { status: 404 });
@@ -643,6 +647,9 @@ export async function DELETE(
       return NextResponse.json({ ok: true });
     } catch (err) {
       console.error("[admin DELETE circles]", err);
+      if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "23503") {
+        return NextResponse.json({ error: "This Circle has posts. Remove or moderate its posts before deleting the Circle." }, { status: 409 });
+      }
       return NextResponse.json({ error: "This Circle could not be deleted. Please try again." }, { status: 500 });
     }
   }
