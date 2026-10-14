@@ -2586,6 +2586,29 @@ grant execute on function public.calculate_dad_score_period(uuid, date, date, ti
 -- exact, adjacent, non-overlapping seven-day periods.
 -- Base on public.user_profile (not auth.users) and use SECURITY INVOKER so RLS of the
 -- querying authenticated user applies. Exposed to authenticated clients and service-role reads.
+create or replace function public.is_dad_score_baseline_available(
+  p_created_at timestamptz,
+  p_effective_week_start date,
+  p_current_week_start date
+)
+returns boolean
+language sql
+stable
+set search_path = pg_catalog, public
+as $$
+  select p_current_week_start > greatest(
+    p_effective_week_start,
+    coalesce(
+      date_trunc('week', p_created_at)::date
+        + case when extract(isodow from p_created_at) = 1 then 0 else 7 end,
+      p_effective_week_start
+    )
+  );
+$$;
+
+revoke all on function public.is_dad_score_baseline_available(timestamptz, date, date) from public, anon;
+grant execute on function public.is_dad_score_baseline_available(timestamptz, date, date) to authenticated, service_role;
+
 create or replace view public.dad_score_view
   with (security_invoker = true)
 as
@@ -3799,7 +3822,10 @@ select
       ) as actions(score, available, action, priority)
       where actions.available order by actions.score, actions.priority limit 1
     )
-  end as recommended_action
+  end as recommended_action,
+  public.is_dad_score_baseline_available(
+    p.created_at, score_config.effective_week_start, current_week.week_start
+  ) as baseline_available
 from public.user_profile p
 cross join (select date_trunc('week', current_date)::date as week_start) current_week
 cross join public.activity_score_config score_config

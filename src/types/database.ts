@@ -126,6 +126,7 @@ export interface DadScoreRow {
   mind_week_change: number | null;
   body_week_change: number | null;
   bond_week_change: number | null;
+  baseline_available: boolean;
 }
 
 export interface SleepLog {
