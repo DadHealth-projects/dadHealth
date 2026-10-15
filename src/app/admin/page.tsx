@@ -433,7 +433,7 @@ function ChallengesTab() {
       </SectionHeader>
 
       <p className="mb-4 text-sm text-muted-foreground">
-        Only the challenge marked Shown in Dad Health appears in the web and mobile apps. Create a new challenge for each week; editing an existing challenge keeps its participation history.
+        Only the challenge marked Shown in Dad Health appears in the web and mobile apps. Create a new challenge for each week. Challenges with participation history cannot be edited or republished, so past completions stay tied to the original challenge.
       </p>
 
       {error && (
