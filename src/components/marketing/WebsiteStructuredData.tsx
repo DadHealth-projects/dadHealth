@@ -1,4 +1,5 @@
 import { SITE_URL } from "@/lib/marketingMetadata";
+import { OG_HERO_IMAGE } from "@/lib/images";
 
 const organizationId = new URL("/#organization", SITE_URL).toString();
 
@@ -10,7 +11,7 @@ const structuredData = {
       "@id": organizationId,
       name: "Dad Health Ltd",
       url: SITE_URL.origin,
-      logo: new URL("/icon.svg", SITE_URL).toString(),
+      logo: new URL(OG_HERO_IMAGE, SITE_URL).toString(),
       email: "hello@dadhealth.co.uk",
       address: {
         "@type": "PostalAddress",
