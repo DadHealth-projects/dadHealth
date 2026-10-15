@@ -507,6 +507,20 @@ export async function PATCH(
       if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
       try {
+        if (parsed.active) {
+          const { count, error: participationError } = await supabase
+            .from("weekly_challenge_participants")
+            .select("challenge_id", { count: "exact", head: true })
+            .eq("challenge_id", parsed.id);
+          if (participationError) throw participationError;
+          if ((count ?? 0) > 0) {
+            return NextResponse.json(
+              { error: "This challenge has participation history. Create a new challenge for each week." },
+              { status: 409 },
+            );
+          }
+        }
+
         const { data, error } = await supabase
           .rpc("set_active_weekly_challenge", {
             p_challenge_id: parsed.id,
@@ -531,6 +545,18 @@ export async function PATCH(
     const { id, ...updates } = parsed.value;
 
     try {
+      const { count, error: participationError } = await supabase
+        .from("weekly_challenge_participants")
+        .select("challenge_id", { count: "exact", head: true })
+        .eq("challenge_id", id!);
+      if (participationError) throw participationError;
+      if ((count ?? 0) > 0) {
+        return NextResponse.json(
+          { error: "This challenge has participation history and cannot be repurposed. Create a new challenge for each week." },
+          { status: 409 },
+        );
+      }
+
       const { data, error } = await supabase
         .from("weekly_challenges")
         .update(updates)

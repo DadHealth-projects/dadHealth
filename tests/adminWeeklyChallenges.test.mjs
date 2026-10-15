@@ -23,7 +23,7 @@ test("Weekly Challenge admin supports content editing and explicit active states
     'This weekly challenge could not be made active. Please try again.',
     'This weekly challenge could not be deleted. Please try again.',
     'Enter the challenge instruction before saving.',
-    'Create a new challenge for each week; editing an existing challenge keeps its participation history.',
+    'Create a new challenge for each week. Challenges with participation history cannot be edited or republished, so past completions stay tied to the original challenge.',
     'Its participation and completion history will also be removed.',
   ]) {
     assert.ok(page.includes(expected), `Missing Weekly Challenge admin contract: ${expected}`);
@@ -41,6 +41,8 @@ test("Weekly Challenge API has strict content, active-state, and delete allowlis
   assert.match(route, /Only the challenge ID can be supplied when deleting\./);
   assert.match(route, /\.select\("id, title, description, active, created_at"\)/);
   assert.match(route, /\.rpc\("set_active_weekly_challenge", \{[\s\S]*?p_challenge_id: parsed\.id,[\s\S]*?p_active: parsed\.active/);
+  assert.match(route, /if \(parsed\.active\) \{[\s\S]*?from\("weekly_challenge_participants"\)[\s\S]*?\.eq\("challenge_id", parsed\.id\)[\s\S]*?participationError[\s\S]*?Create a new challenge for each week/);
+  assert.match(route, /parseChallengeWrite\(body, true\)[\s\S]*?from\("weekly_challenge_participants"\)[\s\S]*?\.eq\("challenge_id", id!\)[\s\S]*?participationError[\s\S]*?cannot be repurposed[\s\S]*?status: 409/);
   assert.match(route, /case "challenges": \{[\s\S]*?parseChallengeWrite\(body, false\)[\s\S]*?active: false/);
   assert.ok(route.includes('Challenge description is required.'));
   assert.equal(route.includes('challenges: "weekly_challenges"'), false);
