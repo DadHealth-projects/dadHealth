@@ -547,10 +547,45 @@ const buildFallbackMealPlan = (calorieTarget: number, adults: number, dietaryPre
   }))
 }
 
-/** AI meal plans a dad can generate before Dad Health Pro is required. */
-export const FREE_AI_MEAL_PLANS = 3
-
 export const maxDuration = 60
+
+export async function GET(req: Request) {
+  const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID()
+  const headers = { 'Cache-Control': 'private, no-store' }
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json({ error: 'Meal plans are temporarily unavailable.', requestId }, { status: 503, headers })
+    }
+
+    const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+    const authSupabase = await createServerSupabaseClient()
+    const bearerToken = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
+    const authResult = bearerToken
+      ? await admin.auth.getUser(bearerToken)
+      : await authSupabase.auth.getUser()
+    const user = authResult.data.user
+    if (!user) return NextResponse.json({ error: 'Unauthorized', requestId }, { status: 401, headers })
+
+    const { data, error } = await admin
+      .from('meal_plans')
+      .select('id, plan, grocery_list, created_at')
+      .eq('user_id', user.id)
+      .eq('source', 'ai_generated')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) {
+      console.error('[generate-meal-plan] saved plan lookup failed', { requestId, error })
+      return NextResponse.json({ error: 'We could not load your saved meal plan.', requestId }, { status: 500, headers })
+    }
+    return NextResponse.json({ savedPlan: data ?? null, requestId }, { headers })
+  } catch (error) {
+    console.error('[generate-meal-plan] saved plan request failed', { requestId, error })
+    return NextResponse.json({ error: 'We could not load your saved meal plan.', requestId }, { status: 500, headers })
+  }
+}
 
 export async function POST(req: Request) {
   const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID()
@@ -605,32 +640,10 @@ export async function POST(req: Request) {
     }
 
     if (!isPro) {
-      // Every dad gets the first three AI meal plans. After that it is Pro.
-      const usageClient = bearerToken ? nativeSupabase : authSupabase
-      const { count, error: usageError } = await usageClient
-        .from('meal_plans')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('source', 'ai_generated')
-
-      if (usageError) {
-        console.error('[generate-meal-plan] allowance lookup failed', usageError)
-        return NextResponse.json(
-          { error: 'We could not check your meal planner allowance. Please try again.' },
-          { status: 503 },
-        )
-      }
-
-      if ((count ?? 0) >= FREE_AI_MEAL_PLANS) {
-        return NextResponse.json(
-          {
-            error: `You have used your ${FREE_AI_MEAL_PLANS} free meal plans. Dad Health Pro gives you unlimited plans.`,
-            code: 'meal_plan_limit_reached',
-            plansUsed: count ?? 0,
-          },
-          { status: 403 },
-        )
-      }
+      return NextResponse.json(
+        { error: 'Meal plan generation requires Dad Health Pro.', code: 'pro_required', requestId },
+        { status: 403 },
+      )
     }
 
     const { calorieTarget, preferences, dietaryPreference: rawDietaryPreference, mealsPerDay, adults } = await req.json()
