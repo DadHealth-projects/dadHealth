@@ -81,6 +81,25 @@ interface WorkoutItem {
   created_at?: string;
 }
 
+interface WeeklyWorkoutAssignment {
+  week_start: string;
+  workout_id: string;
+  workout_title: string;
+}
+
+interface WeeklyRecipeAssignment {
+  week_start: string;
+  recipe_id: string;
+  recipe_title: string;
+}
+
+function currentMondayDateInput(): string {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 interface Therapist {
   id: string;
   name: string;
@@ -562,6 +581,11 @@ function recipeToForm(item: Recipe) {
 
 function RecipesTab() {
   const [items, setItems] = useState<Recipe[]>([]);
+  const [weeklyAssignments, setWeeklyAssignments] = useState<WeeklyRecipeAssignment[]>([]);
+  const [featuredRecipeId, setFeaturedRecipeId] = useState("");
+  const [featuredWeekStart, setFeaturedWeekStart] = useState(currentMondayDateInput);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduling, setScheduling] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -573,14 +597,49 @@ function RecipesTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminFetch("/api/admin/recipes");
-      if (res.ok) setItems(await res.json());
+      const [recipesResponse, schedulesResponse] = await Promise.all([
+        adminFetch("/api/admin/recipes"),
+        adminFetch("/api/admin/weekly-recipe"),
+      ]);
+      if (recipesResponse.ok) setItems(await recipesResponse.json());
+      if (schedulesResponse.ok) {
+        const result = await schedulesResponse.json() as { assignments?: WeeklyRecipeAssignment[] };
+        setWeeklyAssignments(result.assignments ?? []);
+        setScheduleError(null);
+      } else {
+        setScheduleError("Could not load scheduled Cook Together recipes. Refresh and try again.");
+      }
+    } catch {
+      setScheduleError("Could not load scheduled Cook Together recipes. Refresh and try again.");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleSchedule = async () => {
+    if (!featuredRecipeId || !featuredWeekStart) return;
+    setScheduleError(null);
+    setScheduling(true);
+    try {
+      const response = await adminFetch("/api/admin/weekly-recipe", {
+        method: "POST",
+        body: JSON.stringify({ week_start: featuredWeekStart, recipe_id: featuredRecipeId }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        setScheduleError(result?.error ?? "This weekly Cook Together recipe could not be scheduled.");
+        return;
+      }
+      setScheduleError(null);
+      await load();
+    } catch {
+      setScheduleError("This weekly Cook Together recipe could not be scheduled. Please try again.");
+    } finally {
+      setScheduling(false);
+    }
+  };
 
   const buildPayload = () => {
     const ingredientsArr = form.ingredients.split("\n").map((s) => s.trim()).filter(Boolean);
@@ -662,6 +721,7 @@ function RecipesTab() {
     if (filter === "standard") return !r.cook_together;
     return true;
   });
+  const selectedWeeklyAssignment = weeklyAssignments.find((assignment) => assignment.week_start === featuredWeekStart);
 
   return (
     <div>
@@ -674,6 +734,49 @@ function RecipesTab() {
           <Plus className="h-3 w-3" /> Add Recipe
         </button>
       </SectionHeader>
+
+      <section className="mb-6 rounded-2xl border border-border bg-card p-4 space-y-3">
+        <div>
+          <h3 className="font-heading text-sm font-extrabold uppercase text-foreground">Free weekly Cook Together recipe</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Choose one existing Cook Together recipe for a Monday-starting week.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+          <div>
+            <label className={labelCls} htmlFor="featured-recipe">Recipe</label>
+            <select
+              id="featured-recipe"
+              className={inputCls}
+              value={featuredRecipeId}
+              onChange={(event) => setFeaturedRecipeId(event.target.value)}
+            >
+              <option value="">Choose recipe</option>
+              {items.filter((item) => item.cook_together).map((item) => (
+                <option key={item.id} value={item.id}>{item.title}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="featured-recipe-week-start">Week starts Monday</label>
+            <input
+              id="featured-recipe-week-start"
+              className={inputCls}
+              type="date"
+              min={currentMondayDateInput()}
+              value={featuredWeekStart}
+              onChange={(event) => setFeaturedWeekStart(event.target.value)}
+            />
+          </div>
+          <button type="button" disabled={scheduling || !featuredRecipeId || !featuredWeekStart} onClick={handleSchedule} className={btnPrimary}>
+            {scheduling ? "Scheduling…" : "Schedule recipe"}
+          </button>
+        </div>
+        {scheduleError ? <p role="alert" className="text-sm text-destructive">{scheduleError}</p> : null}
+        <div className="border-t border-border pt-3 text-xs text-muted-foreground">
+          {selectedWeeklyAssignment ? (
+            <p>Week of {selectedWeeklyAssignment.week_start}: <span className="font-semibold text-foreground">{selectedWeeklyAssignment.recipe_title}</span></p>
+          ) : <p>No recipe scheduled for this week.</p>}
+        </div>
+      </section>
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {(["all", "cook_together", "standard"] as const).map((f) => (
@@ -839,6 +942,12 @@ function workoutToForm(item: WorkoutItem) {
 
 function WorkoutsTab() {
   const [items, setItems] = useState<WorkoutItem[]>([]);
+  const [weeklyAssignments, setWeeklyAssignments] = useState<WeeklyWorkoutAssignment[]>([]);
+  const [featuredWorkoutId, setFeaturedWorkoutId] = useState("");
+  const [featuredWeekStart, setFeaturedWeekStart] = useState(currentMondayDateInput);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [workoutActionError, setWorkoutActionError] = useState<string | null>(null);
+  const [scheduling, setScheduling] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -848,8 +957,19 @@ function WorkoutsTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminFetch("/api/admin/workouts");
-      if (res.ok) setItems(await res.json());
+      const [workoutsResponse, schedulesResponse] = await Promise.all([
+        adminFetch("/api/admin/workouts"),
+        adminFetch("/api/admin/weekly-workout"),
+      ]);
+      if (workoutsResponse.ok) setItems(await workoutsResponse.json());
+      if (schedulesResponse.ok) {
+        setWeeklyAssignments(await schedulesResponse.json());
+        setScheduleError(null);
+      } else {
+        setScheduleError("Could not load scheduled workouts. Refresh and try again.");
+      }
+    } catch {
+      setScheduleError("Could not load scheduled workouts. Refresh and try again.");
     } finally {
       setLoading(false);
     }
@@ -888,6 +1008,29 @@ function WorkoutsTab() {
     }
   };
 
+  const handleSchedule = async () => {
+    if (!featuredWorkoutId || !featuredWeekStart) return;
+    setScheduleError(null);
+    setScheduling(true);
+    try {
+      const response = await adminFetch("/api/admin/weekly-workout", {
+        method: "POST",
+        body: JSON.stringify({ week_start: featuredWeekStart, workout_id: featuredWorkoutId }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        setScheduleError(result?.error ?? "This weekly workout could not be scheduled.");
+        return;
+      }
+      setScheduleError(null);
+      await load();
+    } catch {
+      setScheduleError("This weekly workout could not be scheduled. Please try again.");
+    } finally {
+      setScheduling(false);
+    }
+  };
+
   const startEdit = (item: WorkoutItem) => {
     setForm(workoutToForm(item));
     setEditId(item.id);
@@ -896,18 +1039,68 @@ function WorkoutsTab() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this workout?")) return;
-    await adminFetch("/api/admin/workouts", { method: "DELETE", body: JSON.stringify({ id }) });
+    setWorkoutActionError(null);
+    const response = await adminFetch("/api/admin/workouts", { method: "DELETE", body: JSON.stringify({ id }) });
+    if (!response.ok) {
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      setWorkoutActionError(result?.error ?? "This workout could not be deleted.");
+      return;
+    }
     if (editId === id) resetForm();
-    load();
+    await load();
   };
 
   return (
     <div>
-      <SectionHeader title="Workout Library (Free 8)" onRefresh={load}>
+      <SectionHeader title="Workout Library" onRefresh={load}>
         <button type="button" onClick={() => { if (showForm) resetForm(); else setShowForm(true); }} className={btnPrimary}>
           <Plus className="h-3 w-3" /> Add Workout
         </button>
       </SectionHeader>
+
+      <section className="mb-6 rounded-2xl border border-border bg-card p-4 space-y-3">
+        <div>
+          <h3 className="font-heading text-sm font-extrabold uppercase text-foreground">Free weekly workout</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Choose one existing Admin workout for a Monday-starting week.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+          <div>
+            <label className={labelCls} htmlFor="featured-workout">Workout</label>
+            <select
+              id="featured-workout"
+              className={inputCls}
+              value={featuredWorkoutId}
+              onChange={(event) => setFeaturedWorkoutId(event.target.value)}
+            >
+              <option value="">Choose workout</option>
+              {items.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="featured-week-start">Week starts Monday</label>
+            <input
+              id="featured-week-start"
+              className={inputCls}
+              type="date"
+              value={featuredWeekStart}
+              onChange={(event) => setFeaturedWeekStart(event.target.value)}
+            />
+          </div>
+          <button type="button" disabled={scheduling || !featuredWorkoutId || !featuredWeekStart} onClick={handleSchedule} className={btnPrimary}>
+            {scheduling ? "Scheduling…" : "Schedule workout"}
+          </button>
+        </div>
+        {scheduleError ? <p role="alert" className="text-sm text-destructive">{scheduleError}</p> : null}
+        {weeklyAssignments.length > 0 ? (
+          <ul className="space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
+            {weeklyAssignments.map((assignment) => (
+              <li key={assignment.week_start}>
+                Week of {assignment.week_start}: <span className="font-semibold text-foreground">{assignment.workout_title}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-xs text-muted-foreground">No weekly workouts scheduled yet.</p>}
+      </section>
 
       {showForm && (
         <div className="mb-6 rounded-2xl border border-border bg-card p-4 space-y-3">
@@ -972,6 +1165,8 @@ function WorkoutsTab() {
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No admin workouts yet.</p>
       ) : (
+        <>
+        {workoutActionError ? <p role="alert" className="mb-3 text-sm text-destructive">{workoutActionError}</p> : null}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {items.map((item) => (
             <div key={item.id} className={`rounded-2xl border bg-card p-4 ${editId === item.id ? "border-primary" : "border-border"}`}>
@@ -991,6 +1186,7 @@ function WorkoutsTab() {
             </div>
           ))}
         </div>
+        </>
       )}
     </div>
   );

@@ -181,6 +181,12 @@ export interface WorkoutCompletion {
   duration_actual_seconds: number;
 }
 
+export interface FreeWeeklyWorkoutAssignment {
+  week_start: string;
+  workout_id: string;
+  created_at: string;
+}
+
 export interface UserStreak {
   id: string;
   user_id: string;

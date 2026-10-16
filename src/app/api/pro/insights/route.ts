@@ -83,11 +83,16 @@ export async function GET(request: Request) {
     if (kind === "score-history") {
       const { data, error } = await context.admin
         .from("dad_score_history_view")
-        .select("week_start,total_score,mind_score,body_score,bond_score,mind_has_data,body_has_data,bond_has_data")
+        .select("week_start,total_score,mind_score,body_score,bond_score,mind_has_data,body_has_data,bond_has_data,score_model_version")
         .eq("user_id", context.userId)
         .order("week_start", { ascending: true });
       if (error) throw error;
-      const points = (data ?? []).filter((point) => point.mind_has_data || point.body_has_data || point.bond_has_data);
+      const rows = data ?? [];
+      const latestModelVersion = rows[rows.length - 1]?.score_model_version;
+      const points = rows.filter((point) =>
+        point.score_model_version === latestModelVersion
+          && (point.mind_has_data || point.body_has_data || point.bond_has_data),
+      );
       return json({ points });
     }
 

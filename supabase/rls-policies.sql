@@ -11,6 +11,9 @@ alter table mood_logs enable row level security;
 alter table sleep_logs enable row level security;
 alter table workout_sessions enable row level security;
 alter table workouts enable row level security;
+alter table free_weekly_workout_assignments enable row level security;
+alter table free_weekly_recipe_assignments enable row level security;
+grant select on table workouts to anon, authenticated;
 alter table ai_workout_generation_claims enable row level security;
 alter table workout_completions enable row level security;
 alter table user_profile enable row level security;
@@ -89,9 +92,50 @@ create policy "Users can CRUD own workout_sessions" on workout_sessions for all 
 
 -- workouts: users can read admin and own, write own only
 drop policy if exists "Users can read admin and own workouts" on workouts;
-create policy "Users can read admin and own workouts"
+drop policy if exists "Read eligible workouts" on workouts;
+create policy "Read eligible workouts"
 on workouts for select
-using (source = 'admin' or auth.uid() = user_id);
+using (
+  (source = 'admin' and (
+    public.current_user_has_pro_workout_access()
+    or exists (
+      select 1 from public.free_weekly_workout_assignments assignment
+      where assignment.workout_id = workouts.id
+        and assignment.week_start = date_trunc('week', current_date::timestamp)::date
+    )
+  ))
+  or (auth.uid() is not null and auth.uid() = user_id)
+);
+drop policy if exists "Restrict workout reads to Pro or weekly assignment" on workouts;
+create policy "Restrict workout reads to Pro or weekly assignment"
+on workouts as restrictive for select to anon, authenticated
+using (
+  (source = 'admin' and (
+    public.current_user_has_pro_workout_access()
+    or exists (
+      select 1 from public.free_weekly_workout_assignments assignment
+      where assignment.workout_id = workouts.id
+        and assignment.week_start = date_trunc('week', current_date::timestamp)::date
+    )
+  ))
+  or (auth.uid() is not null and auth.uid() = user_id)
+);
+
+revoke all on table free_weekly_workout_assignments from public, anon, authenticated;
+grant select on table free_weekly_workout_assignments to anon, authenticated;
+grant select, insert, update, delete on table free_weekly_workout_assignments to service_role;
+drop policy if exists "Read current weekly workout assignment" on free_weekly_workout_assignments;
+create policy "Read current weekly workout assignment"
+on free_weekly_workout_assignments for select to anon, authenticated
+using (week_start = date_trunc('week', current_date::timestamp)::date);
+
+revoke all on table free_weekly_recipe_assignments from public, anon, authenticated;
+grant select on table free_weekly_recipe_assignments to anon, authenticated;
+grant select, insert, update, delete on table free_weekly_recipe_assignments to service_role;
+drop policy if exists "Read current weekly recipe assignment" on free_weekly_recipe_assignments;
+create policy "Read current weekly recipe assignment"
+on free_weekly_recipe_assignments for select to anon, authenticated
+using (week_start = date_trunc('week', current_date::timestamp)::date);
 
 drop policy if exists "Users can insert own ai workouts" on workouts;
 create policy "Users can insert own ai workouts"
@@ -346,18 +390,54 @@ create policy "Users can CRUD own earned_badges" on earned_badges for all using 
 -- RECIPES AND SAVED RECIPES
 -- ============================================================
 
--- recipes: anyone can read cook together recipes (admin writes via service role)
+-- Cook Together recipes: Free reads current assignment; Pro/Trial read full library.
 drop policy if exists "Anyone can read cook together recipes" on recipes;
-create policy "Anyone can read cook together recipes"
-on recipes for select
-using (cook_together = true);
+drop policy if exists "Read eligible Cook Together recipes" on recipes;
+create policy "Read eligible Cook Together recipes"
+on recipes for select to anon, authenticated
+using (cook_together = true and public.can_access_cook_together_recipe(id));
+drop policy if exists "Restrict Cook Together recipe reads to Pro or weekly assignment" on recipes;
+create policy "Restrict Cook Together recipe reads to Pro or weekly assignment"
+on recipes as restrictive for select to anon, authenticated
+using (cook_together is not true or public.can_access_cook_together_recipe(id));
 
 -- user_saved_recipes: users can CRUD own saved recipes
 drop policy if exists "Users can CRUD own saved recipes" on user_saved_recipes;
-create policy "Users can CRUD own saved recipes"
-on user_saved_recipes for all
+drop policy if exists "Users can read own saved recipe ids" on user_saved_recipes;
+drop policy if exists "Users can save accessible recipes" on user_saved_recipes;
+drop policy if exists "Users can update own accessible saved recipes" on user_saved_recipes;
+drop policy if exists "Users can delete own saved recipes" on user_saved_recipes;
+drop policy if exists "Restrict saved recipe access" on user_saved_recipes;
+drop policy if exists "Restrict reading own saved recipe ids" on user_saved_recipes;
+drop policy if exists "Restrict saving accessible recipes" on user_saved_recipes;
+drop policy if exists "Restrict updating accessible saved recipes" on user_saved_recipes;
+drop policy if exists "Restrict deleting own saved recipes" on user_saved_recipes;
+create policy "Users can read own saved recipe ids"
+on user_saved_recipes for select to authenticated
+using (auth.uid() = user_id);
+create policy "Users can save accessible recipes"
+on user_saved_recipes for insert to authenticated
+with check (auth.uid() = user_id and public.can_save_recipe(recipe_id));
+create policy "Users can update own accessible saved recipes"
+on user_saved_recipes for update to authenticated
 using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+with check (auth.uid() = user_id and public.can_save_recipe(recipe_id));
+create policy "Users can delete own saved recipes"
+on user_saved_recipes for delete to authenticated
+using (auth.uid() = user_id);
+create policy "Restrict reading own saved recipe ids"
+on user_saved_recipes as restrictive for select to authenticated
+using (auth.uid() = user_id);
+create policy "Restrict saving accessible recipes"
+on user_saved_recipes as restrictive for insert to authenticated
+with check (auth.uid() = user_id and public.can_save_recipe(recipe_id));
+create policy "Restrict updating accessible saved recipes"
+on user_saved_recipes as restrictive for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id and public.can_save_recipe(recipe_id));
+create policy "Restrict deleting own saved recipes"
+on user_saved_recipes as restrictive for delete to authenticated
+using (auth.uid() = user_id);
 
 -- ============================================================
 -- SEARCH AND INTEGRATION HISTORY

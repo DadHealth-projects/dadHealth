@@ -94,6 +94,13 @@ create table if not exists workouts (
   created_at timestamptz default now()
 );
 
+-- One Admin-selected Free workout per Monday-starting calendar week.
+create table if not exists free_weekly_workout_assignments (
+  week_start date primary key check (extract(isodow from week_start) = 1),
+  workout_id uuid not null references workouts(id) on delete restrict,
+  created_at timestamptz not null default now()
+);
+
 -- Server-only monthly allowance claims for AI workout generation.
 create table if not exists ai_workout_generation_claims (
   id uuid primary key default gen_random_uuid(),
@@ -1533,6 +1540,13 @@ create table if not exists recipes (
   created_at timestamptz default now()
 );
 
+-- One Admin-selected Free Cook Together recipe per Monday-starting week.
+create table if not exists free_weekly_recipe_assignments (
+  week_start date primary key check (extract(isodow from week_start) = 1),
+  recipe_id uuid not null references recipes(id) on delete restrict,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists user_saved_recipes (
   user_id uuid references auth.users(id) on delete cascade not null,
   recipe_id uuid references recipes(id) on delete cascade not null,
@@ -2234,88 +2248,6 @@ begin
 end;
 $$;
 
--- complete cook together recipe
-create or replace function public.complete_cook_together_recipe(
-  p_recipe_id uuid
-)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_user_id uuid := auth.uid();
-  v_recipe recipes%rowtype;
-begin
-  if v_user_id is null then
-    raise exception 'Not authenticated';
-  end if;
-
-  select *
-  into v_recipe
-  from recipes
-  where id = p_recipe_id
-    and cook_together = true;
-
-  if not found then
-    raise exception 'Recipe not found';
-  end if;
-
-  insert into bond_logs (
-    user_id,
-    recipe_id,
-    activity_type,
-    quality,
-    minutes
-  )
-  values (
-    v_user_id,
-    p_recipe_id,
-    'cook_together_recipe',
-    4,
-    v_recipe.prep_mins
-  );
-
-  -- Cook Together should not be stored as a workout session.
-  -- The activity is tracked in bond_logs and active minutes.
-  /*
-  insert into workout_sessions (
-    user_id,
-    exercise_name,
-    duration_minutes,
-    calories,
-    exercises_completed,
-    performed_at
-  )
-  values (
-    v_user_id,
-    'Cook Together: ' || v_recipe.title,
-    v_recipe.prep_mins,
-    0,
-    1,
-    now()
-  );
-  */
-
-  insert into body_metrics (
-    user_id,
-    metric_type,
-    value,
-    recorded_at
-  )
-  values (
-    v_user_id,
-    'active_mins',
-    v_recipe.prep_mins,
-    now()
-  );
-
-  perform update_streak(v_user_id);
-end;
-$$;
-
-grant execute on function public.complete_cook_together_recipe(uuid) to authenticated;
-
 -- =========================
 -- CO-PARENTING (shared custody calendar)
 -- Defined before VIEWS because dad_score_view references co_parenting_schedules.
@@ -2701,6 +2633,8 @@ create index if not exists idx_sleep_user_date on sleep_logs(user_id, date);
 create index if not exists idx_workout_user on workout_sessions(user_id);
 create index if not exists idx_workouts_source_created on workouts(source, created_at desc);
 create index if not exists idx_workouts_user_created on workouts(user_id, created_at desc);
+create index if not exists free_weekly_workout_assignments_workout_id_idx on free_weekly_workout_assignments(workout_id);
+create index if not exists free_weekly_recipe_assignments_recipe_id_idx on free_weekly_recipe_assignments(recipe_id);
 create index if not exists idx_workout_completions_user_completed on workout_completions(user_id, completed_at desc);
 create index if not exists idx_tasks_user_date on daily_tasks(user_id, date);
 create index if not exists idx_recipes_cook_together on recipes(cook_together);
@@ -3255,6 +3189,168 @@ $$;
 revoke all on function public.user_has_pro_access(uuid) from public, anon, authenticated;
 grant execute on function public.user_has_pro_access(uuid) to service_role;
 
+create or replace function public.current_user_has_pro_workout_access()
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null and public.user_has_pro_access(auth.uid());
+$$;
+
+revoke all on function public.current_user_has_pro_workout_access() from public;
+grant execute on function public.current_user_has_pro_workout_access() to anon, authenticated, service_role;
+
+create or replace function public.admin_set_free_weekly_workout(
+  p_week_start date,
+  p_workout_id uuid
+)
+returns public.free_weekly_workout_assignments
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  saved_assignment public.free_weekly_workout_assignments;
+  current_week_start date := date_trunc('week', current_date::timestamp)::date;
+begin
+  if p_week_start is null or extract(isodow from p_week_start) <> 1 then
+    raise exception 'Week start must be a Monday.' using errcode = '22023';
+  end if;
+  if p_week_start < current_week_start then
+    raise exception 'Past weeks cannot be rescheduled.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.workouts workout
+    where workout.id = p_workout_id and workout.source = 'admin' and workout.user_id is null
+  ) then
+    raise exception 'Choose an existing Admin workout.' using errcode = '22023';
+  end if;
+  insert into public.free_weekly_workout_assignments (week_start, workout_id)
+  values (p_week_start, p_workout_id)
+  on conflict (week_start) do update set workout_id = excluded.workout_id
+  returning * into saved_assignment;
+  return saved_assignment;
+end;
+$$;
+
+revoke all on function public.admin_set_free_weekly_workout(date, uuid) from public, anon, authenticated;
+grant execute on function public.admin_set_free_weekly_workout(date, uuid) to service_role;
+
+create or replace function public.can_access_cook_together_recipe(p_recipe_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select exists (
+    select 1
+    from public.recipes recipe
+    where recipe.id = p_recipe_id
+      and recipe.cook_together = true
+      and (
+        (auth.uid() is not null and public.user_has_pro_access(auth.uid()))
+        or exists (
+          select 1 from public.free_weekly_recipe_assignments assignment
+          where assignment.recipe_id = recipe.id
+            and assignment.week_start = date_trunc('week', current_date::timestamp)::date
+        )
+      )
+  );
+$$;
+revoke all on function public.can_access_cook_together_recipe(uuid) from public;
+grant execute on function public.can_access_cook_together_recipe(uuid) to anon, authenticated, service_role;
+
+create or replace function public.can_save_recipe(p_recipe_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select exists (
+    select 1 from public.recipes recipe
+    where recipe.id = p_recipe_id
+      and (recipe.cook_together is not true or public.can_access_cook_together_recipe(recipe.id))
+  );
+$$;
+revoke all on function public.can_save_recipe(uuid) from public;
+grant execute on function public.can_save_recipe(uuid) to authenticated, service_role;
+
+create or replace function public.complete_cook_together_recipe(p_recipe_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_recipe recipes%rowtype;
+begin
+  if v_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_recipe
+  from recipes
+  where id = p_recipe_id
+    and cook_together = true
+    and public.can_access_cook_together_recipe(id);
+
+  if not found then
+    raise exception 'Recipe unavailable.' using errcode = '42501';
+  end if;
+
+  insert into bond_logs (user_id, recipe_id, activity_type, quality, minutes)
+  values (v_user_id, p_recipe_id, 'cook_together_recipe', 4, v_recipe.prep_mins);
+
+  insert into body_metrics (user_id, metric_type, value, recorded_at)
+  values (v_user_id, 'active_mins', v_recipe.prep_mins, now());
+
+  perform update_streak(v_user_id);
+end;
+$$;
+revoke all on function public.complete_cook_together_recipe(uuid) from public, anon;
+grant execute on function public.complete_cook_together_recipe(uuid) to authenticated, service_role;
+
+create or replace function public.admin_set_free_weekly_recipe(
+  p_week_start date,
+  p_recipe_id uuid
+)
+returns public.free_weekly_recipe_assignments
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  saved_assignment public.free_weekly_recipe_assignments;
+  current_week_start date := date_trunc('week', current_date::timestamp)::date;
+begin
+  if p_week_start is null or extract(isodow from p_week_start) <> 1 then
+    raise exception 'Week start must be a Monday.' using errcode = '22023';
+  end if;
+  if p_week_start < current_week_start then
+    raise exception 'Past weeks cannot be rescheduled.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.recipes recipe
+    where recipe.id = p_recipe_id and recipe.cook_together = true
+  ) then
+    raise exception 'Choose an existing Cook Together recipe.' using errcode = '22023';
+  end if;
+
+  insert into public.free_weekly_recipe_assignments (week_start, recipe_id)
+  values (p_week_start, p_recipe_id)
+  on conflict (week_start) do update set recipe_id = excluded.recipe_id
+  returning * into saved_assignment;
+  return saved_assignment;
+end;
+$$;
+revoke all on function public.admin_set_free_weekly_recipe(date, uuid) from public, anon, authenticated;
+grant execute on function public.admin_set_free_weekly_recipe(date, uuid) to service_role;
+
 create table if not exists public.user_streak_freezes (
   user_id uuid not null references auth.users(id) on delete cascade,
   week_start date not null,
@@ -3412,10 +3508,6 @@ on public.user_streaks for select to authenticated
 using (auth.uid() = user_id);
 revoke insert, update, delete on table public.user_streaks from anon, authenticated;
 grant select on table public.user_streaks to authenticated;
-
--- Pro history is returned only through the authenticated server insights API.
-revoke all on table public.dad_score_history_view from anon, authenticated;
-grant select on table public.dad_score_history_view to service_role;
 
 -- Change 07 manual activity logging and canonical score integration
 
@@ -3945,6 +4037,65 @@ alter table public.likes enable row level security;
 alter table public.saved_posts enable row level security;
 alter table public.user_circles enable row level security;
 alter table public.comment_likes enable row level security;
+alter table public.recipes enable row level security;
+alter table public.user_saved_recipes enable row level security;
+alter table public.free_weekly_recipe_assignments enable row level security;
+
+revoke all on table public.free_weekly_recipe_assignments from public, anon, authenticated;
+grant select on table public.free_weekly_recipe_assignments to anon, authenticated;
+grant select, insert, update, delete on table public.free_weekly_recipe_assignments to service_role;
+
+drop policy if exists "Anyone can read cook together recipes" on public.recipes;
+drop policy if exists "Read eligible Cook Together recipes" on public.recipes;
+create policy "Read eligible Cook Together recipes"
+on public.recipes for select to anon, authenticated
+using (cook_together = true and public.can_access_cook_together_recipe(id));
+drop policy if exists "Restrict Cook Together recipe reads to Pro or weekly assignment" on public.recipes;
+create policy "Restrict Cook Together recipe reads to Pro or weekly assignment"
+on public.recipes as restrictive for select to anon, authenticated
+using (cook_together is not true or public.can_access_cook_together_recipe(id));
+
+drop policy if exists "Read current weekly recipe assignment" on public.free_weekly_recipe_assignments;
+create policy "Read current weekly recipe assignment"
+on public.free_weekly_recipe_assignments for select to anon, authenticated
+using (week_start = date_trunc('week', current_date::timestamp)::date);
+
+drop policy if exists "Users can CRUD own saved recipes" on public.user_saved_recipes;
+drop policy if exists "Users can read own saved recipe ids" on public.user_saved_recipes;
+drop policy if exists "Users can save accessible recipes" on public.user_saved_recipes;
+drop policy if exists "Users can update own accessible saved recipes" on public.user_saved_recipes;
+drop policy if exists "Users can delete own saved recipes" on public.user_saved_recipes;
+drop policy if exists "Restrict saved recipe access" on public.user_saved_recipes;
+drop policy if exists "Restrict reading own saved recipe ids" on public.user_saved_recipes;
+drop policy if exists "Restrict saving accessible recipes" on public.user_saved_recipes;
+drop policy if exists "Restrict updating accessible saved recipes" on public.user_saved_recipes;
+drop policy if exists "Restrict deleting own saved recipes" on public.user_saved_recipes;
+create policy "Users can read own saved recipe ids"
+on public.user_saved_recipes for select to authenticated
+using (auth.uid() = user_id);
+create policy "Users can save accessible recipes"
+on public.user_saved_recipes for insert to authenticated
+with check (auth.uid() = user_id and public.can_save_recipe(recipe_id));
+create policy "Users can update own accessible saved recipes"
+on public.user_saved_recipes for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id and public.can_save_recipe(recipe_id));
+create policy "Users can delete own saved recipes"
+on public.user_saved_recipes for delete to authenticated
+using (auth.uid() = user_id);
+create policy "Restrict reading own saved recipe ids"
+on public.user_saved_recipes as restrictive for select to authenticated
+using (auth.uid() = user_id);
+create policy "Restrict saving accessible recipes"
+on public.user_saved_recipes as restrictive for insert to authenticated
+with check (auth.uid() = user_id and public.can_save_recipe(recipe_id));
+create policy "Restrict updating accessible saved recipes"
+on public.user_saved_recipes as restrictive for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id and public.can_save_recipe(recipe_id));
+create policy "Restrict deleting own saved recipes"
+on public.user_saved_recipes as restrictive for delete to authenticated
+using (auth.uid() = user_id);
 
 drop policy if exists "Anyone can read circles" on public.circles;
 drop policy if exists "Read public circles or joined private circles" on public.circles;
@@ -4125,3 +4276,276 @@ comment on column public.posts.circle_id is
   'Circle for a Circle-scoped post. NULL preserves legacy global posts and older-client writes.';
 comment on column public.circles.visibility is
   'Public Circles are readable by everyone; private Circle content requires membership.';
+-- Current versioned Mind 60/40 and Body/Bond 60/10/30 scoring model. Keep aligned with migration 20261016120000_pillar_score_60_40_10_30.sql.
+begin;
+
+-- Version the scoring transition separately from Change 07. Start on the next
+-- Monday so no in-progress week mixes formulas. Future scoring models get rows.
+create table if not exists public.dad_score_model_config (
+  model_version text primary key,
+  effective_week_start date not null check (extract(isodow from effective_week_start) = 1),
+  manual_weight numeric not null check (manual_weight between 0 and 100),
+  mind_checkin_weight numeric not null check (mind_checkin_weight between 0 and 100),
+  checkin_weight numeric not null check (checkin_weight between 0 and 100),
+  other_weight numeric not null check (other_weight between 0 and 100),
+  created_at timestamptz not null default now(),
+  constraint dad_score_model_config_mind_weights_sum_to_100
+    check (manual_weight + mind_checkin_weight = 100),
+  constraint dad_score_model_config_body_bond_weights_sum_to_100
+    check (manual_weight + checkin_weight + other_weight = 100)
+);
+
+alter table public.dad_score_model_config enable row level security;
+drop policy if exists dad_score_model_config_read on public.dad_score_model_config;
+create policy dad_score_model_config_read on public.dad_score_model_config
+  for select to authenticated using (true);
+revoke all on public.dad_score_model_config from public, anon;
+revoke insert, update, delete on public.dad_score_model_config from authenticated;
+grant select on public.dad_score_model_config to authenticated, service_role;
+
+insert into public.dad_score_model_config (
+  model_version, effective_week_start, manual_weight, mind_checkin_weight, checkin_weight, other_weight
+)
+values (
+  '60_40_10_30_v1', date_trunc('week', current_date)::date + 7, 60, 40, 10, 30
+)
+on conflict (model_version) do nothing;
+
+create or replace function public.calculate_dad_score_period(
+  p_user_id uuid,
+  p_start_date date,
+  p_end_date date,
+  p_start_time timestamptz,
+  p_end_time timestamptz
+)
+returns table (
+  mind_score numeric,
+  body_score numeric,
+  bond_score numeric,
+  mind_has_data boolean,
+  body_has_data boolean,
+  bond_has_data boolean
+)
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_nonmanual record;
+  v_manual record;
+  v_checkins record;
+  v_change_07_week date;
+  v_model_effective_week date;
+  v_manual_weight numeric;
+  v_mind_checkin_weight numeric;
+  v_checkin_weight numeric;
+  v_other_weight numeric;
+  v_mind_checkin_days integer;
+begin
+  if auth.role() = 'authenticated' and auth.uid() is distinct from p_user_id then
+    raise exception using errcode = '42501', message = 'score_user_mismatch';
+  end if;
+
+  select effective_week_start into v_change_07_week
+  from public.activity_score_config where singleton = true;
+  if v_change_07_week is null then
+    raise exception using errcode = '55000', message = 'activity_score_config_missing';
+  end if;
+
+  select effective_week_start, manual_weight, mind_checkin_weight, checkin_weight, other_weight
+  into v_model_effective_week, v_manual_weight, v_mind_checkin_weight, v_checkin_weight, v_other_weight
+  from public.dad_score_model_config where model_version = '60_40_10_30_v1';
+  if v_model_effective_week is null then
+    raise exception using errcode = '55000', message = 'score_model_config_missing';
+  end if;
+
+  select * into v_nonmanual
+  from public.calculate_dad_score_nonmanual_period(
+    p_user_id, p_start_date, p_end_date, p_start_time, p_end_time
+  );
+
+  -- Preserve the original pre-Change-07 model for closed historical weeks.
+  if p_start_date < v_change_07_week then
+    mind_score := v_nonmanual.mind_score;
+    body_score := v_nonmanual.body_score;
+    bond_score := v_nonmanual.bond_score;
+    mind_has_data := v_nonmanual.mind_has_data;
+    body_has_data := v_nonmanual.body_has_data;
+    bond_has_data := v_nonmanual.bond_has_data;
+    return next;
+    return;
+  end if;
+
+  select * into v_manual
+  from public.calculate_manual_activity_period(p_user_id, p_start_date, p_end_date);
+
+  -- Preserve the existing Change 07 formula for its full historical interval.
+  if p_start_date < v_model_effective_week then
+    mind_score := least(100, greatest(0, coalesce(v_nonmanual.mind_score, 0)) * 0.30 + coalesce(v_manual.mind_manual_points, 0));
+    body_score := least(100, greatest(0, coalesce(v_nonmanual.body_score, 0)) * 0.30 + coalesce(v_manual.body_manual_points, 0));
+    bond_score := least(100, greatest(0, coalesce(v_nonmanual.bond_score, 0)) * 0.30 + coalesce(v_manual.bond_manual_points, 0));
+    mind_has_data := v_nonmanual.mind_has_data or v_manual.mind_manual_has_data;
+    body_has_data := v_nonmanual.body_has_data or v_manual.body_manual_has_data;
+    bond_has_data := v_nonmanual.bond_has_data or v_manual.bond_manual_has_data;
+    return next;
+    return;
+  end if;
+
+  -- Mind check-in credit is proportional to distinct days with a Mood response.
+  -- Answers, including historical Stress, never alter score credit.
+  select count(distinct m.date)::integer into v_mind_checkin_days
+  from public.mood_logs m
+  where m.user_id = p_user_id and m.date >= p_start_date and m.date < p_end_date
+    and m.mood_value is not null;
+
+  -- Body and Bond receive their participation credit when Energy or Connection
+  -- is present at least once in the week. Answer values never affect credit.
+  select
+    exists (
+      select 1 from public.mood_logs m
+      where m.user_id = p_user_id and m.date >= p_start_date and m.date < p_end_date
+        and m.energy_level is not null
+    ) as body_completed,
+    exists (
+      select 1 from public.mood_logs m
+      where m.user_id = p_user_id and m.date >= p_start_date and m.date < p_end_date
+        and m.connection_level is not null
+    ) as bond_completed
+  into v_checkins;
+
+  -- Mood and Stress remain recorded for wellbeing guidance and history, but
+  -- answer values do not score. Seven daily Mind check-ins earn 40 points.
+  mind_score := least(100,
+    coalesce(v_manual.mind_manual_points, 0) * v_manual_weight / 70.0
+      + least(coalesce(v_mind_checkin_days, 0), 7) * v_mind_checkin_weight / 7.0
+  );
+  body_score := least(100,
+    coalesce(v_manual.body_manual_points, 0) * v_manual_weight / 70.0
+      + case when v_checkins.body_completed then v_checkin_weight else 0 end
+      + greatest(0, coalesce(v_nonmanual.body_score, 0)) * v_other_weight / 100.0
+  );
+  bond_score := least(100,
+    coalesce(v_manual.bond_manual_points, 0) * v_manual_weight / 70.0
+      + case when v_checkins.bond_completed then v_checkin_weight else 0 end
+      + greatest(0, coalesce(v_nonmanual.bond_score, 0)) * v_other_weight / 100.0
+  );
+
+  mind_has_data := v_manual.mind_manual_has_data or coalesce(v_mind_checkin_days, 0) > 0;
+  body_has_data := v_manual.body_manual_has_data or v_checkins.body_completed or v_nonmanual.body_has_data;
+  bond_has_data := v_manual.bond_manual_has_data or v_checkins.bond_completed or v_nonmanual.bond_has_data;
+  return next;
+end;
+$$;
+
+revoke all on function public.calculate_dad_score_period(uuid, date, date, timestamptz, timestamptz) from public, anon;
+grant execute on function public.calculate_dad_score_period(uuid, date, date, timestamptz, timestamptz) to authenticated, service_role;
+
+-- Score shape stays compatible. Suppress trend comparison in the first full
+-- week of the new formula; comparisons resume once both weeks use this model.
+create or replace view public.dad_score_view
+  with (security_invoker = true)
+as
+select
+  p.user_id,
+  current_scores.mind_score,
+  current_scores.body_score,
+  current_scores.bond_score::bigint as bond_score,
+  case when previous_scores.mind_has_data and current_week.week_start > greatest(score_config.effective_week_start, model_config.effective_week_start) then previous_scores.mind_score end as previous_mind_score,
+  case when previous_scores.body_has_data and current_week.week_start > greatest(score_config.effective_week_start, model_config.effective_week_start) then previous_scores.body_score end as previous_body_score,
+  case when previous_scores.bond_has_data and current_week.week_start > greatest(score_config.effective_week_start, model_config.effective_week_start) then previous_scores.bond_score end as previous_bond_score,
+  case when previous_scores.mind_has_data and current_week.week_start > greatest(score_config.effective_week_start, model_config.effective_week_start)
+    then current_scores.mind_score - previous_scores.mind_score end as mind_week_change,
+  case when previous_scores.body_has_data and current_week.week_start > greatest(score_config.effective_week_start, model_config.effective_week_start)
+    then current_scores.body_score - previous_scores.body_score end as body_week_change,
+  case when previous_scores.bond_has_data and current_week.week_start > greatest(score_config.effective_week_start, model_config.effective_week_start)
+    then current_scores.bond_score - previous_scores.bond_score end as bond_week_change,
+  round((current_scores.mind_score + current_scores.body_score + current_scores.bond_score) / 3.0)::integer as total_score,
+  case
+    when current_scores.mind_score <= current_scores.body_score and current_scores.mind_score <= current_scores.bond_score then 'mind'
+    when current_scores.body_score <= current_scores.bond_score then 'body'
+    else 'bond'
+  end as weakest_pillar,
+  case
+    when not exists (select 1 from public.mood_logs m where m.user_id = p.user_id and m.date = current_date) then 'checkin'::text
+    else (
+      select actions.action from lateral (values
+        (current_scores.mind_score, true, 'mind_breathing'::text, 1),
+        (current_scores.body_score, not exists (
+          select 1 from public.workout_sessions w where w.user_id = p.user_id
+            and w.performed_at >= current_date::timestamptz and w.performed_at < (current_date + 1)::timestamptz
+        ) and not exists (
+          select 1 from public.activity_logs a where a.user_id = p.user_id and a.activity_date = current_date
+            and (a.pillar = 'body' or (a.pillar = 'bond' and a.activity_type = 'mini_partners'))
+        ), 'body_workout'::text, 2),
+        (current_scores.bond_score, not exists (
+          select 1 from public.journal_entries j where j.user_id = p.user_id
+            and j.created_at >= current_date::timestamptz and j.created_at < (current_date + 1)::timestamptz
+        ) and not exists (
+          select 1 from public.bond_logs bl where bl.user_id = p.user_id
+            and bl.created_at >= current_date::timestamptz and bl.created_at < (current_date + 1)::timestamptz
+        ) and not exists (
+          select 1 from public.present_dad_sessions pds where pds.user_id = p.user_id and pds.status = 'completed'
+            and pds.completed_at >= current_date::timestamptz and pds.completed_at < (current_date + 1)::timestamptz
+        ) and not exists (
+          select 1 from public.activity_logs a where a.user_id = p.user_id and a.pillar = 'bond' and a.activity_date = current_date
+        ), 'bond_present_mode'::text, 3)
+      ) as actions(score, available, action, priority)
+      where actions.available order by actions.score, actions.priority limit 1
+    )
+  end as recommended_action,
+  public.is_dad_score_baseline_available(
+    p.created_at, score_config.effective_week_start, current_week.week_start
+  ) as baseline_available
+from public.user_profile p
+cross join (select date_trunc('week', current_date)::date as week_start) current_week
+cross join public.activity_score_config score_config
+cross join (
+  select * from public.dad_score_model_config where model_version = '60_40_10_30_v1'
+) model_config
+cross join lateral public.calculate_dad_score_period(
+  p.user_id, current_week.week_start, current_week.week_start + 7,
+  current_week.week_start::timestamptz, (current_week.week_start + 7)::timestamptz
+) current_scores
+cross join lateral public.calculate_dad_score_period(
+  p.user_id, current_week.week_start - 7, current_week.week_start,
+  (current_week.week_start - 7)::timestamptz, current_week.week_start::timestamptz
+) previous_scores;
+
+grant select on public.dad_score_view to authenticated;
+
+-- Keep raw history, but label each period's formula so the Pro API can avoid
+-- comparing bars calculated under different models.
+create or replace view public.dad_score_history_view
+  with (security_invoker = true)
+as
+select
+  p.user_id,
+  weeks.week_start,
+  round((scores.mind_score + scores.body_score + scores.bond_score) / 3.0)::integer as total_score,
+  scores.mind_score,
+  scores.body_score,
+  scores.bond_score,
+  scores.mind_has_data,
+  scores.body_has_data,
+  scores.bond_has_data,
+  case
+    when weeks.week_start < activity_config.effective_week_start then 'legacy'
+    when weeks.week_start < model_config.effective_week_start then 'change_07_70_30'
+    else model_config.model_version
+  end as score_model_version
+from public.user_profile p
+cross join generate_series(0, 7) as offsets(week_offset)
+cross join lateral (
+  select (date_trunc('week', current_date)::date - (week_offset * 7))::date as week_start
+) weeks
+cross join public.activity_score_config activity_config
+cross join (
+  select * from public.dad_score_model_config where model_version = '60_40_10_30_v1'
+) model_config
+cross join lateral public.calculate_dad_score_period(
+  p.user_id, weeks.week_start, weeks.week_start + 7,
+  weeks.week_start::timestamptz, (weeks.week_start + 7)::timestamptz
+) scores;
+
+revoke all on public.dad_score_history_view from anon, authenticated;
+grant select on public.dad_score_history_view to service_role;
+
+commit;

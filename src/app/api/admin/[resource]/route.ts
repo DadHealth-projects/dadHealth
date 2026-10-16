@@ -680,6 +680,28 @@ export async function DELETE(
     }
   }
 
+  if (resource === "workouts") {
+    if (typeof id !== "string" || !UUID_PATTERN.test(id)) {
+      return NextResponse.json({ error: "A valid workout ID is required." }, { status: 400 });
+    }
+    try {
+      const { count, error } = await supabase
+        .from("free_weekly_workout_assignments")
+        .select("week_start", { count: "exact", head: true })
+        .eq("workout_id", id);
+      if (error) throw error;
+      if ((count ?? 0) > 0) {
+        return NextResponse.json(
+          { error: "This workout has weekly assignments and cannot be deleted. Schedule a replacement instead." },
+          { status: 409 },
+        );
+      }
+    } catch (err) {
+      console.error("[admin DELETE workouts assignment check]", err);
+      return NextResponse.json({ error: "This workout could not be deleted. Please try again." }, { status: 500 });
+    }
+  }
+
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   // Banning a user: delete their auth account. FK cascades remove all their data.
