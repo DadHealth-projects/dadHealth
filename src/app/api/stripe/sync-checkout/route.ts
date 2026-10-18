@@ -50,22 +50,29 @@ export async function POST(request: Request) {
           ? (subExpanded as Stripe.Subscription).id
           : null;
 
-    let status: string | null = null;
-    if (typeof subExpanded === "object" && subExpanded && "status" in subExpanded) {
-      status = (subExpanded as Stripe.Subscription).status;
-    } else if (subId) {
-      const sub = await stripe.subscriptions.retrieve(subId);
-      status = sub.status;
+    const verificationStartedAt = new Date().toISOString();
+    let subscription: Stripe.Subscription | null =
+      typeof subExpanded === "object" && subExpanded && "status" in subExpanded
+        ? subExpanded as Stripe.Subscription
+        : null;
+    if (!subscription && subId) subscription = await stripe.subscriptions.retrieve(subId);
+    const status = subscription?.status ?? null;
+
+    if (!customerId || !subId || !status || !subscription) {
+      return NextResponse.json({ error: "Subscription not ready yet" }, { status: 422 });
     }
 
-    if (!customerId || !subId || !status) {
-      return NextResponse.json({ error: "Subscription not ready yet" }, { status: 422 });
+    if (subscription.current_period_end == null) {
+      return NextResponse.json({ error: "Subscription expiry is not available yet" }, { status: 503 });
     }
 
     await syncUserProfile(user.id, {
       stripe_customer_id: customerId,
       stripe_subscription_id: subId,
       subscription_status: status,
+      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      auto_renews: !subscription.cancel_at_period_end && subscription.status !== "canceled",
+      last_verified_at: verificationStartedAt,
     });
 
     return NextResponse.json({ ok: true, status });

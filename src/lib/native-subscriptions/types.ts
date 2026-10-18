@@ -45,7 +45,7 @@ export function entitlementGrantsAccess(
   now = Date.now(),
 ): boolean {
   if (!ACCESS_GRANTING_STATUSES.has(entitlement.status)) return false;
-  if (!entitlement.current_period_end) return true;
+  if (!entitlement.current_period_end) return false;
   const periodEnd = Date.parse(entitlement.current_period_end);
   return Number.isFinite(periodEnd) && periodEnd > now;
 }

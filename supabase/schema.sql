@@ -385,6 +385,8 @@ alter table user_profile add column if not exists subscription_status text;
 -- Keep the committed schema safe to reapply without removing it.
 alter table public.user_profile
   add column if not exists is_pro boolean not null default false;
+alter table public.user_profile
+  add column if not exists manual_pro_grant boolean not null default false;
 
 -- Profile owners still need to update their normal profile fields, but billing
 -- and entitlement fields must only be changed by trusted server code.
@@ -397,12 +399,14 @@ begin
   if coalesce(auth.role(), '') in ('anon', 'authenticated') then
     if tg_op = 'INSERT' then
       if new.is_pro is distinct from false
+        or new.manual_pro_grant is distinct from false
         or new.stripe_customer_id is not null
         or new.stripe_subscription_id is not null
         or new.subscription_status is not null then
         raise exception 'Subscription fields are server managed' using errcode = '42501';
       end if;
     elsif new.is_pro is distinct from old.is_pro
+      or new.manual_pro_grant is distinct from old.manual_pro_grant
       or new.stripe_customer_id is distinct from old.stripe_customer_id
       or new.stripe_subscription_id is distinct from old.stripe_subscription_id
       or new.subscription_status is distinct from old.subscription_status then
@@ -560,11 +564,14 @@ create or replace function public.refresh_effective_subscription_profile(p_user_
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   provider_status text;
   compatibility_status text;
+  v_stripe_customer_id text;
+  v_stripe_subscription_id text;
+  has_stripe_snapshot boolean := false;
 begin
   perform pg_advisory_xact_lock(hashtextextended('subscription:' || p_user_id::text, 0));
 
@@ -573,19 +580,27 @@ begin
   from public.subscription_entitlements e
   where e.user_id = p_user_id
     and e.status in ('active', 'trialing', 'grace_period')
-    and (e.current_period_end is null or e.current_period_end > now())
+    and e.current_period_end is not null
+    and e.current_period_end > now()
   order by
     case e.status when 'trialing' then 0 when 'grace_period' then 1 else 2 end,
-    e.current_period_end desc nulls first,
+    e.current_period_end desc,
+    e.last_verified_at desc nulls last,
     e.updated_at desc
   limit 1;
 
   if provider_status is null then
-    select e.status
+    select case
+      when e.status in ('active', 'trialing', 'grace_period')
+        and e.current_period_end is null then 'unknown'
+      when e.status in ('active', 'trialing', 'grace_period')
+        and e.current_period_end <= now() then 'expired'
+      else e.status
+    end
       into provider_status
     from public.subscription_entitlements e
     where e.user_id = p_user_id
-    order by e.updated_at desc
+    order by e.last_verified_at desc nulls last, e.updated_at desc
     limit 1;
   end if;
 
@@ -595,11 +610,34 @@ begin
     else provider_status
   end;
 
+  select e.provider_account_id, e.provider_subscription_id
+    into v_stripe_customer_id, v_stripe_subscription_id
+  from public.subscription_entitlements e
+  where e.user_id = p_user_id
+    and e.provider = 'stripe'
+  order by e.last_verified_at desc nulls last,
+           e.updated_at desc,
+           e.created_at desc
+  limit 1;
+  has_stripe_snapshot := found;
+
   update public.user_profile
   set subscription_status = compatibility_status,
+      stripe_customer_id = case
+        when has_stripe_snapshot then coalesce(v_stripe_customer_id, stripe_customer_id)
+        else stripe_customer_id
+      end,
+      stripe_subscription_id = case
+        when has_stripe_snapshot then v_stripe_subscription_id
+        else stripe_subscription_id
+      end,
       updated_at = now()
   where user_id = p_user_id
-    and subscription_status is distinct from compatibility_status;
+    and (
+      subscription_status is distinct from compatibility_status
+      or (has_stripe_snapshot and stripe_customer_id is distinct from coalesce(v_stripe_customer_id, stripe_customer_id))
+      or (has_stripe_snapshot and stripe_subscription_id is distinct from v_stripe_subscription_id)
+    );
 end;
 $$;
 
@@ -663,6 +701,9 @@ begin
   if coalesce(auth.role(), '') <> 'service_role' then
     raise exception 'Service role required' using errcode = '42501';
   end if;
+  if p_status in ('active', 'trialing', 'grace_period') and p_current_period_end is null then
+    raise exception 'Verified subscription expiry is required for Pro access' using errcode = '22023';
+  end if;
 
   perform pg_advisory_xact_lock(hashtextextended('subscription:' || p_user_id::text, 0));
 
@@ -675,7 +716,7 @@ begin
     raise exception 'Subscription already belongs to another user' using errcode = '23505';
   end if;
 
-  insert into public.subscription_entitlements (
+  insert into public.subscription_entitlements as current_entitlement (
     user_id, provider, provider_subscription_id, provider_account_id,
     latest_transaction_id, product_id, plan, status, current_period_end,
     trial_end, auto_renews, environment, last_verified_at, updated_at
@@ -697,7 +738,18 @@ begin
     environment = excluded.environment,
     last_verified_at = excluded.last_verified_at,
     updated_at = now()
+  -- Equal timestamps are ambiguous at millisecond precision; reject them so
+  -- a concurrent tie cannot replace the first persisted snapshot.
+  where current_entitlement.last_verified_at is null
+     or excluded.last_verified_at > current_entitlement.last_verified_at
   returning id into entitlement_id;
+
+  if entitlement_id is null then
+    select id into entitlement_id
+    from public.subscription_entitlements
+    where provider = p_provider
+      and provider_subscription_id = p_provider_subscription_id;
+  end if;
 
   return entitlement_id;
 end;
@@ -3166,24 +3218,18 @@ security definer
 set search_path = public
 as $$
   select coalesce((
-      select profile.is_pro
-      from public.user_profile profile
-      where profile.user_id = p_user_id
-    ), false)
-    or exists (
-      select 1
-      from public.user_profile profile
-      where profile.user_id = p_user_id
-        and profile.stripe_customer_id is not null
-        and profile.subscription_status in ('active', 'trialing')
-    )
-    or exists (
-      select 1
-      from public.subscription_entitlements entitlement
-      where entitlement.user_id = p_user_id
-        and entitlement.status in ('active', 'trialing', 'grace_period')
-        and (entitlement.current_period_end is null or entitlement.current_period_end > now())
-    );
+    select profile.manual_pro_grant
+    from public.user_profile profile
+    where profile.user_id = p_user_id
+  ), false)
+  or exists (
+    select 1
+    from public.subscription_entitlements entitlement
+    where entitlement.user_id = p_user_id
+      and entitlement.status in ('active', 'trialing', 'grace_period')
+      and entitlement.current_period_end is not null
+      and entitlement.current_period_end > now()
+  );
 $$;
 
 revoke all on function public.user_has_pro_access(uuid) from public, anon, authenticated;
@@ -3201,6 +3247,101 @@ $$;
 
 revoke all on function public.current_user_has_pro_workout_access() from public;
 grant execute on function public.current_user_has_pro_workout_access() to anon, authenticated, service_role;
+
+create or replace function public.current_user_has_pro_access()
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null and public.user_has_pro_access(auth.uid());
+$$;
+revoke all on function public.current_user_has_pro_access() from public, anon;
+grant execute on function public.current_user_has_pro_access() to authenticated, service_role;
+
+alter table public.workouts enable row level security;
+grant select on table public.workouts to anon, authenticated;
+drop policy if exists "Read eligible workouts" on public.workouts;
+drop policy if exists "Restrict workout reads to Pro or weekly assignment" on public.workouts;
+create policy "Read eligible workouts"
+on public.workouts for select to anon, authenticated
+using (
+  (source = 'admin' and (
+    public.current_user_has_pro_workout_access()
+    or exists (
+      select 1 from public.free_weekly_workout_assignments assignment
+      where assignment.workout_id = workouts.id
+        and assignment.week_start = date_trunc('week', current_date::timestamp)::date
+    )
+  ))
+  or (source = 'ai_generated' and auth.uid() is not null and auth.uid() = user_id and public.current_user_has_pro_access())
+);
+create policy "Restrict workout reads to Pro or weekly assignment"
+on public.workouts as restrictive for select to anon, authenticated
+using (
+  (source = 'admin' and (
+    public.current_user_has_pro_workout_access()
+    or exists (
+      select 1 from public.free_weekly_workout_assignments assignment
+      where assignment.workout_id = workouts.id
+        and assignment.week_start = date_trunc('week', current_date::timestamp)::date
+    )
+  ))
+  or (source = 'ai_generated' and auth.uid() is not null and auth.uid() = user_id and public.current_user_has_pro_access())
+);
+
+alter table public.meal_plans enable row level security;
+drop policy if exists "Users can CRUD own meal_plans" on public.meal_plans;
+drop policy if exists "Users can read accessible own meal plans" on public.meal_plans;
+drop policy if exists "Restrict meal plan reads to Pro" on public.meal_plans;
+drop policy if exists "Users can insert own meal plans" on public.meal_plans;
+drop policy if exists "Restrict meal plan inserts to Pro for AI plans" on public.meal_plans;
+drop policy if exists "Users can update accessible own meal plans" on public.meal_plans;
+drop policy if exists "Restrict meal plan updates to Pro for AI plans" on public.meal_plans;
+drop policy if exists "Users can delete own meal plans" on public.meal_plans;
+drop policy if exists "Restrict meal plan deletes to owner" on public.meal_plans;
+create policy "Users can read accessible own meal plans"
+on public.meal_plans for select to authenticated
+using (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Restrict meal plan reads to Pro"
+on public.meal_plans as restrictive for select to authenticated
+using (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Users can insert own meal plans"
+on public.meal_plans for insert to authenticated
+with check (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Restrict meal plan inserts to Pro for AI plans"
+on public.meal_plans as restrictive for insert to authenticated
+with check (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Users can update accessible own meal plans"
+on public.meal_plans for update to authenticated
+using (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()))
+with check (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Restrict meal plan updates to Pro for AI plans"
+on public.meal_plans as restrictive for update to authenticated
+using (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()))
+with check (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Users can delete own meal plans"
+on public.meal_plans for delete to authenticated using (auth.uid() = user_id);
+create policy "Restrict meal plan deletes to owner"
+on public.meal_plans as restrictive for delete to authenticated using (auth.uid() = user_id);
+create or replace function public.prevent_ai_meal_plan_source_change()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+  if old.source = 'ai_generated' and new.source is distinct from old.source then
+    raise exception 'Generated meal plan source cannot be changed.' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.prevent_ai_meal_plan_source_change() from public, anon, authenticated;
+drop trigger if exists prevent_ai_meal_plan_source_change on public.meal_plans;
+create trigger prevent_ai_meal_plan_source_change
+before update of source on public.meal_plans
+for each row execute function public.prevent_ai_meal_plan_source_change();
 
 create or replace function public.admin_set_free_weekly_workout(
   p_week_start date,

@@ -49,12 +49,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    const verificationStartedAt = new Date().toISOString();
     const purchase = await verifyGooglePurchase(purchaseToken);
     const accountReference = purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId;
     const existing = await findSubscriptionEntitlement(admin, "google", purchaseToken);
     const userId = accountReference ? await findGoogleAccountOwner(admin, accountReference) : existing?.user_id;
     if (!userId || (existing && existing.user_id !== userId)) throw new Error("Google subscription owner not found");
     const entitlement = googleEntitlementInput(userId, purchaseToken, purchase);
+    // RTDN publishTime orders messages, not the Google Play state we just
+    // verified. Use the verification start time so delayed notifications
+    // cannot make a fresh API snapshot look older than the stored snapshot.
+    entitlement.lastVerifiedAt = verificationStartedAt;
     await upsertSubscriptionEntitlement(admin, entitlement);
     if (purchase.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING") {
       await acknowledgeGooglePurchase(purchaseToken, entitlement.productId!);

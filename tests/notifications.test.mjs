@@ -136,18 +136,14 @@ test("the weekly Dad Health report is dispatched on Sunday", async () => {
   assert.match(settings, /Sunday 08:00 - Your Dad Health Score this week/);
 });
 
-test("the meal planner allows three free AI plans before requiring Pro", async () => {
+test("meal plan generation and saved reads use canonical Pro access", async () => {
   const route = await source("src/app/api/generate-meal-plan/route.ts");
 
-  assert.match(route, /export const FREE_AI_MEAL_PLANS = 3/);
-  // The allowance is only checked for members without Pro.
-  assert.match(route, /if \(!isProfilePro\([\s\S]*?\.eq\('source', 'ai_generated'\)/);
-  assert.match(route, /count \?\? 0\) >= FREE_AI_MEAL_PLANS/);
-  assert.match(route, /code: 'meal_plan_limit_reached'/);
-  // The old unconditional Pro wall is gone.
-  assert.doesNotMatch(route, /Meal planner is a Pro feature/);
+  assert.match(route, /getSubscriptionSummary\(createAdminSupabaseClient\(\), user\.id\)/);
+  assert.match(route, /if \(!isPro\)[\s\S]*?status: 403/);
+  const getHandler = route.slice(route.indexOf("export async function GET"), route.indexOf("export async function POST"));
+  assert.ok(getHandler.indexOf("if (!isPro)") < getHandler.indexOf(".from('meal_plans')"));
 });
-
 test("notification environment and database setting names stay aligned", async () => {
   const envExample = await source(".env.local.example");
   const schema = await source("supabase/schema.sql");

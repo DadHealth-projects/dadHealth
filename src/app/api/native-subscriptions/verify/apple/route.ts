@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     if (typeof body.signedTransaction !== "string") {
       return NextResponse.json({ error: "Apple purchase information is missing", code: "invalid_request" }, { status: 400 });
     }
+    const verificationStartedAt = new Date().toISOString();
     const verified = await verifyAppleTransaction(body.signedTransaction);
     const originalId = verified.transaction.originalTransactionId;
     if (!originalId) throw new Error("Apple transaction is incomplete");
@@ -30,7 +31,26 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
-    await upsertSubscriptionEntitlement(auth.admin, appleEntitlementInput(auth.user.id, verified));
+    const existingGraceEnd = existing?.status === "grace_period" && existing.current_period_end
+      ? Date.parse(existing.current_period_end)
+      : Number.NaN;
+    const transactionExpired = typeof verified.transaction.expiresDate === "number"
+      && verified.transaction.expiresDate <= Date.now();
+    // Transaction verification does not include renewal/grace data. Keep the
+    // still-valid server-verified grace snapshot until Apple sends fresher
+    // renewal information; never replace it with an incomplete expired snapshot.
+    if (
+      transactionExpired
+      && !verified.transaction.revocationDate
+      && Number.isFinite(existingGraceEnd)
+      && existingGraceEnd > Date.now()
+    ) {
+      return NextResponse.json({ ok: true, summary: await getSubscriptionSummary(auth.admin, auth.user.id) });
+    }
+    await upsertSubscriptionEntitlement(
+      auth.admin,
+      appleEntitlementInput(auth.user.id, verified, null, undefined, verificationStartedAt),
+    );
     return NextResponse.json({ ok: true, summary: await getSubscriptionSummary(auth.admin, auth.user.id) });
   } catch (error) {
     return nativeSubscriptionErrorResponse(error);

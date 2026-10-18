@@ -47,6 +47,7 @@ export async function POST(request: Request) {
 
         if (!customerId || !subId) break;
 
+        const verificationStartedAt = new Date().toISOString();
         const stripe = getStripe();
         const sub = await stripe.subscriptions.retrieve(subId);
 
@@ -54,23 +55,30 @@ export async function POST(request: Request) {
           stripe_customer_id: customerId,
           stripe_subscription_id: subId,
           subscription_status: sub.status,
+          current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+          auto_renews: !sub.cancel_at_period_end && sub.status !== "canceled",
+          last_verified_at: verificationStartedAt,
         });
         break;
       }
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
-        const sub = event.data.object as Stripe.Subscription;
-        const userId = getUserIdFromSubscription(sub);
+        const eventSubscription = event.data.object as Stripe.Subscription;
+        const userId = getUserIdFromSubscription(eventSubscription);
         if (!userId) break;
 
+        const verificationStartedAt = new Date().toISOString();
+        const sub = await getStripe().subscriptions.retrieve(eventSubscription.id);
         const cust = sub.customer;
         const customerId = typeof cust === "string" ? cust : cust.id;
-        const status = event.type === "customer.subscription.deleted" ? "canceled" : sub.status;
 
         await syncUserProfile(userId, {
           stripe_customer_id: customerId,
           stripe_subscription_id: sub.id,
-          subscription_status: status,
+          subscription_status: sub.status,
+          current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+          auto_renews: !sub.cancel_at_period_end && sub.status !== "canceled",
+          last_verified_at: verificationStartedAt,
         });
         break;
       }

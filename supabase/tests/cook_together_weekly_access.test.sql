@@ -10,7 +10,7 @@ values
   ('81000000-0000-4000-8000-000000000003', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'cook-trial@example.test', '', now(), now(), now()),
   ('81000000-0000-4000-8000-000000000004', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'cook-expired@example.test', '', now(), now(), now());
 
-update public.user_profile set is_pro = true where user_id = '81000000-0000-4000-8000-000000000002';
+update public.user_profile set manual_pro_grant = true where user_id = '81000000-0000-4000-8000-000000000002';
 insert into public.subscription_entitlements (user_id, provider, provider_subscription_id, status, current_period_end)
 values
   ('81000000-0000-4000-8000-000000000003', 'apple', 'cook-trial', 'trialing', now() + interval '7 days'),
@@ -124,7 +124,7 @@ select ok(not public.can_access_cook_together_recipe('82000000-0000-4000-8000-00
 select is((select count(*)::integer from public.recipes where cook_together), 1, 'expired user sees current assignment only');
 reset role;
 
-update public.user_profile set is_pro = true where user_id = '81000000-0000-4000-8000-000000000001';
+update public.user_profile set manual_pro_grant = true where user_id = '81000000-0000-4000-8000-000000000001';
 select set_config('request.jwt.claim.sub', '81000000-0000-4000-8000-000000000001', true);
 set local role authenticated;
 select is((select count(*)::integer from public.recipes where cook_together), 4, 'renewed Pro user regains full library');

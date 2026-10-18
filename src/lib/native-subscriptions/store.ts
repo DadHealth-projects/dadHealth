@@ -1,6 +1,6 @@
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 
-import { entitlementGrantsAccess, type SubscriptionEntitlementInput, type SubscriptionEntitlementRow, type SubscriptionProvider } from "./types";
+import { ACCESS_GRANTING_STATUSES, entitlementGrantsAccess, type SubscriptionEntitlementInput, type SubscriptionEntitlementRow, type SubscriptionProvider } from "./types";
 
 type AdminClient = ReturnType<typeof createAdminSupabaseClient>;
 
@@ -15,6 +15,9 @@ export async function upsertSubscriptionEntitlement(
   admin: AdminClient,
   input: SubscriptionEntitlementInput,
 ): Promise<string> {
+  if (ACCESS_GRANTING_STATUSES.has(input.status) && !input.currentPeriodEnd) {
+    throw new Error("Verified subscription expiry is required for Pro access");
+  }
   const { data, error } = await admin.rpc("upsert_subscription_entitlement", {
     p_user_id: input.userId,
     p_provider: input.provider,
@@ -137,7 +140,7 @@ export async function getSubscriptionSummary(
     await Promise.all([
       admin
         .from("user_profile")
-        .select("is_pro, subscription_status, stripe_customer_id, stripe_subscription_id")
+        .select("manual_pro_grant")
         .eq("user_id", userId)
         .maybeSingle(),
       admin.from("subscription_entitlements").select("*").eq("user_id", userId),
@@ -156,10 +159,7 @@ export async function getSubscriptionSummary(
       const rightEnd = right.current_period_end ? Date.parse(right.current_period_end) : Number.MAX_SAFE_INTEGER;
       return rightEnd - leftEnd;
     });
-  const manual = databaseBoolean(profile?.is_pro);
-  const legacyStatus = typeof profile?.subscription_status === "string" ? profile.subscription_status : null;
-  const legacyStripeAccess =
-    Boolean(profile?.stripe_customer_id) && (legacyStatus === "active" || legacyStatus === "trialing");
+  const manual = databaseBoolean(profile?.manual_pro_grant);
   const primary = active[0] ?? null;
   // The database predicate is also used by authoritative streak processing.
   // Keep this server summary as the shared resolver for API and UI consumers.
@@ -167,8 +167,8 @@ export async function getSubscriptionSummary(
 
   return {
     isPro,
-    status: primary?.status ?? (legacyStripeAccess ? legacyStatus : manual ? "manual" : legacyStatus),
-    primaryProvider: primary?.provider ?? (legacyStripeAccess ? "stripe" : manual ? "manual" : null),
+    status: primary?.status ?? (manual ? "manual" : null),
+    primaryProvider: primary?.provider ?? (manual ? "manual" : null),
     activeProviders: [...new Set(active.map((item) => item.provider))],
     plan: primary?.plan ?? null,
     productId: primary?.product_id ?? null,

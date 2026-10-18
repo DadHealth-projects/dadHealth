@@ -30,6 +30,7 @@ export interface UserProfile {
   display_name?: string | null;
   /** Explicit admin/manual Pro entitlement. */
   is_pro?: boolean | null;
+  manual_pro_grant?: boolean | null;
   /** Stripe Customer id (cus_…) */
   stripe_customer_id?: string | null;
   /** Stripe Subscription id (sub_…) */

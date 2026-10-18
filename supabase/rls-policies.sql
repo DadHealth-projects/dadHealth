@@ -86,6 +86,18 @@ create policy "Users can CRUD own journal_entries" on journal_entries for all us
 -- FITNESS DATA - OWNER ONLY (with admin created workouts)
 -- ============================================================
 
+create or replace function public.current_user_has_pro_access()
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null and public.user_has_pro_access(auth.uid());
+$$;
+revoke all on function public.current_user_has_pro_access() from public, anon;
+grant execute on function public.current_user_has_pro_access() to authenticated, service_role;
+
 -- workout_sessions: users can CRUD own sessions
 drop policy if exists "Users can CRUD own workout_sessions" on workout_sessions;
 create policy "Users can CRUD own workout_sessions" on workout_sessions for all using (auth.uid() = user_id);
@@ -104,7 +116,12 @@ using (
         and assignment.week_start = date_trunc('week', current_date::timestamp)::date
     )
   ))
-  or (auth.uid() is not null and auth.uid() = user_id)
+  or (
+    source = 'ai_generated'
+    and auth.uid() is not null
+    and auth.uid() = user_id
+    and public.current_user_has_pro_access()
+  )
 );
 drop policy if exists "Restrict workout reads to Pro or weekly assignment" on workouts;
 create policy "Restrict workout reads to Pro or weekly assignment"
@@ -118,7 +135,12 @@ using (
         and assignment.week_start = date_trunc('week', current_date::timestamp)::date
     )
   ))
-  or (auth.uid() is not null and auth.uid() = user_id)
+  or (
+    source = 'ai_generated'
+    and auth.uid() is not null
+    and auth.uid() = user_id
+    and public.current_user_has_pro_access()
+  )
 );
 
 revoke all on table free_weekly_workout_assignments from public, anon, authenticated;
@@ -174,6 +196,56 @@ with check (auth.uid() = user_id);
 
 -- meal_plans: users can CRUD own plans
 drop policy if exists "Users can CRUD own meal_plans" on meal_plans;
+drop policy if exists "Users can read accessible own meal plans" on meal_plans;
+drop policy if exists "Restrict meal plan reads to Pro" on meal_plans;
+drop policy if exists "Users can insert own meal plans" on meal_plans;
+drop policy if exists "Restrict meal plan inserts to Pro for AI plans" on meal_plans;
+drop policy if exists "Users can update accessible own meal plans" on meal_plans;
+drop policy if exists "Restrict meal plan updates to Pro for AI plans" on meal_plans;
+drop policy if exists "Users can delete own meal plans" on meal_plans;
+drop policy if exists "Restrict meal plan deletes to owner" on meal_plans;
+create policy "Users can read accessible own meal plans"
+on meal_plans for select to authenticated
+using (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Restrict meal plan reads to Pro"
+on meal_plans as restrictive for select to authenticated
+using (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Users can insert own meal plans"
+on meal_plans for insert to authenticated
+with check (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Restrict meal plan inserts to Pro for AI plans"
+on meal_plans as restrictive for insert to authenticated
+with check (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Users can update accessible own meal plans"
+on meal_plans for update to authenticated
+using (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()))
+with check (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Restrict meal plan updates to Pro for AI plans"
+on meal_plans as restrictive for update to authenticated
+using (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()))
+with check (auth.uid() = user_id and (source is distinct from 'ai_generated' or public.current_user_has_pro_access()));
+create policy "Users can delete own meal plans"
+on meal_plans for delete to authenticated using (auth.uid() = user_id);
+create policy "Restrict meal plan deletes to owner"
+on meal_plans as restrictive for delete to authenticated using (auth.uid() = user_id);
+
+create or replace function public.prevent_ai_meal_plan_source_change()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+  if old.source = 'ai_generated' and new.source is distinct from old.source then
+    raise exception 'Generated meal plan source cannot be changed.' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.prevent_ai_meal_plan_source_change() from public, anon, authenticated;
+drop trigger if exists prevent_ai_meal_plan_source_change on meal_plans;
+create trigger prevent_ai_meal_plan_source_change
+before update of source on meal_plans
+for each row execute function public.prevent_ai_meal_plan_source_change();
 create policy "Users can CRUD own meal_plans" on meal_plans for all using (auth.uid() = user_id);
 
 -- ============================================================

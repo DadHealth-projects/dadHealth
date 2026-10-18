@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@supabase/supabase-js'
-import { isProSubscriptionStatus } from '@/lib/stripe/subscription'
+import { getSubscriptionSummary } from '@/lib/native-subscriptions/store'
+import { createAdminSupabaseClient } from '@/utils/supabase/admin'
 import { createServerSupabaseClient } from '@/utils/supabase/server'
 
 
@@ -16,9 +16,7 @@ if (!serviceRoleKey) {
   throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
 }
 
-const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-  auth: { persistSession: false },
-})
+const supabaseAdmin = createAdminSupabaseClient()
 
 const FREE_SEARCH_LIMIT = 3
 
@@ -56,17 +54,6 @@ function oneHourAgo() {
   return new Date(Date.now() - 60 * 60 * 1000).toISOString()
 }
 
-function profileHasProAccess(profile: {
-  is_pro?: boolean | string | number | null
-  subscription_status?: string | null
-} | null): boolean {
-  return profile?.is_pro === true ||
-    profile?.is_pro === 'true' ||
-    profile?.is_pro === 1 ||
-    profile?.is_pro === '1' ||
-    isProSubscriptionStatus(profile?.subscription_status)
-}
-
 async function getRequestUser(req: NextRequest) {
   const bearerToken = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
   const authSupabase = await createServerSupabaseClient()
@@ -86,12 +73,8 @@ export async function GET(req: NextRequest) {
     const user = await getRequestUser(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const [profileResult, countResult] = await Promise.all([
-      supabaseAdmin
-        .from('user_profile')
-        .select('is_pro, subscription_status')
-        .eq('user_id', user.id)
-        .maybeSingle(),
+    const [subscription, countResult] = await Promise.all([
+      getSubscriptionSummary(supabaseAdmin, user.id),
       supabaseAdmin
         .from('dad_day_searches')
         .select('*', { count: 'exact', head: true })
@@ -99,15 +82,14 @@ export async function GET(req: NextRequest) {
         .gte('searched_at', startOfMonth()),
     ])
 
-    if (profileResult.error || countResult.error) {
+    if (countResult.error) {
       console.error('[dad-days/allowance] read failed', {
-        profileCode: profileResult.error?.code,
         countCode: countResult.error?.code,
       })
       return NextResponse.json({ error: 'allowance_unavailable' }, { status: 503 })
     }
 
-    const isPro = profileHasProAccess(profileResult.data)
+    const isPro = subscription.isPro
     return NextResponse.json({
       isPro,
       searchesUsed: isPro ? null : countResult.count ?? 0,
@@ -339,18 +321,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'rate_limit_exceeded' }, { status: 429 })
     }
 
-    const { data: profile } = await supabaseAdmin
-      .from('user_profile')
-      .select('is_pro, subscription_status')
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    const p = profile as {
-      is_pro?: boolean | string | number | null
-      subscription_status?: string | null
-    } | null
-
-    const isPro = profileHasProAccess(p)
+    const isPro = (await getSubscriptionSummary(supabaseAdmin, userId)).isPro
 
 
     if (isPro) {

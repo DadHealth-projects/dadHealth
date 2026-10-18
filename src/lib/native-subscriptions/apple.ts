@@ -134,6 +134,7 @@ export function appleEntitlementInput(
   verified: VerifiedAppleTransaction,
   renewal?: JWSRenewalInfoDecodedPayload | null,
   notificationStatus?: Status | number,
+  lastVerifiedAt = new Date().toISOString(),
 ): SubscriptionEntitlementInput {
   const transaction = verified.transaction;
   if (transaction.bundleId !== DAD_HEALTH_BUNDLE_ID) throw new Error("Apple transaction is for another app");
@@ -143,6 +144,10 @@ export function appleEntitlementInput(
   const plan = requireKnownAppleProduct(transaction.productId);
   const trialing = transaction.offerType === OfferType.INTRODUCTORY_OFFER
     && (transaction.offerDiscountType === OfferDiscountType.FREE_TRIAL || transaction.price === 0);
+  const status = appleStatus(transaction, renewal, notificationStatus);
+  const gracePeriodEnd = status === "grace_period" && renewal?.gracePeriodExpiresDate
+    ? unixMillisecondsToIso(renewal.gracePeriodExpiresDate)
+    : null;
 
   return {
     userId,
@@ -152,11 +157,11 @@ export function appleEntitlementInput(
     latestTransactionId: transaction.transactionId,
     productId: transaction.productId,
     plan,
-    status: appleStatus(transaction, renewal, notificationStatus),
-    currentPeriodEnd: unixMillisecondsToIso(transaction.expiresDate),
-    trialEnd: trialing ? unixMillisecondsToIso(transaction.expiresDate) : null,
+    status,
+    currentPeriodEnd: gracePeriodEnd ?? unixMillisecondsToIso(transaction.expiresDate),
+    trialEnd: status === "trialing" || trialing ? unixMillisecondsToIso(transaction.expiresDate) : null,
     autoRenews: renewal ? renewal.autoRenewStatus === AutoRenewStatus.ON : null,
     environment: verified.environment,
-    lastVerifiedAt: new Date().toISOString(),
+    lastVerifiedAt,
   };
 }

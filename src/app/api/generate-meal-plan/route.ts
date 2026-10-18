@@ -568,6 +568,23 @@ export async function GET(req: Request) {
     const user = authResult.data.user
     if (!user) return NextResponse.json({ error: 'Unauthorized', requestId }, { status: 401, headers })
 
+    let isPro: boolean
+    try {
+      isPro = (await getSubscriptionSummary(createAdminSupabaseClient(), user.id)).isPro
+    } catch (error) {
+      console.error('[generate-meal-plan] entitlement lookup failed', error)
+      return NextResponse.json(
+        { error: 'We could not verify your Pro access. Please try again.', requestId },
+        { status: 503, headers },
+      )
+    }
+    if (!isPro) {
+      return NextResponse.json(
+        { error: 'Meal plan access requires Dad Health Pro.', code: 'pro_required', requestId },
+        { status: 403, headers },
+      )
+    }
+
     const { data, error } = await admin
       .from('meal_plans')
       .select('id, plan, grocery_list, created_at')

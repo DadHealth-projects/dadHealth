@@ -9,7 +9,7 @@ values
   ('71000000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'weekly-pro@example.test', '', now(), now(), now()),
   ('71000000-0000-4000-8000-000000000003', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'weekly-trial@example.test', '', now(), now(), now());
 
-update public.user_profile set is_pro = true where user_id = '71000000-0000-4000-8000-000000000002';
+update public.user_profile set manual_pro_grant = true where user_id = '71000000-0000-4000-8000-000000000002';
 insert into public.subscription_entitlements (user_id, provider, provider_subscription_id, status, current_period_end)
 values ('71000000-0000-4000-8000-000000000003', 'apple', 'weekly-workout-trial', 'trialing', now() + interval '7 days');
 
@@ -63,7 +63,7 @@ select set_config('request.jwt.claim.sub', '71000000-0000-4000-8000-000000000001
 set local role authenticated;
 select ok(not public.current_user_has_pro_workout_access(), 'Free user fails canonical Pro resolver');
 select is((select count(*)::integer from public.workouts where source = 'admin'), 1, 'Free user sees assigned workout only');
-select is((select count(*)::integer from public.workouts where id = '72000000-0000-4000-8000-000000000003'), 1, 'Free user retains own previously generated workout');
+select is((select count(*)::integer from public.workouts where id = '72000000-0000-4000-8000-000000000003'), 0, 'Free user cannot read previously generated Pro workout');
 select is((select count(*)::integer from public.workouts where id = '72000000-0000-4000-8000-000000000002'), 0, 'next week workout stays hidden before rollover');
 select is((select count(*)::integer from public.workouts where id = '72000000-0000-4000-8000-000000000004'), 0, 'unassigned Admin workout stays hidden from Free user');
 select is((select count(*)::integer from public.workouts where id = '72000000-0000-4000-8000-000000000005'), 0, 'other users generated workouts stay private');

@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     if (typeof body.purchaseToken !== "string") {
       return NextResponse.json({ error: "Google Play purchase information is missing", code: "invalid_request" }, { status: 400 });
     }
+    const verificationStartedAt = new Date().toISOString();
     const purchase = await verifyGooglePurchase(body.purchaseToken);
     const expectedAccount = googleAccountReference(auth.user.id);
     const purchaseAccount = purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId;
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
       );
     }
     const entitlement = googleEntitlementInput(auth.user.id, body.purchaseToken, purchase);
+    entitlement.lastVerifiedAt = verificationStartedAt;
     await upsertSubscriptionEntitlement(auth.admin, entitlement);
     if (purchase.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING") {
       await acknowledgeGooglePurchase(body.purchaseToken, entitlement.productId!);

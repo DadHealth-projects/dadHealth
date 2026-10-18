@@ -13,8 +13,13 @@ values
   ('54000000-0000-4000-8000-000000000006', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'legacy-stripe-pro@example.test', '', now(), now(), now()),
   ('54000000-0000-4000-8000-000000000007', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'trialing-pro@example.test', '', now(), now(), now());
 
-insert into public.user_profile (user_id, is_pro)
-select id, id = '54000000-0000-4000-8000-000000000005'::uuid from auth.users where id::text like '54000000-0000-4000-8000-00000000000%';
+insert into public.user_profile (user_id, is_pro, manual_pro_grant)
+select
+  id,
+  id = '54000000-0000-4000-8000-000000000005'::uuid
+    or id = '54000000-0000-4000-8000-000000000004'::uuid,
+  id = '54000000-0000-4000-8000-000000000005'::uuid
+from auth.users where id::text like '54000000-0000-4000-8000-00000000000%';
 
 update public.user_profile set stripe_customer_id = 'cus_legacy_test', subscription_status = 'active'
 where user_id = '54000000-0000-4000-8000-000000000006';
@@ -24,14 +29,15 @@ values
   ('54000000-0000-4000-8000-000000000002', 'apple', 'streak-pro-grace', 'grace_period', now() + interval '1 day'),
   ('54000000-0000-4000-8000-000000000003', 'google', 'streak-pro-active', 'active', now() + interval '30 days'),
   ('54000000-0000-4000-8000-000000000004', 'apple', 'streak-pro-expired', 'active', now() - interval '1 day'),
+  ('54000000-0000-4000-8000-000000000006', 'stripe', 'streak-stripe-active', 'active', now() + interval '30 days'),
   ('54000000-0000-4000-8000-000000000007', 'google', 'streak-pro-trial', 'trialing', now() + interval '1 day');
 
 select ok(not public.user_has_pro_access('54000000-0000-4000-8000-000000000001'), 'Free user has no Pro streak access');
-select ok(public.user_has_pro_access('54000000-0000-4000-8000-000000000005'), 'manual Pro grants access');
-select ok(public.user_has_pro_access('54000000-0000-4000-8000-000000000006'), 'active legacy Stripe subscription grants access');
+select ok(public.user_has_pro_access('54000000-0000-4000-8000-000000000005'), 'explicit manual Pro grant works without subscription');
+select ok(public.user_has_pro_access('54000000-0000-4000-8000-000000000006'), 'active Stripe entitlement grants access');
 select ok(public.user_has_pro_access('54000000-0000-4000-8000-000000000002'), 'valid grace period grants Pro access');
 select ok(public.user_has_pro_access('54000000-0000-4000-8000-000000000007'), 'valid trialing entitlement grants access');
-select ok(not public.user_has_pro_access('54000000-0000-4000-8000-000000000004'), 'expired entitlement does not grant Pro access');
+select ok(not public.user_has_pro_access('54000000-0000-4000-8000-000000000004'), 'expired subscription with legacy is_pro=true does not grant Pro access');
 
 select is(public.record_streak_activity('54000000-0000-4000-8000-000000000002', date_trunc('week', current_date)::date - 21), 1, 'Pro streak starts at one');
 select is(public.record_streak_activity('54000000-0000-4000-8000-000000000002', date_trunc('week', current_date)::date - 20), 2, 'consecutive day increments the streak');
