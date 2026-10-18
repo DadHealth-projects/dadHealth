@@ -616,3 +616,22 @@ before changing public website UI.
 - Check public website UI at 390, 435, 768, 1280, 1366, 1440 and 1920 pixels.
   Verify readable copy, compact mobile layouts, controlled desktop scale and no
   horizontal overflow.
+
+# Phase 4 Milestone 2 Status
+
+## Status
+Steps 1-5 implementation is reported complete and deployed. User-reported production checks of Pro access and saved-content behavior are not independently verified here.
+
+## Shared backend status
+- Manual Pro grants, canonical expiry-aware entitlements, saved-content protections, and atomic Stripe profile synchronization are implemented. Production application of the Stripe sync migration is user-reported.
+- Google RTDN ordering code and regression assertions exist; production notification processing remains unverified.
+- Mind 60/40 and Body/Bond 60/10/30 scoring migration and SQL tests exist. Production migration-ledger status is unverified; do not state it is applied without evidence.
+- Weekly Free workout and Cook Together assignment/access implementation exists. Existing records and activity history must remain preserved.
+
+## Outstanding verification and content
+- Verify the scoring migration ledger, Google RTDN production processing, and native store/EAS product configuration with the account owner. Expo Go pricing limitations do not establish a production pricing defect.
+- Current Free weekly-report teaser omits the current score; this is a confirmed UI gap, not proof that score access is locked.
+- Jamie-owned items remain: Journal prompt approval, Community seed content, and first Cook Together completion-badge definition. Trial badge wording and a cancellation-reason step without the rejected offer need confirmation if still required.
+
+## Deferred scope
+Full Sunday report, automatic streak freeze, full paywall redesign, final performance audit, and Mind Plan generation are deferred. Later confirmed decisions supersede older conflicting milestone text. Do not build deferred work without new approval.
