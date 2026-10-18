@@ -48,3 +48,11 @@ test('Pro pattern and freeze status share the database score-history week bounda
   assert.match(status, /summary\.isPro[\s\S]*?getCurrentWeekFreezeState/);
   assert.match(status, /freezesRemaining: 0/);
 });
+
+test('weekly report loads its independent score and workout reads concurrently', async () => {
+  const route = await read('src/app/api/pro/insights/route.ts');
+  const weeklyReport = route.slice(route.indexOf('if (kind === "weekly-report")'), route.indexOf('if (kind === "monthly-report")'));
+  assert.match(weeklyReport, /const \[scoreResult, workoutResult\] = await Promise\.all\(/);
+  assert.match(weeklyReport, /from\("dad_score_view"\)/);
+  assert.match(weeklyReport, /from\("workout_sessions"\)/);
+});

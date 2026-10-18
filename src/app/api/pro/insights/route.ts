@@ -137,17 +137,19 @@ export async function GET(request: Request) {
     }
 
     if (kind === "weekly-report") {
-      const scoreResult = await context.admin
-        .from("dad_score_view")
-        .select("mind_score,body_score,bond_score,mind_week_change,body_week_change,bond_week_change,recommended_action")
-        .eq("user_id", context.userId)
-        .maybeSingle();
-      if (scoreResult.error) throw scoreResult.error;
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
       const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
-      const workoutResult = await context.admin.from("workout_sessions")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", context.userId).gte("performed_at", monthStart).lt("performed_at", monthEnd);
+      const [scoreResult, workoutResult] = await Promise.all([
+        context.admin
+          .from("dad_score_view")
+          .select("mind_score,body_score,bond_score,mind_week_change,body_week_change,bond_week_change,recommended_action")
+          .eq("user_id", context.userId)
+          .maybeSingle(),
+        context.admin.from("workout_sessions")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", context.userId).gte("performed_at", monthStart).lt("performed_at", monthEnd),
+      ]);
+      if (scoreResult.error) throw scoreResult.error;
       if (workoutResult.error) throw workoutResult.error;
       const score = scoreResult.data;
       return json({ report: score ? buildWeeklyReport({
