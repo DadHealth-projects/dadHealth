@@ -282,6 +282,44 @@ with check (auth.uid() = user_id);
 drop policy if exists "Allow read posts" on posts;
 create policy "Read global public and joined Circle posts" on posts for select to anon, authenticated using (circle_id is null or public.can_read_community_post(id));
 
+-- Supabase-managed RLS on realtime.messages must already be enabled.
+-- Keep these policies scoped to the private Community Presence topic.
+drop policy if exists "Community Presence auth guard select" on realtime.messages;
+create policy "Community Presence auth guard select"
+on realtime.messages as restrictive for select to public
+using (
+  extension <> 'presence'
+  or realtime.topic() <> 'community:presence:v1'
+  or auth.uid() is not null
+);
+
+drop policy if exists "Community Presence auth guard insert" on realtime.messages;
+create policy "Community Presence auth guard insert"
+on realtime.messages as restrictive for insert to public
+with check (
+  extension <> 'presence'
+  or realtime.topic() <> 'community:presence:v1'
+  or auth.uid() is not null
+);
+
+drop policy if exists "Authenticated users can read Community Presence" on realtime.messages;
+create policy "Authenticated users can read Community Presence"
+on realtime.messages for select to authenticated
+using (
+  extension = 'presence'
+  and realtime.topic() = 'community:presence:v1'
+  and auth.uid() is not null
+);
+
+drop policy if exists "Authenticated users can track Community Presence" on realtime.messages;
+create policy "Authenticated users can track Community Presence"
+on realtime.messages for insert to authenticated
+with check (
+  extension = 'presence'
+  and realtime.topic() = 'community:presence:v1'
+  and auth.uid() is not null
+);
+
 drop policy if exists "Auth can insert posts" on posts;
 create policy "Authenticated users can create global or joined Circle posts" on posts for insert to authenticated with check (auth.uid() is not null and (circle_id is null or public.is_circle_member(circle_id)) and ((anonymous is true and user_id is null) or (anonymous is not true and user_id = auth.uid())));
 

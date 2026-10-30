@@ -4364,7 +4364,7 @@ $$;
 revoke all on function public.get_community_global_feed(integer) from public;
 grant execute on function public.get_community_global_feed(integer) to anon, authenticated;
 
--- Deterministic 7-day trend: one post per joined Circle, ranked by 2 points per like and 3 per reply.
+-- Deterministic 7-day trend: up to four posts from joined Circles, ranked by likes plus replies.
 create or replace function public.get_trending_circle_posts()
 returns table(
   circle_id uuid,
@@ -4397,21 +4397,54 @@ as $$
       and public.is_circle_member(c.id)
     group by p.id, p.circle_id, c.name, p.content, p.tag, p.anonymous,
       p.author_initials, p.author_name, p.created_at
-  ), ranked as (
-    select e.*, row_number() over (
-      partition by e.circle_id
-      order by (e.likes_count * 2 + e.replies_count * 3) desc, e.created_at desc, e.id
-    ) as position
-    from engagement e
   )
-  select r.circle_id, r.circle_name, r.id, r.content, r.tag, r.anonymous,
-    r.author_initials, r.author_name, r.created_at, r.likes_count, r.replies_count
-  from ranked r where r.position = 1
-  order by r.circle_name;
+  select e.circle_id, e.circle_name, e.id, e.content, e.tag, e.anonymous,
+    e.author_initials, e.author_name, e.created_at, e.likes_count, e.replies_count
+  from engagement e
+  order by e.likes_count + e.replies_count desc, e.created_at desc, e.id
+  limit 4;
 $$;
 
 revoke all on function public.get_trending_circle_posts() from public;
 grant execute on function public.get_trending_circle_posts() to anon, authenticated;
+
+-- Private Community Presence channel policies. RLS on realtime.messages is
+-- managed by Supabase and must already be enabled; never alter it here.
+drop policy if exists "Community Presence auth guard select" on realtime.messages;
+create policy "Community Presence auth guard select"
+on realtime.messages as restrictive for select to public
+using (
+  extension <> 'presence'
+  or realtime.topic() <> 'community:presence:v1'
+  or auth.uid() is not null
+);
+
+drop policy if exists "Community Presence auth guard insert" on realtime.messages;
+create policy "Community Presence auth guard insert"
+on realtime.messages as restrictive for insert to public
+with check (
+  extension <> 'presence'
+  or realtime.topic() <> 'community:presence:v1'
+  or auth.uid() is not null
+);
+
+drop policy if exists "Authenticated users can read Community Presence" on realtime.messages;
+create policy "Authenticated users can read Community Presence"
+on realtime.messages for select to authenticated
+using (
+  extension = 'presence'
+  and realtime.topic() = 'community:presence:v1'
+  and auth.uid() is not null
+);
+
+drop policy if exists "Authenticated users can track Community Presence" on realtime.messages;
+create policy "Authenticated users can track Community Presence"
+on realtime.messages for insert to authenticated
+with check (
+  extension = 'presence'
+  and realtime.topic() = 'community:presence:v1'
+  and auth.uid() is not null
+);
 
 comment on column public.posts.circle_id is
   'Circle for a Circle-scoped post. NULL preserves legacy global posts and older-client writes.';
@@ -4689,4 +4722,41 @@ cross join lateral public.calculate_dad_score_period(
 revoke all on public.dad_score_history_view from anon, authenticated;
 grant select on public.dad_score_history_view to service_role;
 
-commit;
+-- Public Community avatar lookup is limited to explicitly requested, visible non-anonymous contributions.
+create or replace function public.get_community_author_avatars(
+  p_post_ids uuid[],
+  p_comment_ids uuid[]
+)
+returns table(contribution_id uuid, avatar_url text)
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select post.id, nullif(btrim(profile.avatar_url), '')
+  from public.posts post
+  join public.user_profile profile on profile.user_id = post.user_id
+  where auth.uid() is not null
+    and post.id = any(coalesce(p_post_ids, '{}'::uuid[]))
+    and coalesce(cardinality(p_post_ids), 0) + coalesce(cardinality(p_comment_ids), 0) <= 250
+    and post.anonymous is false
+    and public.can_read_community_post(post.id)
+    and nullif(btrim(profile.avatar_url), '') is not null
+
+  union all
+
+  select comment.id, nullif(btrim(profile.avatar_url), '')
+  from public.comments comment
+  join public.user_profile profile on profile.user_id = comment.user_id
+  where auth.uid() is not null
+    and comment.id = any(coalesce(p_comment_ids, '{}'::uuid[]))
+    and coalesce(cardinality(p_post_ids), 0) + coalesce(cardinality(p_comment_ids), 0) <= 250
+    and comment.anonymous is false
+    and public.can_read_community_post(comment.post_id)
+    and nullif(btrim(profile.avatar_url), '') is not null;
+$$;
+
+revoke all on function public.get_community_author_avatars(uuid[], uuid[])
+  from public, anon, authenticated, service_role;
+grant execute on function public.get_community_author_avatars(uuid[], uuid[])
+  to authenticated;
