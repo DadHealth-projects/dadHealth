@@ -16,15 +16,6 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "heif",
 ]);
 
-const ALLOWED_DECLARED_MIME_TYPES = new Set([
-  "application/octet-stream",
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/heic",
-  "image/heif",
-]);
-
 async function requireUser(req: NextRequest) {
   const browserClient = await createServerSupabaseClient();
   const admin = createAdminSupabaseClient();
@@ -75,24 +66,6 @@ export async function POST(req: NextRequest) {
   }
 
   const declaredMimeType = file.type.toLowerCase();
-
-  if (
-    declaredMimeType &&
-    !ALLOWED_DECLARED_MIME_TYPES.has(declaredMimeType)
-  ) {
-    console.warn(
-      "[Profile photo API] Rejected declared MIME type",
-      {
-        mimeType: declaredMimeType,
-        size: file.size,
-      }
-    );
-
-    return NextResponse.json(
-      { error: "unsupported_declared_mime_type" },
-      { status: 415 }
-    );
-  }
 
   let output: Buffer;
 
