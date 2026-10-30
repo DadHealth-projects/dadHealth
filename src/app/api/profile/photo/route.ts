@@ -8,6 +8,23 @@ export const runtime = "nodejs";
 
 const BUCKET = "profile-photos";
 
+const MAX_PHOTO_SIZE = 20 * 1024 * 1024;
+
+const ALLOWED_IMAGE_TYPES = new Set([
+  "jpeg",
+  "png",
+  "heif",
+]);
+
+const ALLOWED_DECLARED_MIME_TYPES = new Set([
+  "application/octet-stream",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/heic",
+  "image/heif",
+]);
+
 async function requireUser(req: NextRequest) {
   const browserClient = await createServerSupabaseClient();
   const admin = createAdminSupabaseClient();
@@ -21,14 +38,40 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const form = await req.formData();
   const file = form.get("photo");
-  if (!(file instanceof File) || !file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) {
-    return NextResponse.json({ error: "Upload a valid image under 5 MB" }, { status: 400 });
+
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "missing_photo" }, { status: 400 });
   }
-  const output = await sharp(Buffer.from(await file.arrayBuffer()), { failOn: "none" })
-    .rotate()
-    .resize({ width: 800, height: 800, fit: "cover", position: "centre" })
-    .jpeg({ quality: 84, mozjpeg: true })
-    .toBuffer();
+  if (file.size === 0) {
+    return NextResponse.json({ error: "invalid_image" }, { status: 400 });
+  }
+  if (file.size > MAX_PHOTO_SIZE) {
+    return NextResponse.json({ error: "photo_too_large" }, { status: 413 });
+  }
+
+  const declaredMimeType = file.type.toLowerCase();
+  if (declaredMimeType && !ALLOWED_DECLARED_MIME_TYPES.has(declaredMimeType)) {
+    return NextResponse.json({ error: "unsupported_image_format" }, { status: 415 });
+  }
+
+  let output: Buffer;
+  try {
+    const input = Buffer.from(await file.arrayBuffer());
+    const image = sharp(input, { failOn: "error" });
+    const metadata = await image.metadata();
+
+    if (!metadata.format || !ALLOWED_IMAGE_TYPES.has(metadata.format)) {
+      return NextResponse.json({ error: "unsupported_image_format" }, { status: 415 });
+    }
+
+    output = await image
+      .rotate()
+      .resize({ width: 800, height: 800, fit: "cover", position: "centre" })
+      .jpeg({ quality: 84, mozjpeg: true })
+      .toBuffer();
+  } catch {
+    return NextResponse.json({ error: "image_processing_failed" }, { status: 422 });
+  }
   const admin = createAdminSupabaseClient();
   const path = `${user.id}/avatar.jpg`;
   const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, output, { contentType: "image/jpeg", cacheControl: "3600", upsert: true });
