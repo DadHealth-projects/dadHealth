@@ -36,6 +36,90 @@ const CIRCLE_ICON_KEYS = new Set([
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+type DadDateWrite = {
+  icon: string;
+  name: string;
+  age_range: string;
+  budget: string;
+  duration_minutes: number;
+  description: string | null;
+  address: string | null;
+  time_of_day: string | null;
+  booking_url: string | null;
+  requires_booking: boolean;
+};
+
+function parseDadDateWrite(input: unknown): { ok: true; value: DadDateWrite } | { ok: false; error: string } {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return { ok: false, error: "Dad Date details are required." };
+  }
+
+  const body = input as Record<string, unknown>;
+  if ("source" in body || "user_id" in body) {
+    return { ok: false, error: "Dad Date ownership cannot be changed." };
+  }
+
+  const requiredText = (field: string, maxLength: number): string | null => {
+    const value = body[field];
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed && trimmed.length <= maxLength && !/[\r\n]/.test(trimmed) ? trimmed : null;
+  };
+  const optionalText = (field: string, maxLength: number): string | null | undefined => {
+    const value = body[field];
+    if (value == null || value === "") return null;
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed && trimmed.length <= maxLength && !/[\r\n]/.test(trimmed) ? trimmed : undefined;
+  };
+
+  const icon = requiredText("icon", 40);
+  const name = requiredText("name", 160);
+  const age_range = requiredText("age_range", 80);
+  const budget = requiredText("budget", 80);
+  const duration = body.duration_minutes;
+  if (!icon || !name || !age_range || !budget) {
+    return { ok: false, error: "Enter the activity name, icon, age range, and budget." };
+  }
+  if (typeof duration !== "number" || !Number.isInteger(duration) || duration < 1 || duration > 10080) {
+    return { ok: false, error: "Enter a valid duration in minutes." };
+  }
+
+  const description = optionalText("description", 4000);
+  const address = optionalText("address", 500);
+  const time_of_day = optionalText("time_of_day", 80);
+  const bookingUrl = optionalText("booking_url", 2048);
+  if (description === undefined || address === undefined || time_of_day === undefined || bookingUrl === undefined) {
+    return { ok: false, error: "Check the optional text fields and try again." };
+  }
+  if (bookingUrl) {
+    try {
+      if (!["http:", "https:"].includes(new URL(bookingUrl).protocol)) throw new Error("unsafe_url");
+    } catch {
+      return { ok: false, error: "Enter a valid HTTP or HTTPS booking URL." };
+    }
+  }
+  if (body.requires_booking != null && typeof body.requires_booking !== "boolean") {
+    return { ok: false, error: "Choose whether booking is required." };
+  }
+
+  return {
+    ok: true,
+    value: {
+      icon,
+      name,
+      age_range,
+      budget,
+      duration_minutes: duration,
+      description,
+      address,
+      time_of_day,
+      booking_url: bookingUrl,
+      requires_booking: body.requires_booking === true,
+    },
+  };
+}
+
 type CircleWriteResult =
   | { ok: true; value: { id?: string; name: string; icon: string; description: string | null; visibility?: "public" | "private" } }
   | { ok: false; error: string };
@@ -244,6 +328,8 @@ export async function GET(
         const { data, error } = await supabase
           .from("dad_dates")
           .select("*")
+          .eq("source", "admin")
+          .is("user_id", null)
           .order("name");
         if (error) throw error;
         return NextResponse.json(data);
@@ -428,16 +514,11 @@ export async function POST(
       }
 
       case "dad_dates": {
+        const parsed = parseDadDateWrite(body);
+        if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
         const { data, error } = await supabase
           .from("dad_dates")
-          .insert({
-            icon: body.icon,
-            name: body.name,
-            age_range: body.age_range,
-            budget: body.budget,
-            duration_minutes: body.duration_minutes,
-            time_of_day: body.time_of_day ?? null,
-          })
+          .insert({ ...parsed.value, source: "admin", user_id: null })
           .select()
           .single();
         if (error) throw error;
@@ -593,6 +674,32 @@ export async function PATCH(
     }
   }
 
+  if (resource === "dad_dates") {
+    const parsed = parseDadDateWrite(body);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const id = body?.id;
+    if (typeof id !== "string" || !UUID_PATTERN.test(id)) {
+      return NextResponse.json({ error: "A valid Dad Date idea ID is required." }, { status: 400 });
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("dad_dates")
+        .update(parsed.value)
+        .eq("id", id)
+        .eq("source", "admin")
+        .is("user_id", null)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return NextResponse.json({ error: "Official Dad Date idea not found." }, { status: 404 });
+      return NextResponse.json(data);
+    } catch (err) {
+      console.error("[admin PATCH dad_dates]", err);
+      return NextResponse.json({ error: "This Dad Date idea could not be updated. Please try again." }, { status: 500 });
+    }
+  }
+
   const { id, ...updates } = body;
 
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -636,6 +743,28 @@ export async function DELETE(
   const supabase = getAdminSupabase();
   const body = await req.json();
   const { id } = body;
+
+  if (resource === "dad_dates") {
+    if (typeof id !== "string" || !UUID_PATTERN.test(id)) {
+      return NextResponse.json({ error: "A valid Dad Date idea ID is required." }, { status: 400 });
+    }
+    try {
+      const { data, error } = await supabase
+        .from("dad_dates")
+        .delete()
+        .eq("id", id)
+        .eq("source", "admin")
+        .is("user_id", null)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return NextResponse.json({ error: "Official Dad Date idea not found." }, { status: 404 });
+      return NextResponse.json({ ok: true });
+    } catch (err) {
+      console.error("[admin DELETE dad_dates]", err);
+      return NextResponse.json({ error: "This Dad Date idea could not be deleted. Please try again." }, { status: 500 });
+    }
+  }
 
   if (resource === "challenges") {
     const parsed = parseChallengeId(body);

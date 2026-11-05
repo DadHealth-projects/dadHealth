@@ -12,6 +12,7 @@ import {
   Heart,
   LogOut,
   Megaphone,
+  Pencil,
   Plus,
   RefreshCw,
   Shield,
@@ -115,7 +116,34 @@ interface DadDate {
   age_range: string;
   budget: string;
   duration_minutes: number;
-  time_of_day?: string;
+  description?: string | null;
+  address?: string | null;
+  time_of_day?: string | null;
+  booking_url?: string | null;
+  requires_booking?: boolean | null;
+}
+
+type DadDateForm = Omit<DadDate, "id" | "duration_minutes"> & { duration_minutes: string };
+
+const emptyDadDateForm = (): DadDateForm => ({
+  icon: "",
+  name: "",
+  age_range: "",
+  budget: "",
+  duration_minutes: "",
+  description: "",
+  address: "",
+  time_of_day: "",
+  booking_url: "",
+  requires_booking: false,
+});
+
+function isHttpBookingUrl(value: string): boolean {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
 }
 
 interface ExpertEvent {
@@ -1318,13 +1346,24 @@ function DadDatesTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ icon: "", name: "", age_range: "", budget: "", duration_minutes: "", time_of_day: "" });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [form, setForm] = useState<DadDateForm>(emptyDadDateForm);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminFetch("/api/admin/dad_dates");
-      if (res.ok) setItems(await res.json());
+      const response = await adminFetch("/api/admin/dad_dates");
+      if (!response.ok) throw new Error("load_failed");
+      setItems(await response.json() as DadDate[]);
+      setLoadError(null);
+      return true;
+    } catch {
+      setLoadError("Dad Date ideas could not be loaded. Please try again.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -1332,76 +1371,211 @@ function DadDatesTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleCreate = async () => {
-    if (!form.name.trim()) return;
+  const resetForm = () => {
+    setForm(emptyDadDateForm());
+    setEditingId(null);
+    setFormError(null);
+    setShowForm(false);
+  };
+
+  const startEdit = (item: DadDate) => {
+    setEditingId(item.id);
+    setForm({
+      icon: item.icon ?? "",
+      name: item.name ?? "",
+      age_range: item.age_range ?? "",
+      budget: item.budget ?? "",
+      duration_minutes: String(item.duration_minutes ?? ""),
+      description: item.description ?? "",
+      address: item.address ?? "",
+      time_of_day: item.time_of_day ?? "",
+      booking_url: item.booking_url ?? "",
+      requires_booking: item.requires_booking === true,
+    });
+    setFormError(null);
+    setFeedback(null);
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    const duration = Number(form.duration_minutes);
+    if (!form.name.trim() || !form.icon.trim() || !form.age_range.trim() || !form.budget.trim()) {
+      setFormError("Enter the activity name, icon, age range, and budget.");
+      return;
+    }
+    if (!Number.isInteger(duration) || duration < 1 || duration > 10080) {
+      setFormError("Enter a valid duration in minutes.");
+      return;
+    }
+    const bookingUrl = form.booking_url?.trim() ?? "";
+    if (bookingUrl && !isHttpBookingUrl(bookingUrl)) {
+      setFormError("Enter a valid HTTP or HTTPS booking URL.");
+      return;
+    }
+
+    const wasEditing = editingId !== null;
     setSaving(true);
+    setFormError(null);
+    setFeedback(null);
     try {
-      await adminFetch("/api/admin/dad_dates", {
-        method: "POST",
-        body: JSON.stringify({ ...form, duration_minutes: Number(form.duration_minutes) }),
+      const response = await adminFetch("/api/admin/dad_dates", {
+        method: wasEditing ? "PATCH" : "POST",
+        body: JSON.stringify({
+          ...(editingId ? { id: editingId } : {}),
+          icon: form.icon.trim(),
+          name: form.name.trim(),
+          age_range: form.age_range.trim(),
+          budget: form.budget.trim(),
+          duration_minutes: duration,
+          description: form.description?.trim() || null,
+          address: form.address?.trim() || null,
+          time_of_day: form.time_of_day?.trim() || null,
+          booking_url: bookingUrl || null,
+          requires_booking: form.requires_booking === true,
+        }),
       });
-      setForm({ icon: "", name: "", age_range: "", budget: "", duration_minutes: "", time_of_day: "" });
-      setShowForm(false);
-      load();
+      if (!response.ok) {
+        throw new Error(await adminErrorMessage(response, "Dad Date idea could not be saved."));
+      }
+
+      resetForm();
+      const refreshed = await load();
+      setFeedback({
+        type: refreshed ? "success" : "error",
+        message: refreshed
+          ? wasEditing ? "Dad Date idea updated." : "Dad Date idea added."
+          : "Dad Date idea saved, but the list could not be refreshed.",
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "Dad Date idea could not be saved. Please try again.",
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this dad date idea?")) return;
-    await adminFetch("/api/admin/dad_dates", { method: "DELETE", body: JSON.stringify({ id }) });
-    load();
+    if (!confirm("Delete this Dad Date idea?")) return;
+    setDeletingId(id);
+    setFeedback(null);
+    try {
+      const response = await adminFetch("/api/admin/dad_dates", {
+        method: "DELETE",
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) {
+        throw new Error(await adminErrorMessage(response, "Dad Date idea could not be deleted."));
+      }
+
+      setItems((current) => current.filter((item) => item.id !== id));
+      const refreshed = await load();
+      setFeedback({
+        type: refreshed ? "success" : "error",
+        message: refreshed
+          ? "Dad Date idea deleted."
+          : "Dad Date idea was deleted, but the list could not be refreshed.",
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "Dad Date idea could not be deleted. Please try again.",
+      });
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
     <div>
       <SectionHeader title="Dad Date Ideas" onRefresh={load}>
-        <button type="button" onClick={() => setShowForm((v) => !v)} className={btnPrimary}>
+        <button
+          type="button"
+          onClick={() => {
+            if (showForm) resetForm();
+            else { setFeedback(null); setShowForm(true); }
+          }}
+          className={btnPrimary}
+        >
           <Plus className="h-3 w-3" /> Add Idea
         </button>
       </SectionHeader>
 
+      {feedback ? (
+        <p
+          role={feedback.type === "error" ? "alert" : "status"}
+          className={`mb-4 text-sm ${feedback.type === "error" ? "text-red-500" : "text-primary"}`}
+        >
+          {feedback.message}
+        </p>
+      ) : null}
+
       {showForm && (
         <div className="mb-6 rounded-2xl border border-border bg-card p-4 space-y-3">
-          <h3 className="font-heading text-sm font-extrabold uppercase text-foreground">Add Dad Date Idea</h3>
+          <h3 className="font-heading text-sm font-extrabold uppercase text-foreground">
+            {editingId ? "Edit Dad Date Idea" : "Add Dad Date Idea"}
+          </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className={labelCls}>Emoji icon</label>
-              <input className={inputCls} value={form.icon} onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))} placeholder="🎬" />
+              <label className={labelCls}>Icon *</label>
+              <input className={inputCls} value={form.icon} onChange={(e) => setForm((current) => ({ ...current, icon: e.target.value }))} placeholder="📍" />
             </div>
             <div>
               <label className={labelCls}>Activity name *</label>
-              <input className={inputCls} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Cinema trip" />
+              <input className={inputCls} maxLength={160} value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} placeholder="Cinema trip" />
             </div>
             <div>
-              <label className={labelCls}>Age range</label>
-              <input className={inputCls} value={form.age_range} onChange={(e) => setForm((f) => ({ ...f, age_range: e.target.value }))} placeholder="3-10" />
+              <label className={labelCls}>Age range *</label>
+              <input className={inputCls} maxLength={80} value={form.age_range} onChange={(e) => setForm((current) => ({ ...current, age_range: e.target.value }))} placeholder="3-10" />
             </div>
             <div>
-              <label className={labelCls}>Budget</label>
-              <input className={inputCls} value={form.budget} onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))} placeholder="Under £15" />
+              <label className={labelCls}>Budget / cost *</label>
+              <input className={inputCls} maxLength={80} value={form.budget} onChange={(e) => setForm((current) => ({ ...current, budget: e.target.value }))} placeholder="Under £15" />
             </div>
             <div>
-              <label className={labelCls}>Duration (minutes)</label>
-              <input type="number" className={inputCls} value={form.duration_minutes} onChange={(e) => setForm((f) => ({ ...f, duration_minutes: e.target.value }))} min={1} placeholder="90" />
+              <label className={labelCls}>Duration (minutes) *</label>
+              <input type="number" className={inputCls} value={form.duration_minutes} onChange={(e) => setForm((current) => ({ ...current, duration_minutes: e.target.value }))} min={1} max={10080} step={1} placeholder="90" />
             </div>
             <div>
               <label className={labelCls}>Time of day</label>
-              <input className={inputCls} value={form.time_of_day} onChange={(e) => setForm((f) => ({ ...f, time_of_day: e.target.value }))} placeholder="Evening" />
+              <input className={inputCls} maxLength={80} value={form.time_of_day ?? ""} onChange={(e) => setForm((current) => ({ ...current, time_of_day: e.target.value }))} placeholder="Evening" />
             </div>
+            <div className="sm:col-span-2">
+              <label className={labelCls}>Description</label>
+              <textarea className={inputCls} maxLength={4000} rows={3} value={form.description ?? ""} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelCls}>Address / location</label>
+              <input className={inputCls} maxLength={500} value={form.address ?? ""} onChange={(e) => setForm((current) => ({ ...current, address: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelCls}>Booking URL</label>
+              <input type="url" className={inputCls} maxLength={2048} value={form.booking_url ?? ""} onChange={(e) => setForm((current) => ({ ...current, booking_url: e.target.value }))} placeholder="https://…" />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-foreground sm:col-span-2">
+              <input type="checkbox" checked={form.requires_booking === true} onChange={(e) => setForm((current) => ({ ...current, requires_booking: e.target.checked }))} />
+              Booking required
+            </label>
           </div>
+          {formError ? <p role="alert" className="text-sm text-red-500">{formError}</p> : null}
           <div className="flex gap-2">
-            <button type="button" onClick={handleCreate} disabled={saving} className={btnPrimary}>{saving ? "Saving…" : "Save"}</button>
-            <button type="button" onClick={() => setShowForm(false)} className={btnGhost}>Cancel</button>
+            <button type="button" onClick={handleSave} disabled={saving} className={btnPrimary}>
+              {saving ? "Saving…" : editingId ? "Save changes" : "Save"}
+            </button>
+            <button type="button" onClick={resetForm} disabled={saving} className={btnGhost}>
+              {editingId ? "Cancel editing" : "Cancel"}
+            </button>
           </div>
         </div>
       )}
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : loadError ? (
+        <p role="alert" className="text-sm text-red-500">{loadError}</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No dad date ideas yet.</p>
+        <p className="text-sm text-muted-foreground">No Dad Date ideas yet.</p>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
           {items.map((item) => (
@@ -1411,9 +1585,24 @@ function DadDatesTab() {
               <div className="text-[10px] text-muted-foreground mt-1">
                 Age {item.age_range} · {item.budget}
               </div>
-              <button type="button" onClick={() => handleDelete(item.id)} className={`${btnDanger} mt-2`}>
-                <Trash2 className="h-3 w-3" />
-              </button>
+              {item.description ? <p className="mt-2 text-xs text-muted-foreground">{item.description}</p> : null}
+              {item.address ? <p className="mt-2 text-xs text-muted-foreground">{item.address}</p> : null}
+              <div className="mt-2 text-xs text-muted-foreground">
+                {item.duration_minutes} min{item.time_of_day ? ` · ${item.time_of_day}` : ""}{item.requires_booking ? " · Booking required" : ""}
+              </div>
+              {item.booking_url ? (
+                <a href={item.booking_url} target="_blank" rel="noopener noreferrer" className="mt-2 block text-xs text-primary hover:underline">
+                  Booking link
+                </a>
+              ) : null}
+              <div className="mt-3 flex gap-2">
+                <button type="button" onClick={() => startEdit(item)} className={btnGhost}>
+                  <Pencil className="h-3 w-3" /> Edit
+                </button>
+                <button type="button" onClick={() => handleDelete(item.id)} disabled={deletingId === item.id} className={`${btnDanger} disabled:opacity-50`}>
+                  <Trash2 className="h-3 w-3" />{deletingId === item.id ? "Deleting…" : "Delete"}
+                </button>
+              </div>
             </div>
           ))}
         </div>
