@@ -23,7 +23,8 @@ export async function sendOneSignalToExternalUserId(args: {
     },
     body: JSON.stringify({
       app_id: appId,
-      include_subscription_ids: ["398dedd9-49c6-447f-82b5-1931b0729dda"],
+      target_channel: "push",
+      include_aliases: { external_id: [args.externalUserId] },
       headings: { en: args.payload.heading },
       contents: { en: args.payload.content },
       web_url: `${siteUrl}${args.payload.link}`,

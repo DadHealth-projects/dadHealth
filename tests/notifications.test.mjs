@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
+import ts from "typescript";
 
 const root = new URL("../", import.meta.url);
 
@@ -26,6 +28,60 @@ test("OneSignal uses the current API with platform-correct routing", async () =>
   for (const legacy of ["api/v1/notifications", "include_external_user_ids", "Basic ${apiKey}"]) {
     assert.equal(sender.includes(legacy), false, `Legacy OneSignal field remains: ${legacy}`);
   }
+});
+
+test("OneSignal targets distinct recipients and preserves payload and idempotency", async () => {
+  const sender = await source("src/lib/notifications/onesignal.ts");
+  const { outputText } = ts.transpileModule(sender, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  });
+  const requests = [];
+  const exports = {};
+  // Isolated globals: no real credentials, network fetch, or module imports.
+  runInNewContext(outputText, {
+    exports,
+    process: { env: {
+      ONESIGNAL_APP_ID: "test-app",
+      ONESIGNAL_REST_API_KEY: "test-key",
+      NEXT_PUBLIC_SITE_URL: "https://example.test/",
+    } },
+    console: { info() {} },
+    fetch: async (url, options) => {
+      requests.push({ url, ...options, body: JSON.parse(options.body) });
+      return { ok: true, text: async () => JSON.stringify({ id: "test-message" }) };
+    },
+  });
+
+  for (const recipient of ["recipient-a", "recipient-b"]) {
+    const payload = {
+      type: "weekly_score",
+      heading: `Report for ${recipient}`,
+      content: `Score for ${recipient}`,
+      link: "/progress",
+      data: { score: 72, marker: recipient },
+    };
+    const idempotencyKey = `claim-${recipient}`;
+    const result = await exports.sendOneSignalToExternalUserId({
+      externalUserId: recipient, payload, idempotencyKey,
+    });
+    assert.equal(result.id, "test-message");
+    const request = requests.at(-1);
+    assert.equal(request.url, "https://api.onesignal.com/notifications");
+    assert.equal(request.method, "POST");
+    assert.equal(request.headers.Authorization, "Key test-key");
+    assert.equal(Object.hasOwn(request.body, "include_subscription_ids"), false);
+    assert.deepEqual(request.body, {
+      app_id: "test-app",
+      target_channel: "push",
+      include_aliases: { external_id: [recipient] },
+      headings: { en: payload.heading },
+      contents: { en: payload.content },
+      web_url: `https://example.test${payload.link}`,
+      idempotency_key: idempotencyKey,
+      data: { type: payload.type, link: payload.link, ...payload.data },
+    });
+  }
+  assert.equal(requests.length, 2);
 });
 
 test("notification delivery is finalized only after OneSignal succeeds", async () => {
