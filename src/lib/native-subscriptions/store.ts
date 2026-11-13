@@ -18,7 +18,7 @@ export async function upsertSubscriptionEntitlement(
   if (ACCESS_GRANTING_STATUSES.has(input.status) && !input.currentPeriodEnd) {
     throw new Error("Verified subscription expiry is required for Pro access");
   }
-  const { data, error } = await admin.rpc("upsert_subscription_entitlement", {
+  const snapshot = {
     p_user_id: input.userId,
     p_provider: input.provider,
     p_provider_subscription_id: input.providerSubscriptionId,
@@ -32,7 +32,12 @@ export async function upsertSubscriptionEntitlement(
     p_auto_renews: input.autoRenews ?? null,
     p_environment: input.environment,
     p_last_verified_at: input.lastVerifiedAt ?? new Date().toISOString(),
-  });
+  };
+  const { data, error } = input.provider === 'apple'
+    ? await admin.rpc('upsert_subscription_with_cancellation_evidence', {
+      p_snapshot: snapshot, p_evidence: input.cancellationEvidence ?? null,
+    })
+    : await admin.rpc('upsert_subscription_entitlement', snapshot);
 
   if (error) {
     if (error.code === "23505") throw new SubscriptionOwnershipError();

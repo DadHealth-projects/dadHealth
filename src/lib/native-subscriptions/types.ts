@@ -22,7 +22,13 @@ export interface SubscriptionEntitlementRow {
   updated_at: string;
 }
 
+export interface CancellationEvidence {
+  source: 'apple_renewal_disabled' | 'apple_renewal_enabled' | 'apple_terminal';
+  scheduledEndAt: string | null;
+}
+
 export interface SubscriptionEntitlementInput {
+  cancellationEvidence?: CancellationEvidence | null;
   userId: string;
   provider: SubscriptionProvider;
   providerSubscriptionId: string;
