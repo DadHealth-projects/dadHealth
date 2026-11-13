@@ -1,3 +1,4 @@
+import { appleCancellationEvidence } from '@/lib/native-subscriptions/cancellation';
 import { NextResponse } from "next/server";
 
 import { appleEntitlementInput, verifyAppleNotification } from "@/lib/native-subscriptions/apple";
@@ -39,18 +40,17 @@ export async function POST(request: Request) {
     const userId = verified.transaction.appAccountToken ?? existing?.user_id;
     if (!userId || (existing && existing.user_id !== userId)) throw new Error("Apple subscription owner not found");
     const signedAt = (verified.notification as typeof verified.notification & { signedDate?: number }).signedDate;
-    const providerUpdatedAt = typeof signedAt === "number" && Number.isFinite(signedAt)
-      ? new Date(signedAt).toISOString()
-      : new Date().toISOString();
+    if (typeof signedAt !== 'number' || !Number.isFinite(signedAt) || signedAt <= 0) throw new Error('Apple signing date missing');
+    const providerUpdatedAt = new Date(signedAt).toISOString();
     await upsertSubscriptionEntitlement(
       admin,
-      appleEntitlementInput(
+      { ...appleEntitlementInput(
         userId,
         { transaction: verified.transaction, environment: verified.environment },
         verified.renewal,
         verified.notification.data?.status,
         providerUpdatedAt,
-      ),
+      ), cancellationEvidence: appleCancellationEvidence(verified) },
     );
     await completeProviderEvent(admin, claimId);
     return NextResponse.json({ ok: true });

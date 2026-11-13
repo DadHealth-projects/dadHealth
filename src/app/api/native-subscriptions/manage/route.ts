@@ -1,3 +1,4 @@
+import { isUuid, ownedSubscription } from '@/lib/native-subscriptions/cancellation';
 import { NextResponse } from "next/server";
 
 import { authenticateNativeSubscriptionRequest } from "@/lib/native-subscriptions/auth";
@@ -13,19 +14,29 @@ export async function POST(request: Request) {
   const auth = await authenticateNativeSubscriptionRequest(request);
   if (!auth) return NextResponse.json({ error: "Sign in required", code: "unauthorized" }, { status: 401 });
   try {
-    const summary = await getSubscriptionSummary(auth.admin, auth.user.id);
-    if (!summary.isPro || !summary.primaryProvider) {
-      return NextResponse.json({ error: "No active subscription was found", code: "not_subscribed" }, { status: 404 });
+    const body: unknown = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    const { subscriptionId } = body as { subscriptionId?: unknown };
+    if (subscriptionId !== undefined && !isUuid(subscriptionId)) return NextResponse.json({ error: 'Invalid subscription' }, { status: 400 });
+    const selected = typeof subscriptionId === 'string' ? await ownedSubscription(auth, subscriptionId) : null;
+    if (subscriptionId !== undefined && (!selected || selected.provider !== 'apple')) {
+      return NextResponse.json({ error: 'Subscription unavailable' }, { status: 404 });
     }
-    if (summary.primaryProvider === "apple") {
+    const summary = selected ? null : await getSubscriptionSummary(auth.admin, auth.user.id);
+    const provider = selected?.provider ?? summary?.primaryProvider;
+    const productId = selected?.product_id ?? summary?.productId;
+    if (!provider || (!selected && !summary?.isPro)) {
+      return NextResponse.json({ error: 'No active subscription was found', code: 'not_subscribed' }, { status: 404 });
+    }
+    if (provider === "apple") {
       return NextResponse.json({ url: "https://apps.apple.com/account/subscriptions" });
     }
-    if (summary.primaryProvider === "google") {
+    if (provider === "google") {
       const params = new URLSearchParams({ package: DAD_HEALTH_ANDROID_PACKAGE });
-      if (summary.productId) params.set("sku", summary.productId);
+      if (productId) params.set("sku", productId);
       return NextResponse.json({ url: `https://play.google.com/store/account/subscriptions?${params}` });
     }
-    if (summary.primaryProvider === "manual") {
+    if (provider === "manual") {
       return NextResponse.json(
         { error: "This Pro access is managed by Dad Health", code: "managed_by_dad_health" },
         { status: 400 },
