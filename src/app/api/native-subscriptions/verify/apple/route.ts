@@ -9,8 +9,19 @@ import { findSubscriptionEntitlement, getSubscriptionSummary, upsertSubscription
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const suppliedId = request.headers?.get('X-IAP-Debug-ID');
+  const operationId = suppliedId && /^iap-[a-z0-9]{1,16}-[0-9]{1,9}$/.test(suppliedId)
+    ? suppliedId : `server-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const log = (stage: string, fields: Record<string, unknown> = {}) => {
+    if (process.env.NODE_ENV === 'development' || process.env.IAP_DEBUG === 'true') {
+      console.info(`[DadHealthIAP][server] ${stage}`, { operationId, ...fields });
+    }
+  };
+  let stage = 'authentication';
+  log('verification request received');
   const auth = await authenticateNativeSubscriptionRequest(request);
   if (!auth) return NextResponse.json({ error: "Sign in required", code: "unauthorized" }, { status: 401 });
+  log('authenticated');
   try {
     if (!(await consumeSubscriptionVerificationAttempt(auth, "apple"))) {
       return NextResponse.json({ error: "Too many attempts. Please try again later.", code: "rate_limited" }, { status: 429 });
@@ -20,12 +31,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Apple purchase information is missing", code: "invalid_request" }, { status: 400 });
     }
     const verificationStartedAt = new Date().toISOString();
+    stage = 'apple_verification';
     const verified = await verifyAppleTransaction(body.signedTransaction);
+    log('Apple transaction verified', { productId: verified.transaction.productId, environment: verified.environment });
     const originalId = verified.transaction.originalTransactionId;
     if (!originalId) throw new Error("Apple transaction is incomplete");
+    stage = 'ownership_lookup';
     const existing = await findSubscriptionEntitlement(auth.admin, "apple", originalId);
     const accountToken = verified.transaction.appAccountToken?.toLowerCase();
-    if ((accountToken && accountToken !== auth.user.id.toLowerCase()) || (existing && existing.user_id !== auth.user.id)) {
+    const tokenMismatch = Boolean(accountToken) && accountToken !== auth.user.id.toLowerCase();
+    const existingOwnerMismatch = Boolean(existing) && existing!.user_id !== auth.user.id;
+    log('ownership', {
+      productId: verified.transaction.productId,
+      environment: verified.environment,
+      hasAppAccountToken: Boolean(accountToken),
+      tokenMatchesUser: accountToken ? !tokenMismatch : null,
+      existingEntitlementFound: Boolean(existing),
+      existingOwnerMatchesUser: existing ? !existingOwnerMismatch : null,
+      tokenMismatch,
+      existingOwnerMismatch,
+    });
+    if (tokenMismatch || existingOwnerMismatch) {
+      log('rejected', {
+        reason: tokenMismatch ? 'app_account_token_mismatch' : 'existing_entitlement_owner_mismatch',
+        productId: verified.transaction.productId,
+      });
       return NextResponse.json(
         { error: "This subscription belongs to another Dad Health account", code: "already_linked" },
         { status: 409 },
@@ -45,14 +75,25 @@ export async function POST(request: Request) {
       && Number.isFinite(existingGraceEnd)
       && existingGraceEnd > Date.now()
     ) {
-      return NextResponse.json({ ok: true, summary: await getSubscriptionSummary(auth.admin, auth.user.id) });
+      stage = 'membership_read';
+      const summary = await getSubscriptionSummary(auth.admin, auth.user.id);
+      log('membership returned', { isPro: summary.isPro, status: summary.status, preservedGrace: true });
+      return NextResponse.json({ ok: true, summary });
     }
+    stage = 'entitlement_upsert';
+    log('entitlement upsert attempted');
     await upsertSubscriptionEntitlement(
       auth.admin,
       appleEntitlementInput(auth.user.id, verified, null, undefined, verificationStartedAt),
     );
-    return NextResponse.json({ ok: true, summary: await getSubscriptionSummary(auth.admin, auth.user.id) });
+    log('entitlement upsert completed');
+    stage = 'membership_read';
+    const summary = await getSubscriptionSummary(auth.admin, auth.user.id);
+    log('membership returned', { isPro: summary.isPro, status: summary.status });
+    return NextResponse.json({ ok: true, summary });
   } catch (error) {
+    log('verification failed', { stage, reason: error instanceof Error && error.name === 'SubscriptionOwnershipError'
+      ? 'database_ownership_constraint_failure' : stage === 'apple_verification' ? 'apple_verification_failure' : 'other_backend_failure' });
     return nativeSubscriptionErrorResponse(error);
   }
 }
