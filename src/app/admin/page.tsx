@@ -72,6 +72,7 @@ interface WorkoutExercise {
 }
 
 interface WorkoutItem {
+  access_level: 'free' | 'pro';
   id: string;
   title: string;
   duration_mins: 10 | 20 | 30 | 45;
@@ -916,6 +917,7 @@ function RecipesTab() {
 // ── Workouts Tab ──────────────────────────────────────────────────────────────
 
 const BLANK_WORKOUT_FORM = {
+  access_level: 'pro' as 'free' | 'pro',
   title: "",
   duration_mins: 20 as 10 | 20 | 30 | 45,
   equipment: "none" as "none" | "dumbbells" | "full_gym",
@@ -960,6 +962,7 @@ function parseExercises(text: string): WorkoutExercise[] {
 
 function workoutToForm(item: WorkoutItem) {
   return {
+    access_level: item.access_level === 'free' ? 'free' as const : 'pro' as const,
     title: item.title,
     duration_mins: item.duration_mins,
     equipment: item.equipment,
@@ -1020,6 +1023,7 @@ function WorkoutsTab() {
       const payload = {
         title: form.title.trim(),
         duration_mins: form.duration_mins,
+        access_level: form.access_level,
         equipment: form.equipment,
         focus: form.focus,
         exercises,
@@ -1148,6 +1152,15 @@ function WorkoutsTab() {
                 <option value={30}>30 min</option>
                 <option value={45}>45 min</option>
               </select>
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="workout-access">Library access</label>
+              <select id="workout-access" className={inputCls} value={form.access_level}
+                onChange={(e) => setForm((f) => ({ ...f, access_level: e.target.value as 'free' | 'pro' }))}>
+                <option value="pro">Pro</option>
+                <option value="free">Free</option>
+              </select>
+              <p className="mt-2 text-[11px] text-muted-foreground">Weekly featured access is separate.</p>
             </div>
             <div>
               <label className={labelCls}>Equipment</label>

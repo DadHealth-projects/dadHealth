@@ -481,6 +481,9 @@ export async function POST(
       }
 
       case "workouts": {
+        if (body.access_level !== undefined && body.access_level !== 'free' && body.access_level !== 'pro') {
+          return NextResponse.json({ error: 'Invalid workout access' }, { status: 400 });
+        }
         const { data, error } = await supabase
           .from("workouts")
           .insert({
@@ -491,6 +494,7 @@ export async function POST(
             focus: body.focus,
             exercises: body.exercises ?? [],
             source: "admin",
+            access_level: body.access_level ?? 'pro',
           })
           .select()
           .single();
@@ -701,6 +705,11 @@ export async function PATCH(
   }
 
   const { id, ...updates } = body;
+
+  if (resource === 'workouts' && updates.access_level !== undefined
+    && updates.access_level !== 'free' && updates.access_level !== 'pro') {
+    return NextResponse.json({ error: 'Invalid workout access' }, { status: 400 });
+  }
 
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
