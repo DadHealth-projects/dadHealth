@@ -9,19 +9,23 @@ export type ReportReadResult =
 
 /** No generation on GET. The owner must come from verified server authentication. */
 export async function readWeeklyReport(admin: AdminClient, owner: string, week?: string, now = new Date()): Promise<ReportReadResult> {
-  const release = week ? reportReleaseForWeek(week) : latestReleasedReportWeek(now);
+  let release = week ? reportReleaseForWeek(week) : latestReleasedReportWeek(now);
   // Reuse the canonical database predicate, including manual/legacy grants.
   // Unlike coercing a missing result to false, require an actual boolean.
   const { data: access, error: accessError } = await admin.rpc('user_has_pro_access', { p_user_id: owner });
   if (accessError || typeof access !== 'boolean') return { state: 'unavailable', reason: 'entitlement_unavailable' };
   if (now.getTime() < Date.parse(release.deliveryAt)) return { state: 'unavailable', reason: 'not_released' };
-  const { data, error } = await admin.from('weekly_report_snapshots')
+  let query = admin.from('weekly_report_snapshots')
     .select('user_id,reporting_week_start,delivery_at,captured_at,payload')
-    .eq('user_id', owner).eq('reporting_week_start', release.weekStart).maybeSingle();
+    .eq('user_id', owner);
+  query = week ? query.eq('reporting_week_start', release.weekStart)
+    : query.lte('delivery_at', now.toISOString()).order('reporting_week_start', { ascending: false }).limit(1);
+  const { data, error } = await query.maybeSingle();
   if (error) return { state: 'unavailable', reason: 'read_failed' };
   if (!data) return { state: 'unavailable', reason: 'snapshot_missing' };
   // Validate persisted metadata before projection; never send the raw stored JSON.
   try {
+    if (!week) release = reportReleaseForWeek(data.reporting_week_start);
     const input = data.payload as WeeklyReportInputV2;
     if (data.user_id !== owner || data.reporting_week_start !== release.weekStart
       || input.period.weekStart !== release.weekStart

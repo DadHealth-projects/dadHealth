@@ -1,3 +1,4 @@
+import { dispatchWeeklyReports } from "@/lib/reports/weekly-report-dispatch";
 import { NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 import type { NotificationType } from "@/types/database";
@@ -32,52 +33,6 @@ function ymdAddYears(ymd: string, years: number): string {
   const d = new Date(`${ymd}T00:00:00Z`);
   d.setUTCFullYear(d.getUTCFullYear() + years);
   return d.toISOString().slice(0, 10);
-}
-
-function calcScore(
-  moodAvg: number | null,
-  sleepAvg: number | null,
-  workoutCount: number,
-  journalCount: number
-): number | null {
-  if (moodAvg == null || sleepAvg == null) return null;
-  const moodScore = Math.min(100, (moodAvg / 4) * 30);
-  const sleepScore = Math.min(30, (sleepAvg / 8) * 30);
-  const workoutScore = Math.min(25, workoutCount * 3);
-  const journalScore = Math.min(15, journalCount * 2);
-  return Math.round(Math.min(100, moodScore + sleepScore + workoutScore + journalScore));
-}
-
-async function computeWeeklyScore(admin: ReturnType<typeof createAdminSupabaseClient>, userId: string, endLocalDate: string) {
-  const start = ymdAddDays(endLocalDate, -6);
-  const end = endLocalDate;
-
-  const [moodRes, sleepRes, workoutRes, journalRes] = await Promise.all([
-    admin.from("mood_logs").select("mood_value").eq("user_id", userId).gte("date", start).lte("date", end),
-    admin.from("sleep_logs").select("hours").eq("user_id", userId).gte("date", start).lte("date", end),
-    admin
-      .from("workout_sessions")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .gte("performed_at", `${start}T00:00:00Z`)
-      .lte("performed_at", `${end}T23:59:59Z`),
-    admin
-      .from("journal_entries")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .gte("created_at", `${start}T00:00:00Z`)
-      .lte("created_at", `${end}T23:59:59Z`),
-  ]);
-
-  const mood = (moodRes.data ?? []).map((r: { mood_value: number }) => r.mood_value).filter((n) => Number.isFinite(n));
-  const sleep = (sleepRes.data ?? []).map((r: { hours: number }) => r.hours).filter((n) => Number.isFinite(n));
-
-  const moodAvg = mood.length ? mood.reduce((a, b) => a + b, 0) / mood.length : null;
-  const sleepAvg = sleep.length ? sleep.reduce((a, b) => a + b, 0) / sleep.length : null;
-  const workoutCount = workoutRes.count ?? 0;
-  const journalCount = journalRes.count ?? 0;
-
-  return calcScore(moodAvg, sleepAvg, workoutCount, journalCount);
 }
 
 async function processPresentDadCompletions(admin: ReturnType<typeof createAdminSupabaseClient>, now: Date) {
@@ -166,6 +121,8 @@ export async function GET(request: Request) {
     const admin = createAdminSupabaseClient();
     const now = new Date();
     console.info("[notifications/dispatch] Run started", { now: now.toISOString() });
+    // Item 02 is independent of notification preferences and other notification jobs.
+    const weeklyResult = await dispatchWeeklyReports(admin, now).catch(() => ({ reports: 0, sent: 0, pending: 0, errors: 1 }));
     const presentDadResult = await processPresentDadCompletions(admin, now);
 
     const prefsRes = await admin
@@ -179,7 +136,7 @@ export async function GET(request: Request) {
     const userIds = Array.from(new Set(prefs.map((p) => p.user_id)));
     if (userIds.length === 0) {
       console.info("[notifications/dispatch] Run completed", { ...presentDadResult, scheduledUsers: 0 });
-      return NextResponse.json({ ok: true, ...presentDadResult });
+      return NextResponse.json({ ok: true, ...presentDadResult, weekly: weeklyResult });
     }
 
     const profilesRes = await admin
@@ -223,20 +180,16 @@ export async function GET(request: Request) {
       let hasCheckinToday: boolean | null = null;
       let streakDays: number | null = null;
       let milestoneText: string | null = null;
-      let weeklyScore: number | null = null;
 
       for (const pref of userPrefs) {
         const type = pref.notification_type;
+        if (type === "weekly_score") continue; // Saved reports are handled independently above.
 
         let due = false;
         let journalPrompt: string | null = null;
 
         if (type === "morning_checkin") {
           due = isInWindow(localHHMM, "07:30");
-        } else if (type === "weekly_score") {
-          // The weekly Dad Health report lands on Sunday. `computeWeeklyScore`
-          // still ends on yesterday, so the window stays a complete seven days.
-          due = localDow === 0 && isInWindow(localHHMM, "08:00");
         } else if (type === "weekly_challenge") {
           due = localDow === 1 && isInWindow(localHHMM, "08:00");
         } else if (type === "streak_at_risk") {
@@ -313,10 +266,6 @@ export async function GET(request: Request) {
           }
         }
 
-        if (type === "weekly_score") {
-          weeklyScore = await computeWeeklyScore(admin, userId, ymdAddDays(localDate, -1));
-        }
-
         if (type === "streak_at_risk") {
           const sRes = await admin.from("user_streaks").select("streak_count").eq("user_id", userId).maybeSingle();
           streakDays = (sRes.data as { streak_count?: number } | null)?.streak_count ?? null;
@@ -324,7 +273,6 @@ export async function GET(request: Request) {
 
         const payload = buildPayload({
           type,
-          weeklyScore,
           streakDays,
           weeklyChallenge,
           milestoneText,
@@ -354,7 +302,7 @@ export async function GET(request: Request) {
       errors,
       scheduledUsers: userIds.length,
     });
-    return NextResponse.json({ ok: true, sent, skipped, errors });
+    return NextResponse.json({ ok: true, sent, skipped, errors, weekly: weeklyResult });
   } catch (e) {
     console.error("[notifications/dispatch]", e);
     return NextResponse.json({ error: "Dispatch failed" }, { status: 500 });
