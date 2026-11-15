@@ -12,11 +12,11 @@ const available = value => ({ state: 'available', value });
 function fixture() {
   const period = { weekStart: '2026-11-09', weekEndExclusive: '2026-11-16', startsAt: '2026-11-09T00:00:00Z',
     endsAtExclusive: '2026-11-16T00:00:00Z', accountTimezone: 'Europe/London', scoringModel: 'canonical-test-v1' };
-  return { version: 1, period, deliveryAt: '2026-11-15T18:00:00Z', cutoffAt: '2026-11-15T18:00:00Z',
+  return { version: 1, period, deliveryAt: '2026-11-15T06:00:00Z', cutoffAt: '2026-11-15T06:00:00Z',
     comparison: { state: 'available', previousPeriod: { ...period, weekStart: '2026-11-02', weekEndExclusive: '2026-11-09',
       startsAt: '2026-11-02T00:00:00Z', endsAtExclusive: '2026-11-09T00:00:00Z' }, previousWeekComplete: true,
       policy: 'partial_week_vs_full_week', policyApproved: true,
-      currentComparedThrough: '2026-11-15T18:00:00Z', previousComparedThrough: '2026-11-09T00:00:00Z' },
+      currentComparedThrough: '2026-11-15T06:00:00Z', previousComparedThrough: '2026-11-09T00:00:00Z' },
     pillars: { mind: { score: available(70), changePoints: available(3.5) }, body: { score: available(65), changePoints: available(-2) },
       bond: { score: available(80), changePoints: available(0) } },
     details: { workouts: available(0), bondSessions: { state: 'missing' }, checkins: { state: 'unavailable' },
@@ -82,14 +82,14 @@ test('missing pillar data suppresses its delta independently', () => {
   assert.equal(report.pillars.body.trendMessage, TREND_FALLBACK);
   assert.equal(report.pillars.bond.trendMessage, null);
 });
-for (const [sunday, utcHour] of [['2026-03-22', '18'], ['2026-03-29', '17'], ['2026-10-18', '17'], ['2026-10-25', '18']]) {
-  test(`Sunday 18:00 London including DST: ${sunday}`, () => {
+for (const [sunday, utcHour] of [['2026-03-22', '06'], ['2026-03-29', '05'], ['2026-10-18', '05'], ['2026-10-25', '06']]) {
+  test(`Sunday 06:00 London including DST: ${sunday}`, () => {
     const input = fixture(); const date = new Date(`${sunday}T00:00:00Z`);
     const key = offset => new Date(date.getTime() + offset * 86400000).toISOString().slice(0, 10);
     input.period = { ...input.period, weekStart: key(-6), weekEndExclusive: key(1), startsAt: `${key(-6)}T00:00:00Z`, endsAtExclusive: `${key(1)}T00:00:00Z` };
     input.deliveryAt = input.cutoffAt = `${sunday}T${utcHour}:00:00Z`;
     input.comparison = { state: 'unavailable', reason: 'missing_history' };
-    assert.equal(project(input, 'free').report.delivery.time, '18:00');
+    assert.equal(project(input, 'free').report.delivery.time, '06:00');
     input.deliveryAt = `${sunday}T20:00:00Z`;
     assert.throws(() => project(input, 'free'), /Invalid report/);
   });
@@ -106,7 +106,7 @@ test('output preserves explicit cutoff metadata, is deterministic and does not m
 });
 test('invalid scores, counts and future cutoffs fail instead of fabricating data', () => {
   for (const change of [i => i.pillars.mind.score.value = NaN, i => i.details.workouts.value = -1,
-    i => i.cutoffAt = '2026-11-15T19:00:00Z']) {
+    i => i.cutoffAt = '2026-11-15T07:00:00Z']) {
     const input = fixture(); change(input); assert.throws(() => project(input, 'pro'));
   }
 });
@@ -152,8 +152,8 @@ function fixtureV2() {
   input.version = 2;
   input.capturedAt = input.deliveryAt;
   input.comparison = { ...input.comparison, policy: 'matched_cutoff',
-    previousComparedThrough: '2026-11-08T18:00:00Z', previousCapturedAt: '2026-11-08T18:00:00Z',
-    previousDeliveryAt: '2026-11-08T18:00:00Z' };
+    previousComparedThrough: '2026-11-08T06:00:00Z', previousCapturedAt: '2026-11-08T06:00:00Z',
+    previousDeliveryAt: '2026-11-08T06:00:00Z' };
   return input;
 }
 
@@ -168,11 +168,11 @@ test('V2 matching observations preserve canonical scores and point deltas', () =
 
 test('V2 late capture is honest and mismatched observations suppress changes', () => {
   const input = fixtureV2();
-  input.capturedAt = input.cutoffAt = '2026-11-15T18:00:00.001Z';
+  input.capturedAt = input.cutoffAt = '2026-11-15T06:00:00.001Z';
   input.comparison.currentComparedThrough = input.cutoffAt;
   const report = projectV2(input, 'free').report;
   assert.equal(report.capturedAt, input.capturedAt);
-  assert.equal(report.deliveryAt, '2026-11-15T18:00:00Z');
+  assert.equal(report.deliveryAt, '2026-11-15T06:00:00Z');
   assert.equal(report.comparison.reason, 'observation_mismatch');
   assert.equal(report.pillars.mind.changePoints.state, 'unavailable');
   assert.equal(report.pillars.mind.trendMessage, null);
@@ -213,6 +213,8 @@ test('V2 keeps overseas preceding week after local Monday and caps activity cuto
   const input = fixtureV2();
   input.period = { ...input.period, accountTimezone: 'Pacific/Auckland',
     startsAt: '2026-11-08T11:00:00Z', endsAtExclusive: '2026-11-15T11:00:00Z' };
+  // A delayed capture occurs after Auckland Monday; release is still 06:00 London.
+  input.capturedAt = '2026-11-15T18:00:00Z';
   input.cutoffAt = input.period.endsAtExclusive;
   input.comparison = { state: 'unavailable', reason: 'snapshot_missing' };
   const report = projectV2(input, 'free').report;
@@ -235,10 +237,10 @@ test('V2 Free allowlist and unknown entitlement never expose details or injected
 
 test('V2 rejects impossible observations and wrong release labels', () => {
   for (const change of [
-    i => i.capturedAt = '2026-11-15T17:59:59Z',
-    i => i.cutoffAt = '2026-11-15T19:00:00Z',
-    i => i.deliveryAt = '2026-11-08T18:00:00Z',
-    i => i.comparison.previousCapturedAt = '2026-11-08T17:00:00Z',
+    i => i.capturedAt = '2026-11-15T05:59:59Z',
+    i => i.cutoffAt = '2026-11-15T07:00:00Z',
+    i => i.deliveryAt = '2026-11-08T06:00:00Z',
+    i => i.comparison.previousCapturedAt = '2026-11-08T05:00:00Z',
   ]) { const input = fixtureV2(); change(input); assert.throws(() => projectV2(input, 'free')); }
 });
 
@@ -249,9 +251,9 @@ test('V2 projection is deterministic and does not mutate the input', () => {
 });
 
 for (const [week, expected] of [
-  ['2026-03-16', '2026-03-22T18:00:00.000Z'], ['2026-03-23', '2026-03-29T17:00:00.000Z'],
-  ['2026-10-12', '2026-10-18T17:00:00.000Z'], ['2026-10-19', '2026-10-25T18:00:00.000Z'],
-  ['2026-11-23', '2026-11-29T18:00:00.000Z'],
+  ['2026-03-16', '2026-03-22T06:00:00.000Z'], ['2026-03-23', '2026-03-29T05:00:00.000Z'],
+  ['2026-10-12', '2026-10-18T05:00:00.000Z'], ['2026-10-19', '2026-10-25T06:00:00.000Z'],
+  ['2026-11-23', '2026-11-29T06:00:00.000Z'],
 ]) {
   test(`London release boundary ${week}`, () => {
     const release = calendar.reportReleaseForWeek(week);
@@ -267,10 +269,10 @@ test('calendar rejects invalid dates and non-Mondays', () => {
 });
 
 for (const [week, previousWeek, delivery, previousDelivery, capture, previousCapture] of [
-  ['2026-03-23', '2026-03-16', '2026-03-29T17:00:00Z', '2026-03-22T18:00:00Z',
-    '2026-03-29T18:00:00Z', '2026-03-22T18:00:00Z'],
-  ['2026-10-19', '2026-10-12', '2026-10-25T18:00:00Z', '2026-10-18T17:00:00Z',
-    '2026-10-25T19:00:00Z', '2026-10-18T19:00:00Z'],
+  ['2026-03-23', '2026-03-16', '2026-03-29T05:00:00Z', '2026-03-22T06:00:00Z',
+    '2026-03-29T06:00:00Z', '2026-03-22T06:00:00Z'],
+  ['2026-10-19', '2026-10-12', '2026-10-25T06:00:00Z', '2026-10-18T05:00:00Z',
+    '2026-10-25T07:00:00Z', '2026-10-18T07:00:00Z'],
 ]) {
   test(`V2 matched account observations survive UK DST with unequal release delays: ${week}`, () => {
     const input = fixtureV2();
@@ -295,3 +297,15 @@ for (const [week, previousWeek, delivery, previousDelivery, capture, previousCap
     assert.equal(projectV2(input, 'free').report.comparison.reason, 'observation_mismatch');
   });
 }
+
+
+test('obsolete Sunday 18:00 release is rejected by both contract versions', () => {
+  const v1 = fixture();
+  v1.deliveryAt = v1.cutoffAt = '2026-11-15T18:00:00Z';
+  v1.comparison = { state: 'unavailable', reason: 'missing_history' };
+  assert.throws(() => project(v1, 'free'), /Invalid report/);
+  const v2 = fixtureV2();
+  v2.deliveryAt = v2.capturedAt = v2.cutoffAt = '2026-11-15T18:00:00Z';
+  v2.comparison = { state: 'unavailable', reason: 'snapshot_missing' };
+  assert.throws(() => projectV2(v2, 'pro'), /Invalid report observation/);
+});

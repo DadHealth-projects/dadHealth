@@ -27,7 +27,7 @@ function snapshot() {
   return { version: 2, period: { weekStart: '2026-11-09', weekEndExclusive: '2026-11-16',
     startsAt: '2026-11-09T00:00:00Z', endsAtExclusive: '2026-11-16T00:00:00Z',
     accountTimezone: 'Europe/London', scoringModel: 'canonical-fixture' },
-    deliveryAt: '2026-11-15T18:00:00Z', capturedAt: '2026-11-15T18:01:00Z', cutoffAt: '2026-11-15T18:01:00Z',
+    deliveryAt: '2026-11-15T06:00:00Z', capturedAt: '2026-11-15T06:01:00Z', cutoffAt: '2026-11-15T06:01:00Z',
     comparison: { state: 'unavailable', reason: 'snapshot_missing' },
     pillars: Object.fromEntries(['mind', 'body', 'bond'].map(p => [p, { score: available(70), changePoints: { state: 'unavailable' } }])),
     details: { workouts: available(0), bondSessions: available(2), checkins: available(6),
@@ -42,7 +42,7 @@ function harness() {
     eq(key, value) { h.filters.push([key, value]); return query; },
     async maybeSingle() {
       return { error: h.queryError, data: h.missing ? null : { user_id: h.rowOwner,
-        reporting_week_start: '2026-11-09', delivery_at: '2026-11-15T18:00:00Z',
+        reporting_week_start: '2026-11-09', delivery_at: '2026-11-15T06:00:00Z',
         captured_at: h.payload.capturedAt, payload: h.payload } };
     },
   };
@@ -104,7 +104,7 @@ test('metadata mismatches, corrupt payload and another owner fail closed', async
 
 test('no read is published before London release, even for Pro', async () => {
   const h = harness(); h.access = true;
-  const result = await readWeeklyReport(h.admin, 'owner', '2026-11-09', new Date('2026-11-15T17:59:59.999Z'));
+  const result = await readWeeklyReport(h.admin, 'owner', '2026-11-09', new Date('2026-11-15T05:59:59.999Z'));
   assert.equal(result.reason, 'not_released');
   assert.equal(h.calls.some(c => c[0] === 'from'), false);
 });

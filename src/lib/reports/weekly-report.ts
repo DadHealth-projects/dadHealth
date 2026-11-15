@@ -1,7 +1,7 @@
 /** Pure contract/projection only. No reads, scheduling, scoring or access resolution. */
 export const WEEKLY_REPORT_VERSION = 1 as const;
 export const TREND_FALLBACK = 'Building first 7 day trend' as const;
-export const REPORT_DELIVERY = { weekday: 'Sunday', time: '18:00', timeZone: 'Europe/London' } as const;
+export const REPORT_DELIVERY = { weekday: 'Sunday', time: '06:00', timeZone: 'Europe/London' } as const;
 
 export type Measurement =
   | { state: 'available'; value: number }
@@ -33,7 +33,7 @@ export type ComparisonInput =
 export interface WeeklyReportInput {
   version: typeof WEEKLY_REPORT_VERSION;
   period: ReportPeriod;
-  /** Sunday 18:00 London deadline, separate from account-calendar boundaries. */
+  /** Sunday 06:00 London deadline, separate from account-calendar boundaries. */
   deliveryAt: string;
   /** Explicit data cutoff; may precede delivery for an already-ended account week. */
   cutoffAt: string;
@@ -115,7 +115,7 @@ export function projectWeeklyReport(input: WeeklyReportInput, access: ReportAcce
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: REPORT_DELIVERY.timeZone,
     weekday: 'long', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(deliveryTime));
   const part = (type: string) => parts.find(p => p.type === type)?.value;
-  if (part('weekday') !== 'Sunday' || part('hour') !== '18' || part('minute') !== '00' || part('second') !== '00'
+  if (part('weekday') !== 'Sunday' || part('hour') !== '06' || part('minute') !== '00' || part('second') !== '00'
     || deliveryTime % 1000 !== 0 || cutoff > deliveryTime
     || cutoff <= instant(current.startsAt) || cutoff > instant(current.endsAtExclusive)) throw new Error('Invalid report cutoff or delivery');
   const compared = comparison(input.comparison, current, input.cutoffAt);
@@ -169,7 +169,7 @@ function isLondonRelease(value: string): boolean {
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London',
     weekday: 'long', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(time));
   const part = (type: string) => parts.find(p => p.type === type)?.value;
-  return part('weekday') === 'Sunday' && part('hour') === '18' && part('minute') === '00'
+  return part('weekday') === 'Sunday' && part('hour') === '06' && part('minute') === '00'
     && part('second') === '00' && time % 1000 === 0;
 }
 

@@ -39,8 +39,8 @@ function harness() {
   return h;
 }
 test('London release chooses the saved reporting week across GMT/BST and before release', async () => {
-  for (const [at, week] of [['2026-11-15T17:59:59Z','2026-11-02'], ['2026-11-15T18:00:00Z','2026-11-09'],
-    ['2026-07-12T16:59:59Z','2026-06-29'], ['2026-07-12T17:00:00Z','2026-07-06']]) {
+  for (const [at, week] of [['2026-11-15T05:59:59Z','2026-11-02'], ['2026-11-15T06:00:00Z','2026-11-09'],
+    ['2026-07-12T04:59:59Z','2026-06-29'], ['2026-07-12T05:00:00Z','2026-07-06']]) {
     const h = harness(); await h.run(at); assert.equal(h.calls[0][1].p_week_start, week);
   }
 });
