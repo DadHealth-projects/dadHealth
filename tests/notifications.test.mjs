@@ -168,28 +168,13 @@ test("Weekly Challenge notification is skipped when no active challenge exists",
   );
 });
 
-test("the weekly Dad Health report is dispatched on Sunday", async () => {
-  const [dispatch, time, settings] = await Promise.all([
-    source("src/app/api/notifications/dispatch/route.ts"),
-    source("src/lib/notifications/time.ts"),
-    source("src/app/settings/page.tsx"),
-  ]);
-
-  // getLocalParts maps Sunday to 0.
-  assert.match(time, /Sun: 0, Mon: 1/);
-
-  const weekly = /type === "weekly_score"\) \{([\s\S]*?)\} else if/.exec(dispatch)?.[1] ?? "";
-  assert.ok(weekly.length > 0);
-  assert.match(weekly, /localDow === 0/);
-
-  // The weekly challenge keeps its own Monday cadence.
+test("weekly reports use the saved-report dispatcher without changing Monday challenge cadence", async () => {
+  const dispatch = await source("src/app/api/notifications/dispatch/route.ts");
+  assert.match(dispatch, /dispatchWeeklyReports\(admin/);
+  assert.ok(dispatch.includes('if (type === "weekly_score") continue;'));
+  assert.equal(dispatch.includes('computeWeeklyScore'), false);
   assert.match(dispatch, /type === "weekly_challenge"\) \{\s*due = localDow === 1/);
-
-  // The window still ends on yesterday, so it stays a complete seven days.
-  assert.match(dispatch, /computeWeeklyScore\(admin, userId, ymdAddDays\(localDate, -1\)\)/);
-
-  // Settings copy agrees with the dispatcher.
-  assert.match(settings, /Sunday 08:00 - Your Dad Health Score this week/);
+  // Behavioural release, quiet-hours and payload cases live in weeklyReportDispatch.test.mjs.
 });
 
 test("meal plan generation and saved reads use canonical Pro access", async () => {

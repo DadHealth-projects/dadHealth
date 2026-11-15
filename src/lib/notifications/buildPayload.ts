@@ -19,6 +19,7 @@ export function pickJournalPrompt(seed: string): string {
 export function buildPayload(args: {
   type: NotificationType;
   weeklyScore?: number | null;
+  reportingWeek?: string;
   streakDays?: number | null;
   weeklyChallenge?: { title: string; description?: string | null } | null;
   milestoneText?: string | null;
@@ -36,6 +37,10 @@ export function buildPayload(args: {
     return { type: t, heading: "Workout window", content: "Your workout window is now. 20 minutes is enough.", link: "/fitness" };
   }
   if (t === "weekly_score") {
+    if (args.reportingWeek) return {
+      type: t, heading: 'Your week in Dad Health', content: 'Your weekly report is ready.',
+      link: '/progress', data: { reporting_week: args.reportingWeek },
+    };
     const score = typeof args.weeklyScore === "number" ? args.weeklyScore : null;
     return {
       type: t,
