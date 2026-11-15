@@ -16,14 +16,14 @@ export function reportReleaseForWeek(weekStart: string): ReportRelease {
   const monday = dateKey(weekStart);
   if (monday.getUTCDay() !== 1) throw new Error('Reporting week must start Monday');
   const day = (offset: number) => new Date(monday.getTime() + offset * 86400000).toISOString().slice(0, 10);
-  // At 18:00 neither UK clock transition is ambiguous. Resolve the actual offset
-  // from IANA data, rather than assuming a fixed GMT/BST season or device zone.
-  const candidate = new Date(`${day(6)}T18:00:00Z`);
+   // Sunday 06:00 Europe/London is outside the UK clock-change window.
+  // Resolve GMT/BST from IANA data.
+  const candidate = new Date(`${day(6)}T06:00:00Z`);
   const hour = Number(new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/London', hour: '2-digit', hourCycle: 'h23',
   }).format(candidate));
   return { weekStart, weekEndExclusive: day(7),
-    deliveryAt: new Date(candidate.getTime() - (hour - 18) * 3600000).toISOString() };
+    deliveryAt: new Date(candidate.getTime() - (hour - 6) * 3600000).toISOString() };
 }
 
 export function latestReleasedReportWeek(now: Date): ReportRelease {
