@@ -28,6 +28,7 @@ export interface CancellationEvidence {
 }
 
 export interface SubscriptionEntitlementInput {
+  trialFacts?: { transactionId: string; startedAt: string; endsAt: string };
   cancellationEvidence?: CancellationEvidence | null;
   userId: string;
   provider: SubscriptionProvider;
