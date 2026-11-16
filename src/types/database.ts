@@ -75,6 +75,8 @@ export interface CoParentingEvent {
 }
 
 export type NotificationType =
+  | "lowest_pillar"
+  | "trial_ending"
   | "morning_checkin"
   | "bedtime_story"
   | "workout_window"

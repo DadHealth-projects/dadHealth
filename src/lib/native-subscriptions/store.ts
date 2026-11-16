@@ -44,6 +44,19 @@ export async function upsertSubscriptionEntitlement(
     throw error;
   }
   if (typeof data !== "string") throw new Error("Subscription entitlement was not saved");
+  if (input.provider === 'apple' && input.trialFacts) {
+    // Notification evidence cannot turn an accepted purchase/restore into failure.
+    // Missing/conflicting evidence skips the notice and is operationally visible.
+    try {
+      const recorded = await admin.rpc('record_notification_trial', {
+        p_subscription_id: data, p_user_id: input.userId,
+        p_transaction_id: input.trialFacts.transactionId,
+        p_started_at: input.trialFacts.startedAt, p_ends_at: input.trialFacts.endsAt,
+        p_environment: input.environment,
+      });
+      if (recorded.error) console.warn('[notifications/trial] evidence not recorded', { code: recorded.error.code });
+    } catch { console.warn('[notifications/trial] evidence recording unavailable'); }
+  }
   return data;
 }
 
