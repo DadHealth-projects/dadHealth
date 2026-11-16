@@ -153,11 +153,13 @@ export interface WeeklyReportInputV2 extends Omit<WeeklyReportInput, 'version' |
   version: typeof WEEKLY_REPORT_VERSION_V2;
   capturedAt: string;
   comparison: ComparisonInputV2;
+  totalScore?: Measurement;
 }
 export interface ReportHeadlineV2 extends Omit<ReportHeadline, 'version' | 'comparison'> {
   version: typeof WEEKLY_REPORT_VERSION_V2;
   capturedAt: string;
   comparison: ComparisonInputV2;
+  totalScore: Measurement;
 }
 export type WeeklyReportResponseV2 =
   | { access: 'unknown' | 'failed'; report: null }
@@ -222,6 +224,41 @@ function comparisonV2(input: WeeklyReportInputV2, current: ReportPeriod): Compar
 }
 
 /** Explicit allowlists at every level; failed entitlement resolution exposes nothing. */
+/**
+ * Existing snapshots use their unrounded saved pillars.
+ * Formula matches dad_score_view. No live data or snapshot rewriting.
+ */
+function savedOverallScore(input: WeeklyReportInputV2): Measurement {
+  if (input.totalScore !== undefined) {
+    const total = measurement(input.totalScore, 'score');
+
+    if (total.state === 'available' && !Number.isInteger(total.value)) {
+      throw new Error('Invalid overall report score');
+    }
+
+    return total;
+  }
+
+  const scores = (['mind', 'body', 'bond'] as const).map(
+    name => measurement(input.pillars[name].score, 'score'),
+  );
+
+  let sum = 0;
+
+  for (const score of scores) {
+    if (score.state !== 'available') {
+      return { state: 'unavailable' };
+    }
+
+    sum += score.value;
+  }
+
+  return {
+    state: 'available',
+    value: Math.round(sum / 3),
+  };
+}
+
 export function projectWeeklyReportV2(input: WeeklyReportInputV2, access: ReportAccess): WeeklyReportResponseV2 {
   if (access !== 'free' && access !== 'pro') return { access: access === 'failed' ? 'failed' : 'unknown', report: null };
   if (input.version !== WEEKLY_REPORT_VERSION_V2) throw new Error('Unsupported report version');
@@ -249,6 +286,7 @@ export function projectWeeklyReportV2(input: WeeklyReportInputV2, access: Report
   const report: ReportHeadlineV2 = { version: WEEKLY_REPORT_VERSION_V2, period: current,
     delivery: { ...REPORT_DELIVERY }, deliveryAt: input.deliveryAt, cutoffAt: input.cutoffAt,
     capturedAt: input.capturedAt, comparison: compared,
+    totalScore: savedOverallScore(input),
     pillars: { mind: pillar('mind'), body: pillar('body'), bond: pillar('bond') } };
   if (access === 'free') return { access: 'free', report };
   const detail = input.details;
