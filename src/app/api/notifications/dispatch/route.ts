@@ -1,4 +1,5 @@
 import { dispatchWeeklyReports } from "@/lib/reports/weekly-report-dispatch";
+import { dispatchItem03Notifications } from '@/lib/notifications/item03-policy';
 import { NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 import type { NotificationType } from "@/types/database";
@@ -122,7 +123,15 @@ export async function GET(request: Request) {
     const now = new Date();
     console.info("[notifications/dispatch] Run started", { now: now.toISOString() });
     // Item 02 is independent of notification preferences and other notification jobs.
-    const weeklyResult = await dispatchWeeklyReports(admin, now).catch(() => ({ reports: 0, sent: 0, pending: 0, errors: 1 }));
+    let item03Result = { sent: 0, errors: 0 };
+    let item03Ran = false;
+    const runItem03 = async () => {
+      if (item03Ran) return;
+      item03Ran = true;
+      item03Result = await dispatchItem03Notifications(admin).catch(() => ({ sent: 0, errors: 1 }));
+    };
+    const weeklyResult = await dispatchWeeklyReports(admin, now, runItem03).catch(() => ({ reports: 0, sent: 0, pending: 0, errors: 1 }));
+    await runItem03(); // A capture failure must not prevent eligible daily/trial work.
     const presentDadResult = await processPresentDadCompletions(admin, now);
 
     const prefsRes = await admin
@@ -136,7 +145,7 @@ export async function GET(request: Request) {
     const userIds = Array.from(new Set(prefs.map((p) => p.user_id)));
     if (userIds.length === 0) {
       console.info("[notifications/dispatch] Run completed", { ...presentDadResult, scheduledUsers: 0 });
-      return NextResponse.json({ ok: true, ...presentDadResult, weekly: weeklyResult });
+      return NextResponse.json({ ok: true, ...presentDadResult, weekly: weeklyResult, item03: item03Result });
     }
 
     const profilesRes = await admin
@@ -177,34 +186,18 @@ export async function GET(request: Request) {
       const userPrefs = prefs.filter((p) => p.user_id === userId);
 
       // Optional lookups (only when needed)
-      let hasCheckinToday: boolean | null = null;
       let streakDays: number | null = null;
       let milestoneText: string | null = null;
 
       for (const pref of userPrefs) {
         const type = pref.notification_type;
-        if (type === "weekly_score") continue; // Saved reports are handled independently above.
+        if (['weekly_score', 'morning_checkin', 'lowest_pillar', 'trial_ending', 'streak_at_risk'].includes(type)) continue;
 
         let due = false;
         let journalPrompt: string | null = null;
 
-        if (type === "morning_checkin") {
-          due = isInWindow(localHHMM, "07:30");
-        } else if (type === "weekly_challenge") {
+        if (type === "weekly_challenge") {
           due = localDow === 1 && isInWindow(localHHMM, "08:00");
-        } else if (type === "streak_at_risk") {
-          due = isInWindow(localHHMM, "21:00");
-          if (due) {
-            if (hasCheckinToday == null) {
-              const checkRes = await admin
-                .from("mood_logs")
-                .select("id", { count: "exact", head: true })
-                .eq("user_id", userId)
-                .eq("date", localDate);
-              hasCheckinToday = (checkRes.count ?? 0) > 0;
-            }
-            due = !hasCheckinToday;
-          }
         } else if (type === "bedtime_story") {
           if (pref.send_time) {
             const bedtime = hhmmFromPgTime(pref.send_time);
@@ -302,7 +295,7 @@ export async function GET(request: Request) {
       errors,
       scheduledUsers: userIds.length,
     });
-    return NextResponse.json({ ok: true, sent, skipped, errors, weekly: weeklyResult });
+    return NextResponse.json({ ok: true, sent, skipped, errors, weekly: weeklyResult, item03: item03Result });
   } catch (e) {
     console.error("[notifications/dispatch]", e);
     return NextResponse.json({ error: "Dispatch failed" }, { status: 500 });
