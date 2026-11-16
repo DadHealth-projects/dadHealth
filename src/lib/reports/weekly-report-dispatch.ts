@@ -20,11 +20,12 @@ export function weeklyPushTimeAllowed(now: Date, timezone: unknown): timezone is
  * Bounded, oldest-observed-first work selection is database-owned. Capture and
  * delivery are separate transactions: a provider failure cannot undo a report.
  */
-export async function dispatchWeeklyReports(admin: Admin, now = new Date()) {
+export async function dispatchWeeklyReports(admin: Admin, now = new Date(), beforePush?: () => Promise<unknown>) {
   const week = latestReleasedReportWeek(now).weekStart;
   const totals = { reports: 0, sent: 0, pending: 0, errors: 0 };
   const candidates = await admin.rpc('list_item02_due_accounts', { p_week_start: week });
   if (candidates.error) throw candidates.error;
+  const savedOwners: string[] = [];
   for (const account of candidates.data ?? []) {
     const owner = account.user_id as string;
     try {
@@ -35,19 +36,21 @@ export async function dispatchWeeklyReports(admin: Admin, now = new Date()) {
         continue;
       }
       totals.reports++;
+      savedOwners.push(owner);
     } catch { totals.errors++; continue; }
-
+  }
+  // Capture is independent of capacity; daily and trial reservations precede push.
+  if (beforePush) await beforePush();
+  for (const owner of savedOwners) {
     // Never gate the preceding capture on notification settings or timezone.
     try {
-      const [profile, preference] = await Promise.all([
-        admin.from('user_profile').select('timezone,push_notifications_enabled').eq('user_id', owner).maybeSingle(),
-        admin.from('notification_preferences').select('enabled').eq('user_id', owner).eq('notification_type', 'weekly_score').maybeSingle(),
-      ]);
-      if (profile.error || preference.error) throw new Error('Notification settings unavailable');
-      if (profile.data?.push_notifications_enabled !== true || preference.data?.enabled !== true
-        || !weeklyPushTimeAllowed(now, profile.data?.timezone)) { totals.pending++; continue; }
+      const context = await admin.rpc('item03_notification_context', { p_user_id: owner });
+      if (context.error) throw new Error('Notification settings unavailable');
+      if (context.data?.allowed !== true) { totals.pending++; continue; }
+      // Canonical effective timezone, not a profile change pending next Monday.
+      // The shared claim independently checks the weekly preference and capacity.
       const result = await sendRateLimitedNotification({ admin, userId: owner, type: 'weekly_score',
-        timezone: profile.data.timezone, eventKey: `weekly-report:${week}`,
+        timezone: context.data.timezone, eventKey: `weekly-report:${week}`,
         payload: buildPayload({ type: 'weekly_score', reportingWeek: week }),
       });
       if (result === 'sent') totals.sent++; else totals.pending++;

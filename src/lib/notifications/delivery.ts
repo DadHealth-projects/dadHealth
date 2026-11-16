@@ -14,12 +14,15 @@ export async function sendRateLimitedNotification(args: {
   /** Stable source-record identity for event-driven notifications. */
   eventKey?: string;
 }): Promise<"sent" | "limited"> {
-  const claimResult = await args.admin.rpc("claim_notification_delivery", {
+  if ((args.type === 'lowest_pillar' || args.type === 'trial_ending' || args.type === 'morning_checkin')
+    && process.env.ITEM03_EXACT_PUSH_ENABLED !== 'true') return 'limited';
+  const parameters = {
     p_user_id: args.userId,
     p_type: args.type,
-    p_timezone: args.timezone,
     p_event_key: args.eventKey?.trim() || "scheduled",
-  });
+    p_pillar: args.payload.data?.pillar ?? null,
+  };
+  const claimResult = await args.admin.rpc("claim_item03_notification", parameters);
   if (claimResult.error) throw claimResult.error;
   if (typeof claimResult.data !== "string" || !claimResult.data) {
     console.info("[notifications/delivery] Delivery skipped by rate limit", {
@@ -30,6 +33,10 @@ export async function sendRateLimitedNotification(args: {
   }
 
   const claimId = claimResult.data;
+  // Revalidate a reserved/previously unsent attempt immediately before sending.
+  const recheck = await args.admin.rpc('claim_item03_notification', parameters);
+  if (recheck.error) throw recheck.error;
+  if (recheck.data !== claimId) return 'limited';
   console.info("[notifications/delivery] Sending claimed notification", {
     claim: claimId.slice(0, 8),
     user: args.userId.slice(0, 8),
