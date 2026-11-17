@@ -22,6 +22,35 @@ const { readWeeklyReport } = load('weekly-report-snapshots', {
   './weekly-report-calendar': calendar, './weekly-report': contract,
 });
 const now = new Date('2026-11-16T12:00:00Z');
+
+test('overall projection reads only the owners compatible prior snapshot and tolerates prior read failures', async () => {
+  const current=snapshot(), previous=snapshot();
+  previous.period={...previous.period,weekStart:'2026-11-02',weekEndExclusive:'2026-11-09',startsAt:'2026-11-02T00:00:00Z',endsAtExclusive:'2026-11-09T00:00:00Z'};
+  previous.deliveryAt='2026-11-08T06:00:00Z';previous.capturedAt=previous.cutoffAt='2026-11-08T06:01:00Z';
+  previous.totalScore={state:'available',value:60};
+  current.comparison={state:'available',previousPeriod:previous.period,previousWeekComplete:true,policy:'matched_cutoff',policyApproved:true,
+    currentComparedThrough:current.cutoffAt,previousComparedThrough:previous.cutoffAt,previousCapturedAt:previous.capturedAt,previousDeliveryAt:previous.deliveryAt};
+  const before=JSON.stringify([current,previous]);
+  for(const mode of ['valid','missing','error','wrong-owner','wrong-week','wrong-capture','throw']) {
+    const reads=[];
+    const admin={rpc:async()=>({data:false,error:null}),from(){
+      const filters={};const query={select(){return query},eq(k,v){filters[k]=v;return query},async maybeSingle(){
+        reads.push(filters);const first=reads.length===1,payload=first?current:previous;
+        if(!first && mode==='throw')throw Error('private');
+        return {error:!first && mode==='error'?Error('private'):null,data:!first && mode==='missing'?null:{
+          user_id:!first && mode==='wrong-owner'?'other':'owner',reporting_week_start:!first && mode==='wrong-week'?'2026-10-26':payload.period.weekStart,
+          delivery_at:payload.deliveryAt,captured_at:!first && mode==='wrong-capture'?'2026-11-08T07:00:00Z':payload.capturedAt,payload}};
+      }};return query;
+    }};
+    const result=await readWeeklyReport(admin,'owner','2026-11-09',now);
+    assert.equal(result.state,'available',mode);
+    assert.equal(result.result.report.overallChange.state,mode==='valid'?'available':'unavailable',mode);
+    if(mode==='valid')assert.equal(result.result.report.overallChange.value,10);
+    assert.deepEqual(reads,[{user_id:'owner',reporting_week_start:'2026-11-09'},{user_id:'owner',reporting_week_start:'2026-11-02'}]);
+    assert.doesNotMatch(JSON.stringify(result),/PRIVATE|workouts|focus/);
+  }
+  assert.equal(JSON.stringify([current,previous]),before);
+});
 function snapshot() {
   const available = value => ({ state: 'available', value });
   return { version: 2, period: { weekStart: '2026-11-09', weekEndExclusive: '2026-11-16',

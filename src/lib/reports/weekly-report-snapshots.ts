@@ -33,7 +33,23 @@ export async function readWeeklyReport(admin: AdminClient, owner: string, week?:
       || Date.parse(input.deliveryAt) !== Date.parse(data.delivery_at)
       || Date.parse(input.capturedAt) !== Date.parse(data.captured_at)
       || Date.parse(input.capturedAt) > now.getTime()) throw new Error('Invalid snapshot metadata');
-    return { state: 'available', result: projectWeeklyReportV2(input, access ? 'pro' : 'free') };
+    const projection = projectWeeklyReportV2(input, access ? 'pro' : 'free');
+    if (projection.report?.comparison.state !== 'available') return { state: 'available', result: projection };
+    // Failure to read a prior snapshot must not hide the current saved report.
+    try {
+      const { data: prior, error: priorError } = await admin.from('weekly_report_snapshots')
+        .select('user_id,reporting_week_start,delivery_at,captured_at,payload')
+        .eq('user_id', owner)
+        .eq('reporting_week_start', projection.report.comparison.previousPeriod.weekStart).maybeSingle();
+      if (!priorError && prior?.user_id === owner
+        && prior.reporting_week_start === projection.report.comparison.previousPeriod.weekStart
+        && prior.payload?.period?.weekStart === prior.reporting_week_start
+        && Date.parse(prior.delivery_at) === Date.parse(prior.payload.deliveryAt)
+        && Date.parse(prior.captured_at) === Date.parse(prior.payload.capturedAt)) {
+        return { state: 'available', result: projectWeeklyReportV2(input, access ? 'pro' : 'free', prior.payload) };
+      }
+    } catch { /* Keep the current report; only the overall change is unavailable. */ }
+    return { state: 'available', result: projection };
   } catch {
     return { state: 'unavailable', reason: 'invalid_snapshot' };
   }
