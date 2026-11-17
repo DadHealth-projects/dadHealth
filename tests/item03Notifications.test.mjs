@@ -7,14 +7,22 @@ function load(path, mocks = {}, env = {}) {
   const exports = {};
   vm.runInNewContext(ts.transpileModule(readFileSync(new URL(`../${path}`, import.meta.url),'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText, { exports, process:{env}, console:{info(){},warn(){}}, require:name=>{assert.ok(name in mocks,name);return mocks[name];} });
+  }).outputText, { exports, process:{env}, console:{info(){},warn(){}}, require:name=>{if(name==='./inbox' && !(name in mocks))return load('src/lib/notifications/inbox.ts');assert.ok(name in mocks,name);return mocks[name];} });
   return exports;
 }
-test('rollout gate defaults disabled without querying accounts or sending',async()=>{
-  const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{}});
+function accounts(rows) {
+  return {from:()=>{let after=null;const q={select:()=>q,order:()=>q,limit:()=>q,
+    gt:(_key,value)=>{after=value;return q;},
+    then:resolve=>Promise.resolve({data:rows.filter(r=>after===null||r.user_id>after),error:null}).then(resolve)};return q;}};
+}
+test('rollout disabled still discovers eligible accounts for inbox creation',async()=>{
+  let delivered=0;
+  const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{sendRateLimitedNotification:async()=>{delivered++;return 'limited';}}});
   assert.equal(api.exactPushEnabled(),false);
-  assert.equal((await api.dispatchItem03Notifications({})).sent,0);
+  const admin={...accounts([{user_id:'a'}]),rpc:async()=>({data:{allowed:true,date:'2026-11-16',dailyType:'morning_checkin',trials:[]}})};
+  assert.equal((await api.dispatchItem03Notifications(admin)).sent,0);assert.equal(delivered,1);
 });
+
 test('pillar destinations are fixed, validated and Body uses approved free workout',()=>{
   const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{}});
   for(const p of ['mind','body','bond']) assert.equal(api.pillarPayload(p).data.pillar,p);
@@ -24,7 +32,7 @@ test('pillar destinations are fixed, validated and Body uses approved free worko
 test('all daily attempts precede trial attempts with stable episode identities',async()=>{
   const sent=[];
   const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{sendRateLimitedNotification:async a=>{sent.push(a);return 'sent';}}},{ITEM03_EXACT_PUSH_ENABLED:'true'});
-  const admin={from:()=>({select:()=>({eq:async()=>({data:[{user_id:'a'},{user_id:'b'}]})})}),
+  const admin={...accounts([{user_id:'a'},{user_id:'b'}]),
     rpc:async()=>({data:{allowed:true,timezone:'Europe/London',date:'2026-11-16',dailyType:'morning_checkin',trials:['episode']}})};
   assert.equal((await api.dispatchItem03Notifications(admin)).sent,4);
   assert.deepEqual(sent.map(a=>a.type),['morning_checkin','morning_checkin','trial_ending','trial_ending']);
@@ -33,6 +41,7 @@ test('all daily attempts precede trial attempts with stable episode identities',
 function deliveryHarness(results) {
   const calls=[];
   const api=load('src/lib/notifications/delivery.ts',{
+    './inbox':{persistInbox:async(_a,_u,_k,p)=>({type:p.type}),savedInboxPayload:e=>({type:e.type,data:{}})},
     '@/lib/notifications/onesignal':{sendOneSignalToExternalUserId:async args=>{calls.push(['provider',args]);return {id:'provider-id'};}},
   },{ITEM03_EXACT_PUSH_ENABLED:'true'});
   const admin={rpc:async(name,args)=>{calls.push([name,args]);return results.shift();}};
