@@ -160,6 +160,7 @@ export interface ReportHeadlineV2 extends Omit<ReportHeadline, 'version' | 'comp
   capturedAt: string;
   comparison: ComparisonInputV2;
   totalScore: Measurement;
+  overallChange: Measurement;
 }
 export type WeeklyReportResponseV2 =
   | { access: 'unknown' | 'failed'; report: null }
@@ -259,7 +260,7 @@ function savedOverallScore(input: WeeklyReportInputV2): Measurement {
   };
 }
 
-export function projectWeeklyReportV2(input: WeeklyReportInputV2, access: ReportAccess): WeeklyReportResponseV2 {
+export function projectWeeklyReportV2(input: WeeklyReportInputV2, access: ReportAccess, previous?: WeeklyReportInputV2): WeeklyReportResponseV2 {
   if (access !== 'free' && access !== 'pro') return { access: access === 'failed' ? 'failed' : 'unknown', report: null };
   if (input.version !== WEEKLY_REPORT_VERSION_V2) throw new Error('Unsupported report version');
   const current = period(input.period);
@@ -274,6 +275,22 @@ export function projectWeeklyReportV2(input: WeeklyReportInputV2, access: Report
   if (Date.parse(`${key('year')}-${key('month')}-${key('day')}T00:00:00Z`)
     !== Date.parse(`${current.weekStart}T00:00:00Z`) + 6 * 86400000) throw new Error('Invalid release week');
   const compared = comparisonV2(input, current);
+  let overallChange: Measurement = { state: 'unavailable' };
+  if (compared.state === 'available' && previous) {
+    try {
+      // Compare immutable snapshot identities, not live scores or averaged deltas.
+      const prior = projectWeeklyReportV2(previous, 'free');
+      const samePeriod = Object.keys(compared.previousPeriod).every(key =>
+        previous.period[key as keyof ReportPeriod] === compared.previousPeriod[key as keyof ReportPeriod]);
+      const total = savedOverallScore(input);
+      if (samePeriod && previous.capturedAt === compared.previousCapturedAt
+        && previous.deliveryAt === compared.previousDeliveryAt
+        && previous.cutoffAt === compared.previousComparedThrough
+        && prior.report?.totalScore.state === 'available' && total.state === 'available') {
+        overallChange = { state: 'available', value: total.value - prior.report.totalScore.value };
+      }
+    } catch { /* An invalid prior snapshot cannot manufacture a comparison. */ }
+  }
   const insufficientHistory = compared.state === 'unavailable'
     && (compared.reason === 'missing_history' || compared.reason === 'incomplete_history');
   const pillar = (name: Pillar) => {
@@ -287,6 +304,7 @@ export function projectWeeklyReportV2(input: WeeklyReportInputV2, access: Report
     delivery: { ...REPORT_DELIVERY }, deliveryAt: input.deliveryAt, cutoffAt: input.cutoffAt,
     capturedAt: input.capturedAt, comparison: compared,
     totalScore: savedOverallScore(input),
+    overallChange,
     pillars: { mind: pillar('mind'), body: pillar('body'), bond: pillar('bond') } };
   if (access === 'free') return { access: 'free', report };
   const detail = input.details;

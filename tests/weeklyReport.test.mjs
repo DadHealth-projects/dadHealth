@@ -157,6 +157,35 @@ function fixtureV2() {
   return input;
 }
 
+test('overall change subtracts canonical rounded saved totals for Free and Pro without mutations', () => {
+  const current=fixtureV2();
+  const previous={...fixtureV2(),period:{...current.comparison.previousPeriod},
+    capturedAt:current.comparison.previousCapturedAt,deliveryAt:current.comparison.previousDeliveryAt,
+    cutoffAt:current.comparison.previousComparedThrough,comparison:{state:'unavailable',reason:'snapshot_missing'}};
+  current.pillars=Object.fromEntries(['mind','body','bond'].map(name=>[name,{score:available(50.6),changePoints:available(0.2)}]));
+  previous.pillars=Object.fromEntries(['mind','body','bond'].map(name=>[name,{score:available(50.4),changePoints:{state:'unavailable'}}]));
+  const before=JSON.stringify([current,previous]);
+  for(const tier of ['free','pro']) assert.equal(projectV2(current,tier,previous).report.overallChange.value,1);
+  assert.equal(JSON.stringify([current,previous]),before);
+  assert.equal(projectV2(current,'free').report.overallChange.state,'unavailable');
+  for(const mutate of [p=>p.period.scoringModel='different',p=>p.capturedAt='2026-11-08T06:00:00.001Z',
+    p=>p.totalScore={state:'unavailable'},p=>p.pillars.mind.score={state:'missing'}]) {
+    const invalid=structuredClone(previous);mutate(invalid);
+    assert.equal(projectV2(current,'pro',invalid).report.overallChange.state,'unavailable');
+  }
+  current.comparison={state:'unavailable',reason:'model_mismatch'};
+  assert.equal(projectV2(current,'pro',previous).report.overallChange.state,'unavailable');
+});
+
+test('identical observations a week apart can compare; a one millisecond difference cannot', () => {
+  const input=fixtureV2();
+  input.capturedAt=input.cutoffAt=input.comparison.currentComparedThrough='2026-11-15T06:01:02.123Z';
+  input.comparison.previousCapturedAt=input.comparison.previousComparedThrough='2026-11-08T06:01:02.123Z';
+  assert.equal(projectV2(input,'free').report.comparison.state,'available');
+  input.capturedAt=input.cutoffAt=input.comparison.currentComparedThrough='2026-11-15T06:01:02.124Z';
+  assert.equal(projectV2(input,'free').report.comparison.reason,'observation_mismatch');
+});
+
 test('V2 matching observations preserve canonical scores and point deltas', () => {
   const input = fixtureV2();
   const result = projectV2(input, 'pro').report;
