@@ -57,6 +57,24 @@ test('saved title and destination are reused with inbox ID across retries',()=>{
  const result=inbox.savedInboxPayload({id:uuid,type:'weekly_score',title:'Saved title',description:'Saved description',destination:{version:'1',type:'weekly_score',link:'/progress',reporting_week:'2026-11-09'}});
  assert.equal(result.heading,'Saved title');assert.equal(result.data.reporting_week,'2026-11-09');assert.equal(result.data.inbox_event_id,uuid);
 });
+test('mark all unread reaches the owner-scoped RPC and propagates failures',async()=>{
+ const calls=[];let error=null;
+ const api=load('src/app/api/notifications/inbox/route.ts',{
+ 'next/server':{NextResponse:{json:(body,options={})=>({body,...options})}},
+ '@supabase/supabase-js':{createClient:(_u,_k,options)=>({rpc:async(name,params)=>{
+  calls.push({name,params,options});return {data:{items:[],unreadCount:2},error};
+ }})},
+ });
+ const request=()=>new Request('https://local/inbox',{method:'POST',headers:{authorization:'Bearer test','Content-Type':'application/json'},body:JSON.stringify({action:'unread_all'})});
+ const result=await api.POST(request());
+ assert.equal(result.body.state,'available');assert.equal(result.body.unreadCount,2);
+ assert.equal(calls[0].name,'notification_inbox');assert.equal(calls[0].params.p_action,'unread_all');
+ assert.equal('p_user_id' in calls[0].params,false);
+ assert.equal(calls[0].options.global.headers.Authorization,'Bearer test');
+ error={code:'42501'};assert.equal((await api.POST(request())).status,401);
+ error={code:'XX000'};assert.equal((await api.POST(request())).status,503);
+});
+
 test('inbox API uses user JWT, strict inputs and private responses',async()=>{
  const calls=[];const api=load('src/app/api/notifications/inbox/route.ts',{
  'next/server':{NextResponse:{json:(body,options={})=>({body,...options})}},

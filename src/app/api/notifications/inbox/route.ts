@@ -24,8 +24,9 @@ async function handle(request: Request) {
     } else {
       const body=await request.json().catch(()=>{throw Error('input');});
       if (!body || typeof body!=='object' || Array.isArray(body) || Object.keys(body).some(k=>!['action','id'].includes(k))
-        || !['read','read_all'].includes(body.action) || (body.action==='read' && !uuid(body.id))
-        || (body.action==='read_all' && body.id!==undefined)) throw Error('input');
+        || !['read','read_all','unread_all'].includes(body.action)
+        || (body.action==='read' && !uuid(body.id))
+        || (['read_all','unread_all'].includes(body.action) && body.id!==undefined)) throw Error('input');
       action=body.action; id=body.id ?? null;
     }
     const result=await client.rpc('notification_inbox',{p_action:action,p_id:id,p_before_at:beforeAt,p_before_id:beforeId,p_limit:limit});
