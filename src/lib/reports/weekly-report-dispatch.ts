@@ -2,6 +2,7 @@ import type { createAdminSupabaseClient } from '@/utils/supabase/admin';
 import { latestReleasedReportWeek } from './weekly-report-calendar';
 import { buildPayload } from '@/lib/notifications/buildPayload';
 import { sendRateLimitedNotification } from '@/lib/notifications/delivery';
+import { persistInbox, readNotificationRows } from '@/lib/notifications/inbox';
 
 type Admin = ReturnType<typeof createAdminSupabaseClient>;
 
@@ -39,9 +40,35 @@ export async function dispatchWeeklyReports(admin: Admin, now = new Date(), befo
       savedOwners.push(owner);
     } catch { totals.errors++; continue; }
   }
+  // Capture/attempt markers cannot hide a missing event after persistence failed.
+  const activation = await admin.rpc('notification_inbox_started_at');
+  if (activation.error) throw activation.error;
+  const saved = await readNotificationRows<{
+    user_id: string; reporting_week_start: string; delivery_at: string;
+  }>((after, limit) => {
+    let query = admin.from('weekly_report_snapshots')
+      .select('user_id,reporting_week_start,delivery_at')
+      .gte('captured_at', activation.data).lte('delivery_at', now.toISOString())
+      .order('user_id', { ascending: true })
+      .order('reporting_week_start', { ascending: true }).limit(limit);
+    if (after) {
+      query = query.or(`user_id.gt.${after.user_id},` +
+        `and(user_id.eq.${after.user_id},reporting_week_start.gt.${after.reporting_week_start})`);
+    }
+    return query;
+  });
+  const reportKeys = new Map<string, { owner: string; week: string }>();
+  for (const row of saved) reportKeys.set(`${row.user_id}:${row.reporting_week_start}`,{owner:row.user_id,week:row.reporting_week_start});
+  const persisted: { owner: string; week: string }[] = [];
+  for (const entry of reportKeys.values()) {
+    try {
+      await persistInbox(admin,entry.owner,`weekly-report:${entry.week}`,buildPayload({type:'weekly_score',reportingWeek:entry.week}));
+      persisted.push(entry);
+    } catch { totals.errors++; }
+  }
   // Capture is independent of capacity; daily and trial reservations precede push.
   if (beforePush) await beforePush();
-  for (const owner of savedOwners) {
+  for (const {owner,week} of persisted) {
     // Never gate the preceding capture on notification settings or timezone.
     try {
       const context = await admin.rpc('item03_notification_context', { p_user_id: owner });

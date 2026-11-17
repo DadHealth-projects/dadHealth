@@ -22,20 +22,22 @@ function harness() {
   h.api = load('src/lib/reports/weekly-report-dispatch.ts', {
     './weekly-report-calendar': calendar,
     '@/lib/notifications/buildPayload': payloads,
+    '@/lib/notifications/inbox': { ...load('src/lib/notifications/inbox.ts'), persistInbox:async(...args)=>{h.calls.push(['inbox',args[2]]);if(h.inboxError)throw Error('storage');return {id:'inbox'};} },
     '@/lib/notifications/delivery': { sendRateLimitedNotification: async args => {
       h.sent.push(args); if (h.sendError) throw Error('provider failed'); return 'sent';
     } },
   });
   h.admin = {
-    rpc: async (name, args) => { h.calls.push([name, args]); return name === 'list_item02_due_accounts'
-      ? { data: [{ user_id: 'owner' }], error: null }
-      : { data: { state: h.state }, error: h.captureError ? Error('capture failed') : null }; },
-    from: table => { const q = { select: () => q, eq: () => q, maybeSingle: async () => {
-      h.calls.push(['settings', table]); return { error: h.settingsError ? Error('settings failed') : null,
-        data: table === 'user_profile' ? { timezone: h.zone, push_notifications_enabled: h.master } : { enabled: h.enabled } };
-    } }; return q; },
+    rpc: async (name, args) => { h.calls.push([name, args]);
+      if(name==='list_item02_due_accounts') return {data:h.alreadyCaptured?[]:[{user_id:'owner'}]};
+      if(name==='notification_inbox_started_at') return {data:'2026-11-01T00:00:00Z'};
+      if(name==='item03_notification_context') return {error:h.settingsError?Error('settings'):null,data:{allowed:h.master&&h.enabled&&h.api.weeklyPushTimeAllowed(new Date(h.now),h.zone),timezone:h.zone}};
+      return {data:{state:h.state},error:h.captureError?Error('capture'):null};
+    },
+    from: () => { let after=false;const q={select:()=>q,gte:(...args)=>{h.calls.push(['source-cutoff',...args]);return q;},lte:()=>q,order:()=>q,limit:()=>q,or:()=>{after=true;return q;},
+      then:resolve=>Promise.resolve({data:!after&&(h.alreadyCaptured||h.state==='available'&&!h.captureError)?[{user_id:'owner',reporting_week_start:'2026-11-09'}]:[],error:null}).then(resolve)};return q; },
   };
-  h.run = (now = '2026-11-15T18:00:00Z') => h.api.dispatchWeeklyReports(h.admin, new Date(now));
+  h.run = (now = '2026-11-15T18:00:00Z') => {h.now=now;return h.api.dispatchWeeklyReports(h.admin, new Date(now));};
   return h;
 }
 test('London release chooses the saved reporting week across GMT/BST and before release', async () => {
@@ -49,13 +51,13 @@ test('storage precedes preferences and disabled push never prevents capture', as
     const h = harness(); h[flag] = false; const result = await h.run();
     assert.equal(result.reports, 1); assert.equal(h.sent.length, 0);
     assert.equal(h.calls[1][0], 'reconcile_and_capture_weekly_report');
-    assert.equal(h.calls[2][0], 'settings');
+    assert.ok(h.calls.findIndex(c=>c[0]==='inbox')<h.calls.findIndex(c=>c[0]==='item03_notification_context'));
   }
 });
 test('pending/scheduled reconciliation and failed generation never attempt push', async () => {
   for (const state of ['pending','scheduled','unavailable']) {
     const h = harness(); h.state = state; const result = await h.run();
-    assert.equal(result.reports, 0); assert.equal(h.sent.length, 0); assert.equal(h.calls.length, 2);
+    assert.equal(result.reports, 0); assert.equal(h.sent.length, 0); assert.equal(h.calls.some(c=>c[0]==='inbox'),false);
   }
   const h = harness(); h.captureError = true; assert.equal((await h.run()).errors, 1); assert.equal(h.sent.length, 0);
 });
@@ -168,4 +170,11 @@ test('SQL: concurrent weekly jobs wait on the same lock and reuse one claim; rol
     assert.equal(database(`select count(*) from notification_delivery_claims where user_id='${uid}';`),'0');
     assert.match(await two.send(claim),/^[0-9a-f-]{36}$/);
   } finally {holder.close();one.close();two.close();database(`delete from auth.users where id='${uid}';`);}
+});
+
+test('saved report survives event persistence failure and retries after capture selection stops',async()=>{
+ const h=harness();h.alreadyCaptured=true;h.inboxError=true;const failed=await h.run();assert.equal(failed.errors,1);assert.equal(h.sent.length,0);
+ h.inboxError=false;await h.run();assert.equal(h.sent.length,1);assert.equal(h.sent[0].eventKey,'weekly-report:2026-11-09');
+ assert.ok(h.calls.some(c=>c[0]==='source-cutoff'&&c[1]==='captured_at'));
+ assert.equal(h.calls.some(c=>c[0]==='reconcile_and_capture_weekly_report'),false);
 });
