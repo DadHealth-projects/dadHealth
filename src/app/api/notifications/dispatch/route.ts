@@ -1,3 +1,5 @@
+import { persistInbox, readNotificationRows } from '@/lib/notifications/inbox';
+import { POST as handleSourceEvent } from '../events/route';
 import { dispatchWeeklyReports } from "@/lib/reports/weekly-report-dispatch";
 import { dispatchItem03Notifications } from '@/lib/notifications/item03-policy';
 import { NextResponse } from "next/server";
@@ -45,20 +47,28 @@ async function processPresentDadCompletions(admin: ReturnType<typeof createAdmin
     .lte("ends_at", nowIso);
   if (completionResult.error) throw completionResult.error;
 
-  const pendingResult = await admin
-    .from("present_dad_sessions")
-    .select("id,user_id")
-    .eq("status", "completed")
-    .gte("completed_duration_seconds", 3600)
-    .is("notification_attempted_at", null)
-    .is("notification_sent_at", null)
-    .limit(100);
-  if (pendingResult.error) throw pendingResult.error;
+  const activation=await admin.rpc('notification_inbox_started_at');
+  if(activation.error) throw activation.error;
+  const sessions = await readNotificationRows<{
+    id: string; user_id: string; notification_attempted_at: string | null;
+  }>((after, limit) => {
+    let query = admin.from('present_dad_sessions')
+      .select('id,user_id,notification_attempted_at')
+      .eq('status', 'completed').gte('completed_duration_seconds', 3600)
+      .gte('completed_at', activation.data).order('id', { ascending: true }).limit(limit);
+    if (after) query = query.gt('id', after.id);
+    return query;
+  });
 
   let sent = 0;
   let skipped = 0;
   let errors = 0;
-  for (const session of pendingResult.data ?? []) {
+  for (const session of sessions) {
+    try {
+      await persistInbox(admin, session.user_id, session.id, {type:'present_dad_mode_complete',
+        heading:'Present Dad Mode complete',content:'You completed 60 minutes of focused time.',link:'/bond',data:{session_id:session.id}});
+    } catch { errors++; continue; }
+    if (session.notification_attempted_at) continue;
     const claimResult = await admin
       .from("present_dad_sessions")
       .update({ notification_attempted_at: nowIso })
@@ -132,62 +142,63 @@ export async function GET(request: Request) {
     };
     const weeklyResult = await dispatchWeeklyReports(admin, now, runItem03).catch(() => ({ reports: 0, sent: 0, pending: 0, errors: 1 }));
     await runItem03(); // A capture failure must not prevent eligible daily/trial work.
-    const presentDadResult = await processPresentDadCompletions(admin, now);
+    const presentDadResult = await processPresentDadCompletions(admin, now).catch(()=>({sent:0,skipped:0,errors:1}));
+    const retrySources=await admin.rpc('notification_inbox_retry_sources');
+    if(retrySources.error) presentDadResult.errors++;
+    for(const source of retrySources.data ?? []) {
+      const response=await handleSourceEvent(new Request('http://internal.invalid/api/notifications/events',{
+        method:'POST',headers:{authorization:'Bearer '+(process.env.NOTIFICATION_WEBHOOK_SECRET?.trim() ?? ''),'content-type':'application/json'},body:JSON.stringify(source)}));
+      if(!response.ok) presentDadResult.errors++;
+    }
 
-    const prefsRes = await admin
-      .from("notification_preferences")
-      .select("user_id, notification_type, enabled, send_time")
-      .eq("enabled", true);
+    const prefs = await readNotificationRows<PrefRow>((after, limit) => {
+      let query = admin.from('notification_preferences')
+        .select('user_id, notification_type, enabled, send_time')
+        .order('user_id', { ascending: true })
+        .order('notification_type', { ascending: true }).limit(limit);
+      if (after) {
+        query = query.or(`user_id.gt.${after.user_id},` +
+          `and(user_id.eq.${after.user_id},notification_type.gt.${after.notification_type})`);
+      }
+      return query;
+    });
 
-    if (prefsRes.error) throw prefsRes.error;
-    const prefs = (prefsRes.data ?? []) as PrefRow[];
-
-    const userIds = Array.from(new Set(prefs.map((p) => p.user_id)));
+    const allAccounts = await readNotificationRows<{ user_id: string }>((after, limit) => {
+      let query = admin.from('user_profile').select('user_id')
+        .order('user_id', { ascending: true }).limit(limit);
+      if (after) query = query.gt('user_id', after.user_id);
+      return query;
+    });
+    const userIds = allAccounts.map(row => row.user_id);
     if (userIds.length === 0) {
       console.info("[notifications/dispatch] Run completed", { ...presentDadResult, scheduledUsers: 0 });
       return NextResponse.json({ ok: true, ...presentDadResult, weekly: weeklyResult, item03: item03Result });
     }
-
-    const profilesRes = await admin
-      .from("user_profile")
-      .select("user_id, timezone, push_notifications_enabled")
-      .in("user_id", userIds);
-    if (profilesRes.error) throw profilesRes.error;
-
-    const pushEnabledByUser = new Map<string, boolean>(
-      (profilesRes.data ?? []).map(
-        (r: { user_id: string; push_notifications_enabled?: boolean | null }) => [r.user_id, Boolean(r.push_notifications_enabled)],
-      ),
-    );
-
-    const tzByUser = new Map<string, string>(
-      (profilesRes.data ?? []).map((r: { user_id: string; timezone?: string | null }) => [
-        r.user_id,
-        (r.timezone?.trim() || "UTC") as string,
-      ])
-    );
 
     let sent = presentDadResult.sent;
     let skipped = presentDadResult.skipped;
     let errors = presentDadResult.errors;
 
     // Cache weekly challenge once per run (only used Mondays 8am local)
-    let cachedChallenge: { title: string; description?: string | null } | null | undefined;
+    let cachedChallenge: { id: string; title: string; description?: string | null } | null | undefined;
 
     for (const userId of userIds) {
-      if (!pushEnabledByUser.get(userId)) {
-        skipped += prefs.filter((p) => p.user_id === userId).length;
-        continue;
+      const context=await admin.rpc('item03_inbox_context',{p_user_id:userId});
+      if(context.error){errors++;continue;}
+      if(context.data?.allowed!==true) continue;
+      const timeZone=context.data.timezone;
+      const observedAt=new Date(context.data.observedAt);
+      if(!Number.isFinite(observedAt.getTime())){errors++;continue;}
+      const {localHHMM}=getLocalParts(observedAt,timeZone);
+      const localDate=context.data.date as string;
+      const localDow=new Date(localDate+'T00:00:00Z').getUTCDay();
+      const userPrefs=prefs.filter(p=>p.user_id===userId);
+      for (const type of ['weekly_challenge','milestone_anniversary'] as const) {
+        if(!userPrefs.some(p=>p.notification_type===type)) userPrefs.push({user_id:userId,notification_type:type,enabled:false,send_time:null});
       }
-
-      const timeZone = tzByUser.get(userId) ?? "UTC";
-      const { localDate, localDow, localHHMM } = getLocalParts(now, timeZone);
-
-      const userPrefs = prefs.filter((p) => p.user_id === userId);
-
       // Optional lookups (only when needed)
       let streakDays: number | null = null;
-      let milestoneText: string | null = null;
+      let milestones: {id:string;text:string}[] = [];
 
       for (const pref of userPrefs) {
         const type = pref.notification_type;
@@ -220,12 +231,12 @@ export async function GET(request: Request) {
             const oneYearAgo = ymdAddYears(localDate, -1);
             const mRes = await admin
               .from("milestones")
-              .select("text")
+              .select("id,text")
               .eq("user_id", userId)
-              .eq("date", oneYearAgo)
-              .maybeSingle();
-            milestoneText = (mRes.data as { text?: string } | null)?.text ?? null;
-            due = Boolean(milestoneText);
+              .eq("date", oneYearAgo);
+            if(mRes.error){errors++;continue;}
+            milestones=mRes.data ?? [];
+            due=milestones.length>0;
           }
         }
 
@@ -239,18 +250,18 @@ export async function GET(request: Request) {
         });
 
         // Dynamic payload pieces for notifications that are currently due.
-        let weeklyChallenge: { title: string; description?: string | null } | null = null;
+        let weeklyChallenge: { id:string; title: string; description?: string | null } | null = null;
 
         if (type === "weekly_challenge") {
           if (cachedChallenge === undefined) {
             const cRes = await admin
               .from("weekly_challenges")
-              .select("title, description")
+              .select("id, title, description")
               .eq("active", true)
               .order("created_at", { ascending: false })
               .limit(1)
               .maybeSingle();
-            cachedChallenge = (cRes.data as { title: string; description?: string | null } | null) ?? null;
+            cachedChallenge = (cRes.data as { id:string; title: string; description?: string | null } | null) ?? null;
           }
           weeklyChallenge = cachedChallenge ?? null;
           if (!weeklyChallenge) {
@@ -264,11 +275,12 @@ export async function GET(request: Request) {
           streakDays = (sRes.data as { streak_count?: number } | null)?.streak_count ?? null;
         }
 
+        for (const milestone of type==='milestone_anniversary' ? milestones : [null]) {
         const payload = buildPayload({
           type,
           streakDays,
           weeklyChallenge,
-          milestoneText,
+          milestoneText: milestone?.text,
           journalPrompt,
         });
 
@@ -278,6 +290,9 @@ export async function GET(request: Request) {
             userId,
             type,
             timezone: timeZone,
+            eventKey: milestone ? 'milestone:'+milestone.id+':'+localDate.slice(0,4) : undefined,
+            inboxSourceKey: milestone ? 'milestone:'+milestone.id+':'+localDate.slice(0,4)
+              : type==='weekly_challenge' ? 'challenge:'+localDate+':'+weeklyChallenge!.id : type+':'+localDate,
             payload,
           });
           if (delivery === "sent") sent++;
@@ -285,6 +300,7 @@ export async function GET(request: Request) {
         } catch (e) {
           console.error("[notifications/dispatch] OneSignal send failed", { userId, type, e });
           errors++;
+        }
         }
       }
     }
