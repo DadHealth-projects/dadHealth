@@ -36,30 +36,22 @@ async function sendIfAllowed(args: {
   payload: NotificationPayload;
 }) {
   const { admin, userId, type, eventKey, payload } = args;
-  const [profileResult, preferenceResult] = await Promise.all([
-    admin.from("user_profile").select("push_notifications_enabled,timezone").eq("user_id", userId).maybeSingle(),
-    admin.from("notification_preferences").select("enabled").eq("user_id", userId).eq("notification_type", type).maybeSingle(),
-  ]);
-  if (profileResult.error) throw profileResult.error;
-  if (preferenceResult.error) throw preferenceResult.error;
-  if (profileResult.data?.push_notifications_enabled !== true || preferenceResult.data?.enabled !== true) {
-    console.info("[notifications/events] Recipient settings skipped delivery", {
-      user: userId.slice(0, 8),
-      type,
-      masterEnabled: profileResult.data?.push_notifications_enabled === true,
-      typeEnabled: preferenceResult.data?.enabled === true,
-    });
-    return "disabled";
-  }
 
   return sendRateLimitedNotification({
     admin,
     userId,
     type,
-    timezone: profileResult.data.timezone?.trim() || "UTC",
+    timezone: "UTC", // compatibility argument; SQL uses canonical timezone
     eventKey,
     payload,
   });
+}
+
+
+async function beganAfterActivation(admin: ReturnType<typeof createAdminSupabaseClient>, createdAt: string | null) {
+ const start=await admin.rpc('notification_inbox_started_at');
+ if(start.error) throw start.error;
+ return Boolean(createdAt && Date.parse(createdAt)>=Date.parse(start.data));
 }
 
 async function actorName(admin: ReturnType<typeof createAdminSupabaseClient>, userId: string | null | undefined) {
@@ -93,10 +85,10 @@ async function canNotifyPrivateCircleMember(
 
 async function communityReply(body: Extract<EventBody, { type: "community_reply" }>) {
   const admin = createAdminSupabaseClient();
-  const commentResult = await admin.from("comments").select("id,user_id,post_id,parent_id").eq("id", body.record_id).maybeSingle();
+  const commentResult = await admin.from("comments").select("id,user_id,post_id,parent_id,created_at").eq("id", body.record_id).maybeSingle();
   if (commentResult.error) throw commentResult.error;
   const comment = commentResult.data;
-  if (!comment) return { sent: 0, skipped: 1 };
+  if (!comment || !await beganAfterActivation(admin, comment.created_at)) return { sent: 0, skipped: 1 };
 
   const recipients = new Set<string>();
   if (comment.parent_id) {
@@ -113,9 +105,9 @@ async function communityReply(body: Extract<EventBody, { type: "community_reply"
     if (ownerResult.error) throw ownerResult.error;
     if (ownerResult.data?.user_id) recipients.add(ownerResult.data.user_id);
   }
-  const name = await actorName(admin, body.actor_user_id || comment.user_id);
+  const name = await actorName(admin, comment.user_id);
 
-  recipients.delete(body.actor_user_id || comment.user_id);
+  recipients.delete(comment.user_id);
   for (const recipient of [...recipients]) {
     if (!(await canNotifyPrivateCircleMember(admin, comment.post_id, recipient))) recipients.delete(recipient);
   }
@@ -158,6 +150,10 @@ async function communityLike(
 ) {
   const admin = createAdminSupabaseClient();
 
+  const source = await admin.from(body.target_type === 'post' ? 'likes' : 'comment_likes').select('created_at')
+    .eq('user_id',body.actor_user_id!).eq(body.target_type === 'post' ? 'post_id' : 'comment_id',body.record_id).maybeSingle();
+  if (source.error) throw source.error;
+  if (!source.data || !await beganAfterActivation(admin,source.data.created_at)) return {sent:0,skipped:1};
   if (body.target_type === "post") {
     const postResult = await admin
       .from("posts")
@@ -254,16 +250,16 @@ async function communityLike(
 
 async function coParentEvent(body: Extract<EventBody, { type: "co_parent_event_added" }>) {
   const admin = createAdminSupabaseClient();
-  const eventResult = await admin.from("co_parenting_events").select("id,schedule_id,event_date,event_type").eq("id", body.record_id).maybeSingle();
+  const eventResult = await admin.from("co_parenting_events").select("id,schedule_id,event_date,event_type,created_at,notification_actor_user_id").eq("id", body.record_id).maybeSingle();
   if (eventResult.error) throw eventResult.error;
   const event = eventResult.data;
-  if (!event) return { sent: 0, skipped: 1 };
+  if (!event || !await beganAfterActivation(admin, event.created_at)) return { sent: 0, skipped: 1 };
   const scheduleResult = await admin.from("co_parenting_schedules").select("user_id,co_parent_user_id").eq("id", event.schedule_id).maybeSingle();
   if (scheduleResult.error) throw scheduleResult.error;
   const schedule = scheduleResult.data;
   if (!schedule) return { sent: 0, skipped: 1 };
 
-  const recipients = [schedule.user_id, schedule.co_parent_user_id].filter((id): id is string => Boolean(id && id !== body.actor_user_id));
+  const recipients = [schedule.user_id, schedule.co_parent_user_id].filter((id): id is string => Boolean(id && id !== event.notification_actor_user_id));
   let sent = 0;
   let skipped = 0;
   for (const userId of recipients) {
@@ -287,43 +283,23 @@ async function coParentEvent(body: Extract<EventBody, { type: "co_parent_event_a
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAuthorized(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  let body: EventBody;
+  try { body = await request.json() as EventBody; } catch { return NextResponse.json({error:'Invalid notification event'},{status:400}); }
+  const uuid = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  if (!body || !['community_reply','community_like','co_parent_event_added'].includes(body.type)
+    || !uuid(body.record_id) || (body.actor_user_id != null && !uuid(body.actor_user_id))
+    || (body.type === 'community_like' && (!uuid(body.actor_user_id) || !['post','comment'].includes(body.target_type ?? '')))) {
+    return NextResponse.json({error:'Invalid notification event'},{status:400});
+  }
   try {
-    const body = await request.json() as EventBody;
-    if (
-  !body?.record_id ||
-  ![
-    "community_reply",
-    "community_like",
-    "co_parent_event_added",
-  ].includes(body.type)
-) if (
-  body.type === "community_like" &&
-  body.target_type !== "post" &&
-  body.target_type !== "comment"
-) {
-  return NextResponse.json(
-    { error: "Invalid community like target" },
-    { status: 400 }
-  );
-}
-    console.info("[notifications/events] Event received", {
-      type: body.type,
-      record: body.record_id.slice(0, 8),
-    });
-    let result;
-
-if (body.type === "community_reply") {
-  result = await communityReply(body);
-} else if (body.type === "community_like") {
-  result = await communityLike(body);
-} else {
-  result = await coParentEvent(body);
-}
-    console.info("[notifications/events] Event processed", { type: body.type, ...result });
-    return NextResponse.json({ ok: true, ...result });
-  } catch (error) {
-    console.error("[notifications/events]", error);
-    return NextResponse.json({ error: "Event dispatch failed" }, { status: 500 });
+    console.info('[notifications/events] Event received', {type:body.type,record:body.record_id.slice(0,8)});
+    const result = body.type === 'community_reply' ? await communityReply(body)
+      : body.type === 'community_like' ? await communityLike(body) : await coParentEvent(body);
+    console.info('[notifications/events] Event processed', {type:body.type,...result});
+    return NextResponse.json({ok:true,...result});
+  } catch {
+    console.error('[notifications/events] Event dispatch failed', {type:body.type});
+    return NextResponse.json({error:'Event dispatch failed'},{status:500});
   }
 }
