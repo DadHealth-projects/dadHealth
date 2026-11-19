@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe/server";
 import { syncUserProfile } from "@/lib/stripe/sync-user-profile";
+import { privacyOwnerRemoved, RemovedPrivacyOwnerError } from '@/lib/privacy/operations';
+import { createAdminSupabaseClient } from '@/utils/supabase/admin';
 
 export const runtime = "nodejs";
 
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
           typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
 
         if (!customerId || !subId) break;
+        if (await privacyOwnerRemoved(createAdminSupabaseClient(), userId, 'stripe', subId)) break;
 
         const verificationStartedAt = new Date().toISOString();
         const stripe = getStripe();
@@ -68,6 +71,7 @@ export async function POST(request: Request) {
         if (!userId) break;
 
         const verificationStartedAt = new Date().toISOString();
+        if (await privacyOwnerRemoved(createAdminSupabaseClient(), userId, 'stripe', eventSubscription.id)) break;
         const sub = await getStripe().subscriptions.retrieve(eventSubscription.id);
         const cust = sub.customer;
         const customerId = typeof cust === "string" ? cust : cust.id;
@@ -88,6 +92,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ received: true });
   } catch (e) {
+    if (e instanceof RemovedPrivacyOwnerError) return NextResponse.json({ received: true });
     console.error("[stripe/webhook] Handler error", e);
     return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }

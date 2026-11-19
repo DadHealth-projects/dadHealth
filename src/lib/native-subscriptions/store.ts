@@ -1,4 +1,5 @@
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
+import { privacyOwnerRemoved, RemovedPrivacyOwnerError } from '@/lib/privacy/operations';
 
 import { ACCESS_GRANTING_STATUSES, entitlementGrantsAccess, type SubscriptionEntitlementInput, type SubscriptionEntitlementRow, type SubscriptionProvider } from "./types";
 
@@ -15,6 +16,7 @@ export async function upsertSubscriptionEntitlement(
   admin: AdminClient,
   input: SubscriptionEntitlementInput,
 ): Promise<string> {
+  if (await privacyOwnerRemoved(admin, input.userId, input.provider, input.providerSubscriptionId)) throw new RemovedPrivacyOwnerError();
   if (ACCESS_GRANTING_STATUSES.has(input.status) && !input.currentPeriodEnd) {
     throw new Error("Verified subscription expiry is required for Pro access");
   }
