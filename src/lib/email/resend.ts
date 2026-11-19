@@ -16,14 +16,19 @@ export async function sendEmail(args: {
   subject: string;
   html: string;
   replyTo?: string;
-}): Promise<void> {
+  attachments?: Array<{ filename: string; content: string }>;
+  idempotencyKey?: string;
+  signal?: AbortSignal;
+}): Promise<{ id: string }> {
   const apiKey = requiredEnv("RESEND_API_KEY");
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
+    signal: args.signal,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
+      ...(args.idempotencyKey ? { 'Idempotency-Key': args.idempotencyKey } : {}),
     },
     body: JSON.stringify({
       from: RESEND_FROM,
@@ -31,11 +36,15 @@ export async function sendEmail(args: {
       subject: args.subject,
       html: args.html,
       ...(args.replyTo ? { reply_to: args.replyTo } : {}),
+      ...(args.attachments ? { attachments: args.attachments } : {}),
     }),
   });
 
   const text = await res.text().catch(() => "");
   if (!res.ok) {
-    throw new Error(`Resend error ${res.status}: ${text}`);
+    throw new Error(`Resend request failed (${res.status})`);
   }
+  const result = JSON.parse(text);
+  if (typeof result?.id !== 'string') throw new Error('Resend confirmation unavailable');
+  return { id: result.id };
 }
