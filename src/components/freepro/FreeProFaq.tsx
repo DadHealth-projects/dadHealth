@@ -13,7 +13,7 @@ const questions = [
   {
     question: "What does Pro cost?",
     answer:
-      "£6.99/month or £49.99/year. Pro adds deeper history and insights, personalised Body functionality and AI workouts, Meal Planner, unlimited Dad Days, reports and one streak freeze each week.",
+      "£6.99/month or £49.99/year. Pro adds deeper history and insights, AI workouts built around your time and equipment, Meal Planner, unlimited Dad Days, reports and one streak freeze each week.",
   },
   {
     question: "Can my employer give me Pro?",

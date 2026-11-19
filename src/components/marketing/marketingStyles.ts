@@ -1,5 +1,5 @@
 export const marketingContainerClass =
-  "mx-auto max-w-7xl px-5 sm:px-6 lg:px-8";
+  "mx-auto min-w-0 max-w-7xl [overflow-wrap:anywhere] [&>*]:min-w-0 px-5 sm:px-6 lg:px-8";
 
 export const marketingSectionClass =
   `${marketingContainerClass} py-14 sm:py-16 lg:py-16 min-[1440px]:py-20`;

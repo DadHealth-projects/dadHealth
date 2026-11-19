@@ -2,8 +2,7 @@
 
 import Script from "next/script";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ANALYTICS_CONSENT_KEY,
   ANALYTICS_SETTINGS_EVENT,
@@ -15,7 +14,7 @@ import {
 type ConsentState = AnalyticsConsentValue | "loading" | "unset";
 
 export default function AnalyticsConsent() {
-  const pathname = usePathname();
+  const choicesRef = useRef<HTMLElement>(null);
   const [consent, setConsent] = useState<ConsentState>("loading");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -43,6 +42,10 @@ export default function AnalyticsConsent() {
     window.addEventListener(ANALYTICS_SETTINGS_EVENT, openSettings);
     return () => window.removeEventListener(ANALYTICS_SETTINGS_EVENT, openSettings);
   }, []);
+
+  useEffect(() => {
+    if (settingsOpen) choicesRef.current?.focus();
+  }, [settingsOpen]);
 
   function chooseConsent(value: AnalyticsConsentValue) {
     try {
@@ -82,8 +85,10 @@ export default function AnalyticsConsent() {
 
       {(consent === "unset" || settingsOpen) && (
         <section
+          ref={choicesRef}
+          tabIndex={-1}
           aria-label="Analytics cookie choices"
-          className={`${pathname === "/cookies" ? "relative mx-auto mb-4 w-[calc(100%-2rem)]" : "fixed inset-x-4 bottom-4 mx-auto"} z-50 max-w-3xl rounded-2xl border border-border bg-card p-5 text-foreground shadow-[0_0_24px_hsl(var(--primary)/0.08)] sm:flex sm:items-center sm:gap-6`}
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-[100] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded-2xl border border-border bg-card p-5 text-foreground shadow-[0_0_24px_hsl(var(--primary)/0.08)] max-h-[calc(100dvh-2rem)] overflow-y-auto sm:flex sm:items-center sm:gap-6"
         >
           <p className="flex-1 text-sm leading-relaxed text-muted-foreground">
             We use optional analytics to understand how Dad Health is used. Read our{" "}
@@ -93,18 +98,18 @@ export default function AnalyticsConsent() {
             .
             {settingsOpen && consent !== "unset" ? ` Current choice: ${consent === "granted" ? "allowed" : "rejected"}.` : ""}
           </p>
-          <div className="mt-4 flex gap-3 sm:mt-0">
+          <div className="mt-4 flex flex-wrap gap-3 sm:mt-0">
             <button
               type="button"
               onClick={() => chooseConsent("denied")}
-              className="inline-flex min-h-11 flex-1 items-center justify-center border border-border px-4 font-heading text-sm font-extrabold uppercase sm:flex-none"
+              className="inline-flex min-h-11 min-w-0 flex-1 [overflow-wrap:anywhere] items-center justify-center bg-primary px-2 py-2 font-heading text-sm font-extrabold uppercase text-primary-foreground sm:flex-none sm:px-4"
             >
               Reject
             </button>
             <button
               type="button"
               onClick={() => chooseConsent("granted")}
-              className="inline-flex min-h-11 flex-1 items-center justify-center bg-primary px-4 font-heading text-sm font-extrabold uppercase text-primary-foreground sm:flex-none"
+              className="inline-flex min-h-11 min-w-0 flex-1 [overflow-wrap:anywhere] items-center justify-center bg-primary px-2 py-2 font-heading text-sm font-extrabold uppercase text-primary-foreground sm:flex-none sm:px-4"
             >
               Allow analytics
             </button>

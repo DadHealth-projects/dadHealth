@@ -1,10 +1,11 @@
+import StoreDownloadButtons from "@/components/marketing/StoreDownloadButtons";
 import HomepagePrimaryButton from "@/components/homepage/HomepagePrimaryButton";
 
 function TodayPhone() {
   return (
     <div
       aria-label="Preview of the Dad Health Today screen"
-      className="relative mx-auto flex w-[280px] shrink-0 flex-col gap-3 rounded-[3rem] border-[11px] border-card bg-background px-4 pb-5 pt-10 shadow-[0_0_0_1px_hsl(var(--border)),0_0_32px_hsl(var(--primary)/0.12)] sm:w-[320px] sm:gap-4 sm:px-5 sm:pb-6 sm:pt-11 lg:mx-0"
+      className="relative mx-auto flex w-[280px] max-w-full shrink-0 flex-col gap-3 rounded-[3rem] border-[11px] border-card bg-background px-4 pb-5 pt-10 shadow-[0_0_0_1px_hsl(var(--border)),0_0_32px_hsl(var(--primary)/0.12)] sm:w-[320px] sm:gap-4 sm:px-5 sm:pb-6 sm:pt-11 lg:mx-0"
     >
       <span aria-hidden="true" className="absolute left-1/2 top-2 h-5 w-24 -translate-x-1/2 rounded-full bg-card" />
       <span aria-hidden="true" className="absolute -right-[15px] top-24 h-14 w-1.5 rounded-r-md border-y border-r border-border bg-card" />
@@ -54,7 +55,7 @@ function TodayPhone() {
 export default function HomepageHero() {
   return (
     <section id="top" className="bg-background">
-      <div className="mx-auto grid max-w-7xl items-start gap-10 px-5 pb-12 pt-8 sm:px-6 sm:pb-14 sm:pt-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-12 lg:px-8 lg:pb-6 lg:pt-7 xl:gap-16 xl:pb-6 xl:pt-9 min-[1440px]:gap-24 min-[1440px]:pb-8 min-[1440px]:pt-10">
+      <div className="mx-auto grid min-w-0 max-w-7xl [overflow-wrap:anywhere] [&>*]:min-w-0 items-start gap-10 px-5 pb-12 pt-8 sm:px-6 sm:pb-14 sm:pt-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-12 lg:px-8 lg:pb-6 lg:pt-7 xl:gap-16 xl:pb-6 xl:pt-9 min-[1440px]:gap-24 min-[1440px]:pb-8 min-[1440px]:pt-10">
         <div className="max-w-3xl lg:pt-16 xl:pt-10 min-[1440px]:pt-24">
           <p className="font-heading text-xs font-bold uppercase tracking-[0.3em] text-primary sm:text-sm">Built for dads, by dads</p>
           <h1 className="mt-6 font-heading text-[3.6rem] font-extrabold uppercase leading-[0.84] tracking-[-0.035em] sm:text-7xl lg:text-[5.25rem] xl:text-[5.5rem] min-[1440px]:text-[6.5rem]">
@@ -69,6 +70,7 @@ export default function HomepageHero() {
     →
   </span>
 </HomepagePrimaryButton>
+          <StoreDownloadButtons prelaunch />
         </div>
 
         <TodayPhone />

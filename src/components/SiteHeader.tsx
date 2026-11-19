@@ -50,12 +50,12 @@ const SiteHeader = () => {
 
   return (
     <header className="sticky top-0 z-50 w-full shrink-0 bg-black border-b border-white/10">
-      <div className="max-w-[1400px] mx-auto flex items-center justify-between px-5 py-3 lg:px-8">
+      <div className="max-w-[1400px] mx-auto flex flex-wrap items-center justify-between gap-3 px-5 py-3 lg:px-8">
         <Link href="/" className="inline-flex shrink-0 items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-sm">
           <Logo />
         </Link>
 
-        <nav className="hidden md:flex items-center gap-6">
+        <nav className="hidden md:flex flex-wrap items-center gap-6">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
@@ -72,7 +72,7 @@ const SiteHeader = () => {
           ))}
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 max-w-full items-center gap-3">
           {user && isPro ? (
             <span
               className="hidden lg:inline-flex font-heading text-[10px] font-bold tracking-wider uppercase text-primary-foreground bg-primary border border-primary px-2 py-0.5"

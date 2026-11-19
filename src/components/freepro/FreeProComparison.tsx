@@ -12,12 +12,12 @@ const features = [
   { feature: "Daily check-in", free: "Yes", pro: "Yes" },
   { feature: "Breathing, Journal and crisis support", free: "Yes", pro: "Yes" },
   { feature: "Basic workouts", free: "Yes", pro: "Yes" },
-  { feature: "Personalised Body functionality and AI workouts", free: "—", pro: "Yes" },
+  { feature: "AI workouts built around your time and equipment", free: "—", pro: "Yes" },
   { feature: "Meal Planner", free: "—", pro: "Yes" },
   { feature: "Manual Mind, Body and Bond logging", free: "Yes", pro: "Yes" },
   { feature: "Dad Days", free: "3 searches per month", pro: "Unlimited" },
   { feature: "Community", free: "Full access", pro: "Full access" },
-  { feature: "Reports", free: "—", pro: "Weekly and monthly reports" },
+  { feature: "Reports", free: "Weekly scores and headline changes", pro: "Detailed weekly and monthly reports" },
   { feature: "Streak protection", free: "—", pro: "One freeze per week" },
 ];
 

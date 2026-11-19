@@ -6,6 +6,7 @@ import {
 const freeFeatures = [
   "Dad Health Score",
   "Current score and pillar trends",
+  "Weekly scores and headline changes",
   "Daily check-in",
   "Breathing, Journal and crisis support",
   "Basic workouts",
@@ -17,7 +18,7 @@ const freeFeatures = [
 const proFeatures = [
   "Everything in Free",
   "Deeper score and history insights",
-  "Personalised Body functionality and AI workouts",
+  "AI workouts built around your time and equipment",
   "Meal Planner",
   "Unlimited Dad Days",
   "Weekly and monthly reports",

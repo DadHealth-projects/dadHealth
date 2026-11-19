@@ -30,7 +30,7 @@ export default function HomepageHowItWorks() {
           {pillars.map((pillar, index) => (
             <article
               key={pillar.title}
-              className={`flex items-center gap-4 p-4 sm:flex-col sm:justify-center sm:px-5 sm:py-6 sm:text-center lg:py-7 ${index > 0 ? "border-t border-border sm:border-l sm:border-t-0" : ""}`}
+              className={`flex flex-wrap items-center gap-4 p-4 sm:flex-col sm:justify-center sm:px-5 sm:py-6 sm:text-center lg:py-7 ${index > 0 ? "border-t border-border sm:border-l sm:border-t-0" : ""}`}
             >
               <Image src={pillar.image} alt="" width={1200} height={1200} className="size-16 shrink-0 object-cover sm:size-20" />
               <div className="min-w-0 sm:mt-1">

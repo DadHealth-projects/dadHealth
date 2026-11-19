@@ -39,7 +39,7 @@ export default function HomepageWaitlist({ headingLevel: Heading = "h2" }: { hea
   return (
     <section id="waitlist" className="scroll-mt-14 border-t border-border bg-card text-foreground">
       <span id="download" className="sr-only" aria-hidden="true" />
-      <div className="mx-auto grid max-w-7xl gap-7 px-5 py-14 sm:px-6 sm:py-16 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-end lg:gap-12 lg:px-8">
+      <div className="mx-auto grid min-w-0 max-w-7xl [overflow-wrap:anywhere] [&>*]:min-w-0 gap-7 px-5 py-14 sm:px-6 sm:py-16 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-end lg:gap-12 lg:px-8">
         <div>
           <p className="font-heading text-xs font-bold uppercase tracking-[0.3em] text-primary">Dad Health app</p>
           <Heading className="mt-4 font-heading text-5xl font-extrabold uppercase leading-none tracking-[-0.025em] sm:text-6xl">Join the waitlist.</Heading>
@@ -48,6 +48,7 @@ export default function HomepageWaitlist({ headingLevel: Heading = "h2" }: { hea
         {state === "success" ? (
           <div role="status" className="rounded-2xl border border-primary bg-background p-6 shadow-[0_0_20px_hsl(var(--primary)/0.06)]">
             <p className="font-heading text-2xl font-extrabold uppercase text-primary">You&apos;re on the waitlist.</p>
+            <p className="mt-3 text-base leading-relaxed text-muted-foreground">Your request has been sent to the Dad Health team. There&apos;s nothing else you need to do now.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
@@ -59,7 +60,7 @@ export default function HomepageWaitlist({ headingLevel: Heading = "h2" }: { hea
               <label htmlFor="waitlist-email" className="font-heading text-xs font-bold uppercase tracking-[0.12em]">Email</label>
               <input id="waitlist-email" name="email" type="email" autoComplete="email" required maxLength={254} className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-4 text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary" />
             </div>
-            <div className="sr-only" aria-hidden="true">
+            <div hidden aria-hidden="true">
               <label htmlFor="waitlist-website">Website</label>
               <input id="waitlist-website" name="website" type="text" tabIndex={-1} autoComplete="off" />
             </div>

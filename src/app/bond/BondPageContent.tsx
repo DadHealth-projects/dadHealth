@@ -129,7 +129,7 @@ export default function BondPageContent() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col overflow-x-hidden bg-background text-foreground">
+    <div className="flex min-h-dvh flex-col overflow-x-hidden bg-background text-foreground [overflow-wrap:anywhere]">
       <HomepageHeader />
       <main className="flex flex-1 flex-col">{content}</main>
       <HomepageFooter />

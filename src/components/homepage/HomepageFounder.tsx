@@ -4,7 +4,7 @@ import Image from "next/image";
 export default function HomepageFounder() {
   return (
     <section id="about" className="scroll-mt-14 border-y border-border bg-card text-foreground">
-      <div className="mx-auto grid max-w-7xl gap-7 px-5 py-10 sm:grid-cols-[12rem_minmax(0,1fr)] sm:items-center sm:px-6 sm:py-12 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-10 lg:px-8 lg:py-14">
+      <div className="mx-auto grid min-w-0 max-w-7xl [overflow-wrap:anywhere] [&>*]:min-w-0 gap-7 px-5 py-10 sm:grid-cols-[12rem_minmax(0,1fr)] sm:items-center sm:px-6 sm:py-12 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-10 lg:px-8 lg:py-14">
         <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-border bg-background shadow-[0_0_18px_hsl(var(--primary)/0.04)] sm:aspect-[3/4]">
           <Image
             src="/Home Screen top image.jpg"

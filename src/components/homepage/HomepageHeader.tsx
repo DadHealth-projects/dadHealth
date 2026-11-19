@@ -20,7 +20,7 @@ export default function HomepageHeader() {
 
   return (
     <header className="relative z-50 border-b border-border bg-background">
-      <div className="flex h-14 w-full items-center gap-3 px-4">
+      <div className="flex min-h-14 w-full flex-wrap items-center gap-3 px-4 py-2">
         <Link href="/" aria-label="Dad Health home" className="shrink-0">
           <Logo />
         </Link>

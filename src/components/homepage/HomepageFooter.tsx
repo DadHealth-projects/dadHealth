@@ -1,3 +1,4 @@
+import StoreDownloadButtons from "@/components/marketing/StoreDownloadButtons";
 import Link from "next/link";
 import Logo from "@/components/Logo";
 import CookieSettingsButton from "@/components/analytics/CookieSettingsButton";
@@ -19,7 +20,7 @@ export default function HomepageFooter() {
   return (
     <footer className="bg-background text-foreground">
       <div className={`${marketingContainerClass} pb-6 pt-12 lg:pt-14`}>
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-12">
+        <div className="grid gap-8 lg:grid-cols-2 lg:items-start lg:gap-12">
           <div>
             <Link href="/" aria-label="Dad Health home" className="inline-block">
               <Logo />
@@ -57,6 +58,17 @@ export default function HomepageFooter() {
               );
             })}
           </nav>
+        </div>
+
+        <div className="mt-6 grid items-start gap-8 lg:grid-cols-2 lg:gap-12">
+          <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+            Dad Health is a wellbeing tool, not a medical service or a
+            substitute for professional care.
+          </p>
+
+          <div className="min-w-0 [&>div]:mt-0">
+  <StoreDownloadButtons prelaunch />
+</div>
         </div>
       </div>
     </footer>

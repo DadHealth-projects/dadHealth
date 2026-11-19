@@ -48,8 +48,8 @@ function BrandPhone({ brand, caption, branded = false }: BrandPhoneProps) {
   const buttonColour = branded ? "bg-blue-400" : "bg-primary";
 
   return (
-    <figure className="w-52">
-      <div className={`flex h-96 flex-col gap-4 rounded-3xl border-4 bg-card p-5 shadow-[0_0_24px_hsl(var(--primary)/0.06)] ${borderColour}`}>
+    <figure className="w-52 max-w-full">
+      <div className={`flex min-h-96 flex-col gap-4 rounded-3xl border-4 bg-card p-5 shadow-[0_0_24px_hsl(var(--primary)/0.06)] ${borderColour}`}>
         {branded ? (
           <p className={`font-heading text-sm font-extrabold uppercase tracking-[0.06em] ${brandColour}`}>{brand}</p>
         ) : (

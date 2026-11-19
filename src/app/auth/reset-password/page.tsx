@@ -104,7 +104,7 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-background px-4 py-16">
+    <main className="min-h-screen flex items-center justify-center bg-background px-4 py-16 [overflow-wrap:anywhere]">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-sm">
         <h1 className="font-heading text-2xl font-extrabold uppercase tracking-wide">Set New Password</h1>
         <p className="mt-2 text-sm text-muted-foreground">

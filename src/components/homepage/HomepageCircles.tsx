@@ -10,7 +10,7 @@ const circles = [
 export default function HomepageCircles() {
   return (
     <section id="community" className="scroll-mt-14 bg-background text-foreground">
-      <div className="mx-auto max-w-7xl px-5 py-14 sm:px-6 sm:py-16 lg:px-8 lg:py-16 min-[1440px]:py-20">
+      <div className="mx-auto min-w-0 max-w-7xl [overflow-wrap:anywhere] [&>*]:min-w-0 px-5 py-14 sm:px-6 sm:py-16 lg:px-8 lg:py-16 min-[1440px]:py-20">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="font-heading text-5xl font-extrabold uppercase leading-none tracking-[-0.025em] sm:text-6xl lg:text-5xl min-[1440px]:text-6xl">Dad Circles</h2>
