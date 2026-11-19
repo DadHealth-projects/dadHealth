@@ -187,7 +187,7 @@ test('web subscription presentation uses the same canonical server summary', asy
 // Phase 04 behavioural coverage. SQL execution remains a separate local gate.
 async function cancellationModules() {
  const ts=(await import('typescript')).default,vm=(await import('node:vm')).default;
- const load=async(path,mocks={})=>{const exports={};vm.runInNewContext(ts.transpileModule(await source(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,process:{env:{ADMIN_SECRET_KEY:'test-admin'}},URLSearchParams,require:n=>{assert.ok(n in mocks,`Unexpected dependency ${n}`);return mocks[n];}});return exports;};
+ const load=async(path,mocks={})=>{mocks={'@/lib/privacy/operations':{privacyOwnerRemoved:async()=>false,RemovedPrivacyOwnerError:class extends Error{}},...mocks};const exports={};vm.runInNewContext(ts.transpileModule(await source(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,process:{env:{ADMIN_SECRET_KEY:'test-admin'}},URLSearchParams,require:n=>{assert.ok(n in mocks,`Unexpected dependency ${n}`);return mocks[n];}});return exports;};
  const types=await load('src/lib/native-subscriptions/types.ts');
  const cancellation=await load('src/lib/native-subscriptions/cancellation.ts',{'./types':types,'@apple/app-store-server-library':await import('@apple/app-store-server-library')});
  return {load,cancellation,types};

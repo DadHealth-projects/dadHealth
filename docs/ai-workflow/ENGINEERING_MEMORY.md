@@ -152,3 +152,7 @@ mobile HEAD c38161a1c169c85e2ce72cc459758a2f9e738ea1 and backend HEAD
 ## Approved refresh presentation rule - 2026-11-13
 
 Never replace known workout content or a confirmed empty assignment with "Checking this week's workout" or new loading text during refresh. Keep prior content on recoverable failure. Show no-assignment copy only after a successful assignment read confirms absence; unknown/error is not empty. Apply this rule to equivalent refresh UI without expanding the approved task scope. User-approved rule; device verification remains separate.
+
+### Item 05 - Ordinary content and truthful operation recovery - 2026-11-18
+
+Preserve ordinary feature-card titles, descriptions and layouts. Do not replace them with "Your workout is loading", "Plan temporarily unavailable", Retry cards, or default Retry/Try again buttons. Use subtle action-level progress and automatic recovery. Preserve owner/access boundaries; never expose restricted data when authorisation is unknown. Never claim success without server confirmation. Destructive operations still need truthful progress and failure messages. Internal retries and durable reconciliation remain required. Never hide genuine failures or leave an operation endlessly pending.
