@@ -160,6 +160,10 @@ export default function PrivacyRequestForm() {
             <h1 className={`${marketingPageHeroClass} mt-4`}>
               Privacy request.
             </h1>
+            <p className={`${marketingBodyClass} mt-4 max-w-xl`}>
+              <a href="/privacy-request/confirm" className="underline">Confirm an account export or deletion</a> using your signed-in account.
+              {' '}If you cannot sign in, use this form for identity-verification assistance. Submitting an email address does not authorise disclosure or deletion.
+            </p>
 
             <p className={`${marketingBodyClass} mt-6 max-w-xl`}>
               Use this form to ask about access to, correction of,
