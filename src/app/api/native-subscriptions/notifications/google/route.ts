@@ -5,6 +5,7 @@ import { acknowledgeGooglePurchase, googleEntitlementInput, verifyGooglePurchase
 import { claimProviderEvent, completeProviderEvent, failProviderEvent } from "@/lib/native-subscriptions/provider-events";
 import { findGoogleAccountOwner, findSubscriptionEntitlement, upsertSubscriptionEntitlement } from "@/lib/native-subscriptions/store";
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
+import { privacyOwnerRemoved, RemovedPrivacyOwnerError } from '@/lib/privacy/operations';
 
 export const runtime = "nodejs";
 
@@ -54,6 +55,10 @@ export async function POST(request: Request) {
     const accountReference = purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId;
     const existing = await findSubscriptionEntitlement(admin, "google", purchaseToken);
     const userId = accountReference ? await findGoogleAccountOwner(admin, accountReference) : existing?.user_id;
+    if (await privacyOwnerRemoved(admin, userId ?? null, 'google', purchaseToken, accountReference ?? null)) {
+      await completeProviderEvent(admin, claimId);
+      return NextResponse.json({ ok: true });
+    }
     if (!userId || (existing && existing.user_id !== userId)) throw new Error("Google subscription owner not found");
     const entitlement = googleEntitlementInput(userId, purchaseToken, purchase);
     // RTDN publishTime orders messages, not the Google Play state we just
@@ -67,6 +72,10 @@ export async function POST(request: Request) {
     await completeProviderEvent(admin, claimId);
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof RemovedPrivacyOwnerError && claimId) {
+      await completeProviderEvent(admin, claimId);
+      return NextResponse.json({ ok: true });
+    }
     if (claimId) await failProviderEvent(admin, claimId, error instanceof Error ? error.name : "processing_failed");
     console.error("[native-subscriptions/google-notification] Processing failed", {
       code: error instanceof Error ? error.name : "unknown_error",

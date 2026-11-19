@@ -5,6 +5,7 @@ import { appleEntitlementInput, verifyAppleNotification } from "@/lib/native-sub
 import { claimProviderEvent, completeProviderEvent, failProviderEvent } from "@/lib/native-subscriptions/provider-events";
 import { findSubscriptionEntitlement, upsertSubscriptionEntitlement } from "@/lib/native-subscriptions/store";
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
+import { privacyOwnerRemoved, RemovedPrivacyOwnerError } from '@/lib/privacy/operations';
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,10 @@ export async function POST(request: Request) {
       verified.transaction.originalTransactionId,
     );
     const userId = verified.transaction.appAccountToken ?? existing?.user_id;
+    if (await privacyOwnerRemoved(admin, userId ?? null, 'apple', verified.transaction.originalTransactionId)) {
+      await completeProviderEvent(admin, claimId);
+      return NextResponse.json({ ok: true });
+    }
     log('ownership', { hasResolvedOwner: Boolean(userId), existingEntitlementFound: Boolean(existing),
       existingOwnerMatches: existing ? existing.user_id === userId : null });
     if (!userId || (existing && existing.user_id !== userId)) throw new Error("Apple subscription owner not found");
@@ -78,6 +83,10 @@ export async function POST(request: Request) {
     await completeProviderEvent(admin, claimId);
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof RemovedPrivacyOwnerError && claimId) {
+      await completeProviderEvent(admin, claimId);
+      return NextResponse.json({ ok: true });
+    }
     log('failed', { stage, ownershipConstraint: error instanceof Error && error.name === 'SubscriptionOwnershipError' });
     if (claimId) await failProviderEvent(admin, claimId, error instanceof Error ? error.name : "processing_failed");
     console.error("[native-subscriptions/apple-notification] Processing failed", {
