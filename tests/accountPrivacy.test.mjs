@@ -210,3 +210,18 @@ test('controlled deletion RPC fixture binds owner and reuses accepted result on 
  const wrong=req(body);wrong.headers.set('Authorization','Bearer '+token(Date.now(),h.h.user.id));
  assert.equal((await h.operations.handleRequest(wrong,'delete')).status,409);assert.equal(inserts,1);
 });
+test('latest export recovery is authenticated, owner-scoped, deterministic and read-only',async()=>{
+ const h=harness();const filters=[],orders=[];h.admin.from=table=>{assert.equal(table,'account_privacy_operations');const q={select:columns=>{assert.equal(columns,'id');return q;},eq:(k,v)=>{filters.push([k,v]);return q;},order:(k,v)=>{orders.push([k,v.ascending]);return q;},limit:n=>{assert.equal(n,1);return q;},maybeSingle:async()=>({data:{id},error:null})};return q;};
+ const route=load('src/app/api/account/export/route.ts',{'@/lib/privacy/operations':h.operations,'@/lib/privacy/auth':h.auth});
+ const response=await route.GET(new Request('https://fixture.invalid/api/account/export?owner=someone-else',{headers:{Authorization:'Bearer '+token()}}));
+ assert.equal(response.status,200);assert.equal((await response.json()).status.id,id);
+ assert.deepEqual(filters,[['user_id',owner],['kind','export']]);assert.deepEqual(orders,[['created_at',false],['id',false]]);
+ assert.equal(h.calls.length,1);assert.equal(h.calls[0].name,'account_privacy_status');assert.equal(h.calls[0].args.p_user_id,owner);
+ assert.match(response.headers.get('cache-control'),/no-store/);
+});
+test('latest export recovery rejects failed authentication and does not invent missing history',async()=>{
+ const h=harness();const route=load('src/app/api/account/export/route.ts',{'@/lib/privacy/operations':h.operations,'@/lib/privacy/auth':h.auth});
+ h.h.user=null;const bad=await route.GET(new Request('https://fixture.invalid/api/account/export',{headers:{Authorization:'Bearer '+token()}}));assert.equal(bad.status,401);assert.equal(h.calls.length,0);
+ h.h.user={id:owner};h.admin.from=()=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,maybeSingle:async()=>({data:null,error:null})};return q;};
+ const empty=await route.GET(new Request('https://fixture.invalid/api/account/export',{headers:{Authorization:'Bearer '+token()}}));assert.equal(empty.status,200);assert.equal((await empty.json()).status,null);assert.equal(h.calls.length,0);
+});
