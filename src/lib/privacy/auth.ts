@@ -119,6 +119,5 @@ export async function tracePrivacy(request: Request, handler: () => Promise<Resp
     reason: trace.reason ?? (response.ok || response.status < 400 ? 'ok' : 'operation_unavailable'),
     status: response.status, durationMs: Date.now() - trace.started, safeErrorCode: trace.safeCode ?? null };
   if (response.status >= 400) console.warn('[AccountPrivacy]', event);
-  else if (process.env.PRIVACY_DEBUG === 'true') console.info('[AccountPrivacy]', event);
   return response;
 }

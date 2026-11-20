@@ -158,7 +158,7 @@ test('privacy correlation spans preparation success and failures without private
  const events=[];const h=harness({env:{PRIVACY_DEBUG:'true'},console:{info:(tag,event)=>events.push({tag,...event}),warn:(tag,event)=>events.push({tag,...event})}});
  const request=req({operationId:id,kind:'delete'});request.headers.set('X-Privacy-Request-ID',id);
  const response=await h.operations.handleConfirmation(request);assert.equal(response.status,200);assert.equal(response.headers.get('x-privacy-request-id'),id);
- assert.equal(events[0].correlationId,id);assert.equal(events[0].reason,'ok');assert.equal(typeof events[0].durationMs,'number');
+ assert.equal(events.length,0);
  const payload=await response.json();assert.ok(payload.confirmation);assert.ok(!JSON.stringify(events).includes(payload.confirmation));assert.ok(!JSON.stringify(events).includes(h.h.user.email));
 });
 test('missing configuration and stale authentication have separate stages, correlated errors and no RPC calls',async()=>{
