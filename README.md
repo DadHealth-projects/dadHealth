@@ -19,7 +19,7 @@ Dad Health is a web application designed to help dads improve their physical hea
 Clone the project:
 
 ```bash
-git clone https://github.com/khushi0433/dadHealth
+git clone <repository-url>
 cd dadhealth
 ```
 
@@ -90,10 +90,6 @@ The project is deployed on Vercel.
 
 Any changes pushed to the `main` branch will automatically trigger a new deployment.
 
-## Support
+## Operations
 
-If you're taking over this project, refer to the handover document for deployment details, third-party services, and account access.
-
----
-
-Developed by **Khushbu Baloch** for **Dad Health**.
+See [privacy worker setup](docs/account-privacy-worker-setup.md) and [community moderation operations](docs/community-moderation-operations.md) for configuration, access restrictions and recovery.
