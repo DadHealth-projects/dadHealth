@@ -97,7 +97,7 @@ test('Apple web callback rejects absent browser state before provider exchange',
 
 test('download uses authenticated owner and denies missing expired or other-owner artifact',async()=>{
  const h=harness();const seen=[];h.admin.rpc=async(name,args)=>{seen.push({name,args});return {data:null,error:null};};
- const route=load('src/app/api/account/exports/[id]/download/route.ts',{'@/lib/privacy/auth':h.auth});
+ const route=load('src/app/api/account/exports/[id]/download/route.ts',{'@/lib/privacy/auth':h.auth,'@/lib/privacy/export-pdf':{renderExportPdf(){throw Error('JSON must not render PDF');}},'node:fs':{}});
  const result=await route.GET(new Request('https://fixture.invalid/api/account/exports/'+id+'/download',{headers:{Authorization:'Bearer fixture','X-Privacy-Recovery':'a'.repeat(43)}}),{params:Promise.resolve({id})});
  assert.equal(result.status,404);assert.equal(seen[0].args.p_user_id,owner);
  h.h.user=null;assert.equal((await route.GET(new Request('https://fixture.invalid/api/account/exports/'+id+'/download'),{params:Promise.resolve({id})})).status,401);
@@ -131,7 +131,7 @@ test('recent account-wide login cannot refresh an old requesting session',async(
 test('large download streams bounded Unicode chunks and revokes between reads',async()=>{
  const h=harness();const text=JSON.stringify({journal:'\u{1F642}'.repeat(1300000)});const chars=Array.from(text);let revoked=false;let largest=0;
  h.admin.rpc=async(name,args)=>{assert.equal(name,'read_account_export_chunk');if(revoked)return {data:null,error:null};const part=chars.slice(args.p_offset,args.p_offset+args.p_limit).join('');largest=Math.max(largest,part.length);return {data:{text:part,length:chars.length},error:null};};
- const route=load('src/app/api/account/exports/[id]/download/route.ts',{'@/lib/privacy/auth':h.auth});
+ const route=load('src/app/api/account/exports/[id]/download/route.ts',{'@/lib/privacy/auth':h.auth,'@/lib/privacy/export-pdf':{renderExportPdf(){throw Error('JSON must not render PDF');}},'node:fs':{}});
  const get=()=>route.GET(new Request('https://fixture.invalid/download',{headers:{Authorization:'Bearer '+token()}}),{params:Promise.resolve({id})});
  const response=await get();assert.equal(await response.text(),text);assert.ok(largest<=131072);assert.equal(response.headers.get('cache-control'),'private, no-store');
  const interrupted=await get();const reader=interrupted.body.getReader();await reader.read();revoked=true;await assert.rejects(async()=>{while(!(await reader.read()).done){}});
