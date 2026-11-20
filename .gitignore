@@ -37,10 +37,10 @@ AuthKey_*.p8
 
 
 # ==========================================
-# Dad Health - Private client documents
+# Local reference material
 # ==========================================
 
-# Client-provided briefs, designs, contracts and legal drafts
+# Local product and design references
 /product/
 /public/product/
 
@@ -67,3 +67,5 @@ AuthKey_*.p8
 *.p12
 *.pfx
 *.mobileprovision
+# Local-only records and development material
+/docs/ai-workflow/
