@@ -8,6 +8,54 @@ const auth=load('src/lib/privacy/auth.ts',{'node:crypto':crypto,'@/utils/supabas
 const operations=load('src/lib/privacy/operations.ts',{'./auth':auth,'./external-cleanup':{openCleanup:JSON.parse,sealCleanup:JSON.stringify,acquireAppleRevocationToken:async()=> 'fixture-token'}},diagnostics);return {...h,auth,operations,admin,h};}
 const token=(at=Date.now(),sub=owner)=>'header.'+Buffer.from(JSON.stringify({sub,session_id:id,amr:[{method:'password',timestamp:Math.floor(at/1000)}]})).toString('base64url')+'.signature';
 const req=(body,at)=>new Request('https://fixture.invalid/api/account/export',{method:'POST',headers:{Authorization:'Bearer '+token(at)},body:JSON.stringify(body)});
+
+test('worker POST requires exact Bearer authentication and enabled rollout before any work',async()=>{
+ for(const [authorization,secret,enabled,expected] of [
+  [null,'fixture-secret','true',401],['fixture-secret','fixture-secret','true',401],
+  ['Bearer wrong','fixture-secret','true',401],['Bearer fixture-secret',undefined,'true',401],
+  ['Bearer fixture-secret','fixture-secret','false',503],['Bearer fixture-secret','fixture-secret','true',200]]) {
+  const h=harness();let calls=0;
+  const route=load('src/app/api/privacy/process/route.ts',{'node:crypto':crypto,
+   '@/utils/supabase/admin':{createAdminSupabaseClient:()=>h.admin},'@/lib/privacy/auth':h.auth,
+   '@/lib/privacy/worker':{runPrivacyWorker:async()=>{calls++;return {processed:0,deferred:0};}}},
+   {process:{env:{PRIVACY_WORKER_SECRET:secret,PRIVACY_OPERATIONS_ENABLED:enabled}}});
+  const response=await route.POST(new Request('https://fixture.invalid/api/privacy/process',{method:'POST',headers:authorization?{Authorization:authorization}:{}}));
+  assert.equal(response.status,expected);assert.equal(calls,expected===200?1:0);
+  assert.match(response.headers.get('X-Privacy-Request-ID'),/^[a-f0-9]{32}$/);
+  assert.equal(route.GET,undefined);assert.equal(route.maxDuration,60);
+ }
+});
+
+test('overlapping worker invocations respect exclusive claims; provider failure stays deferred',async()=>{
+ const h=harness();let leased=false,started=0,release;const patches=[];
+ const wait=new Promise(resolve=>release=resolve);
+ const worker=load('src/lib/privacy/worker.ts',{
+  './auth':h.auth,'./export':{},'./operations':{checkpoint:async(_a,_o,p)=>patches.push(p)},
+  './deletion':{processDeletion:async()=>{started++;await wait;throw new h.auth.PrivacyError('provider_pending');}},
+ });
+ const admin={rpc:async name=>{
+  if(name==='cleanup_account_privacy_retention')return {error:null};
+  assert.equal(name,'claim_account_privacy_operations');
+  if(leased)return {data:[],error:null};leased=true;
+  return {data:[{id,kind:'delete',attempts:1,account_removed_at:null}],error:null};
+ }};
+ const first=worker.runPrivacyWorker(admin);
+ await new Promise(resolve=>setImmediate(resolve));
+ const second=await worker.runPrivacyWorker(admin);
+ assert.equal(started,1);assert.equal(second.processed,0);
+ release();const result=await first;
+ assert.equal(result.processed,0);assert.equal(result.deferred,1);
+ assert.equal(patches[0].state,'queued');assert.equal(patches[0].lease_token,null);
+ assert.equal(patches[0].completed_at,undefined);
+});
+
+test('scheduler setup queues authenticated POST through Vault and installs disabled',()=>{
+ const sql=readFileSync(new URL('../supabase/privacy-worker-scheduler.sql',import.meta.url),'utf8');
+ assert.match(sql,/net\.http_post/);assert.doesNotMatch(sql,/net\.http_get/);
+ assert.match(sql,/vault\.decrypted_secrets/);assert.match(sql,/'Bearer ' \|\| worker_secret/);
+ assert.match(sql,/active := false/);assert.match(sql,/from public, anon, authenticated, service_role/);
+ assert.match(sql,/set search_path = pg_catalog/);
+});
 test('privacy API derives owner from verified Auth and hashes capabilities',async()=>{const {h,operations}=harness();const r=await operations.handleRequest(req({operationId:id,confirmation:'a'.repeat(43),recovery:'b'.repeat(43)}),'export');assert.equal(r.status,202);assert.equal(h.calls[0].args.p_user_id,owner);assert.equal(h.calls[0].args.p_confirmation_hash.length,64);assert.notEqual(h.calls[0].args.p_recovery_hash,'b'.repeat(43));});
 test('privacy API rejects client ownership and recipient overrides',async()=>{for(const extra of [{userId:'other'},{destination:'other@example.invalid'},{access:true}]){const {h,operations}=harness();const r=await operations.handleRequest(req({operationId:id,confirmation:'a'.repeat(43),recovery:'b'.repeat(43),...extra}),'export');assert.equal(r.status,400);assert.equal(h.calls.length,0);}});
 test('anonymous and failed Auth checks never reach privacy RPC',async()=>{const {h,operations}=harness();h.user=null;assert.equal((await operations.handleConfirmation(req({operationId:id,kind:'delete'}))).status,401);assert.equal(h.calls.length,0);});
