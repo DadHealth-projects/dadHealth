@@ -1,10 +1,11 @@
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import ts from 'typescript';import {readFileSync} from 'node:fs';import * as crypto from 'node:crypto';
 function load(path,deps,extras={}){const exports={};vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,Request,Response,URL,Date,Buffer,ReadableStream,TextEncoder,process:{env:{PRIVACY_RECENT_AUTH_SECONDS:'300',PRIVACY_CONFIRMATION_SECONDS:'120',PRIVACY_OPERATIONS_ENABLED:'true'}},require:id=>{assert.ok(id in deps,id);return deps[id];},...extras});return exports;}
 const owner='05000000-0000-4000-8000-000000000001',id='05000000-0000-4000-8000-000000000011';
-function harness(){const h={calls:[],user:{id:owner,email:'owner@example.invalid',email_confirmed_at:new Date().toISOString(),last_sign_in_at:new Date().toISOString()},error:null};
+function harness(options={}){const h={calls:[],user:{id:owner,email:'owner@example.invalid',email_confirmed_at:new Date().toISOString(),last_sign_in_at:new Date().toISOString()},error:null};
 const admin={from:()=>({select:()=>({eq:async()=>({data:[],error:null})})}),auth:{getSession:async()=>({data:{session:{access_token:token()}}}),getUser:async()=>({data:{user:h.user},error:h.error})},rpc:async(name,args)=>{h.calls.push({name,args});return {data:{id,kind:'export',state:'queued'},error:null};}};
-const auth=load('src/lib/privacy/auth.ts',{'node:crypto':crypto,'@/utils/supabase/admin':{createAdminSupabaseClient:()=>admin},'@/utils/supabase/server':{createServerSupabaseClient:async()=>admin}});
-const operations=load('src/lib/privacy/operations.ts',{'./auth':auth,'./external-cleanup':{openCleanup:JSON.parse,sealCleanup:JSON.stringify,acquireAppleRevocationToken:async()=> 'fixture-token'}});return {...h,auth,operations,admin,h};}
+const diagnostics={console:options.console??{info(){},warn(){}},process:{env:{PRIVACY_RECENT_AUTH_SECONDS:'300',PRIVACY_CONFIRMATION_SECONDS:'120',PRIVACY_OPERATIONS_ENABLED:'true',...options.env}}};
+const auth=load('src/lib/privacy/auth.ts',{'node:crypto':crypto,'@/utils/supabase/admin':{createAdminSupabaseClient:()=>admin},'@/utils/supabase/server':{createServerSupabaseClient:async()=>admin}},diagnostics);
+const operations=load('src/lib/privacy/operations.ts',{'./auth':auth,'./external-cleanup':{openCleanup:JSON.parse,sealCleanup:JSON.stringify,acquireAppleRevocationToken:async()=> 'fixture-token'}},diagnostics);return {...h,auth,operations,admin,h};}
 const token=(at=Date.now(),sub=owner)=>'header.'+Buffer.from(JSON.stringify({sub,session_id:id,amr:[{method:'password',timestamp:Math.floor(at/1000)}]})).toString('base64url')+'.signature';
 const req=(body,at)=>new Request('https://fixture.invalid/api/account/export',{method:'POST',headers:{Authorization:'Bearer '+token(at)},body:JSON.stringify(body)});
 test('privacy API derives owner from verified Auth and hashes capabilities',async()=>{const {h,operations}=harness();const r=await operations.handleRequest(req({operationId:id,confirmation:'a'.repeat(43),recovery:'b'.repeat(43)}),'export');assert.equal(r.status,202);assert.equal(h.calls[0].args.p_user_id,owner);assert.equal(h.calls[0].args.p_confirmation_hash.length,64);assert.notEqual(h.calls[0].args.p_recovery_hash,'b'.repeat(43));});
@@ -103,4 +104,61 @@ test('verification requires recent authentication and never sends for expired id
  const h=verificationHarness();h.h.user.email_confirmed_at=null;
  const result=await h.route.POST(req({action:'verify_email'},Date.now()-600000));
  assert.equal(result.status,403);assert.equal((await result.json()).reason,'reauthentication_required');assert.equal(h.sends.length,0);
+});
+
+test('privacy correlation spans preparation success and failures without private log content',async()=>{
+ const events=[];const h=harness({env:{PRIVACY_DEBUG:'true'},console:{info:(tag,event)=>events.push({tag,...event}),warn:(tag,event)=>events.push({tag,...event})}});
+ const request=req({operationId:id,kind:'delete'});request.headers.set('X-Privacy-Request-ID',id);
+ const response=await h.operations.handleConfirmation(request);assert.equal(response.status,200);assert.equal(response.headers.get('x-privacy-request-id'),id);
+ assert.equal(events[0].correlationId,id);assert.equal(events[0].reason,'ok');assert.equal(typeof events[0].durationMs,'number');
+ const payload=await response.json();assert.ok(payload.confirmation);assert.ok(!JSON.stringify(events).includes(payload.confirmation));assert.ok(!JSON.stringify(events).includes(h.h.user.email));
+});
+test('missing configuration and stale authentication have separate stages, correlated errors and no RPC calls',async()=>{
+ for(const config of [true,false]){
+  const events=[];const h=harness({env:config?{PRIVACY_RECENT_AUTH_SECONDS:''}:{},console:{info(){},warn:(_,event)=>events.push(event)}});
+  const r=await h.operations.handleConfirmation(req({operationId:id,kind:'delete'},config?Date.now():Date.now()-600000));
+  assert.equal(r.status,config?503:403);assert.match(r.headers.get('x-privacy-request-id'),/^[a-f0-9]{32}$/);
+  assert.equal(events[0].stage,'recent_auth');assert.equal(events[0].reason,config?'verification_configuration_required':'reauthentication_required');assert.equal(h.h.calls.length,0);
+ }
+});
+test('RPC permission or missing migration diagnostics preserve generic confirmation response and omit raw messages',async()=>{
+ for(const code of ['42501','PGRST202','42P01']){
+  const events=[];const h=harness({console:{info(){},warn:(_,event)=>events.push(event)}});
+  h.admin.rpc=async()=>({error:{code,message:'PRIVATE payload owner@example.invalid Bearer token'},data:null});
+  const r=await h.operations.handleConfirmation(req({operationId:id,kind:'delete'}));assert.equal(r.status,503);
+  assert.equal((await r.json()).reason,'confirmation_unavailable');assert.equal(events[0].stage,'confirmation_rpc');assert.equal(events[0].safeErrorCode,code);
+  assert.equal(events[0].reason,code==='42501'?'rpc_permission_denied':'rpc_unavailable');assert.doesNotMatch(JSON.stringify(events),/PRIVATE|owner@example|Bearer/);
+ }
+});
+test('debug is opt-in; failures remain observable and malformed correlation headers are replaced',async()=>{
+ const events=[];const h=harness({console:{info:(_,event)=>events.push(event),warn:(_,event)=>events.push(event)}});
+ await h.operations.handleConfirmation(req({operationId:id,kind:'delete'}));assert.equal(events.length,0);
+ const request=req({operationId:'bad',kind:'delete'});request.headers.set('X-Privacy-Request-ID','private arbitrary value');
+ const failed=await h.operations.handleConfirmation(request);assert.equal(failed.status,400);assert.match(failed.headers.get('x-privacy-request-id'),/^[a-f0-9]{32}$/);
+ assert.equal(events.length,1);assert.equal(events[0].reason,'invalid_request');assert.doesNotMatch(JSON.stringify(events),/private arbitrary value/);
+});
+test('disabled deletion and invalid confirmations remain distinct and do not weaken submission rules',async()=>{
+ const events=[];const h=harness({env:{PRIVACY_OPERATIONS_ENABLED:'false'},console:{info(){},warn:(_,event)=>events.push(event)}});
+ let r=await h.operations.handleRequest(req({operationId:id,confirmation:'a'.repeat(43),recovery:'b'.repeat(43)}),'delete');
+ assert.equal(r.status,503);assert.equal(events[0].reason,'setup_pending');assert.equal(events[0].stage,'rollout_gate');assert.equal(h.h.calls.length,0);
+ const active=harness({console:{info(){},warn:(_,event)=>events.push(event)}});
+ active.admin.rpc=async()=>({error:{code:'42501',message:'Confirmation required'},data:null});
+ r=await active.operations.handleRequest(req({operationId:id,confirmation:'a'.repeat(43),recovery:'b'.repeat(43)}),'delete');
+ assert.equal(r.status,409);assert.equal(events.at(-1).reason,'confirmation_required');assert.equal(events.at(-1).stage,'submission_rpc');
+});
+test('controlled deletion RPC fixture binds owner and reuses accepted result on duplicate/lost-response submission',async()=>{
+ const h=harness();let saved=null;let inserts=0;
+ const confirmation='a'.repeat(43),recovery='b'.repeat(43);
+ h.admin.rpc=async(name,args)=>{
+  assert.equal(name,'request_account_privacy_operation');
+  if(args.p_user_id!==owner||args.p_confirmation_hash!==h.auth.hashSecret(confirmation))return {data:null,error:{code:'42501',message:'Confirmation required'}};
+  if(!saved){saved={id,kind:'delete',state:'queued'};inserts++;}
+  return {data:saved,error:null};
+ };
+ const body={operationId:id,confirmation,recovery};
+ const first=await h.operations.handleRequest(req(body),'delete');assert.equal(first.status,202);
+ const retry=await h.operations.handleRequest(req(body),'delete');assert.deepEqual(await first.json(),await retry.json());assert.equal(inserts,1);
+ h.h.user.id='05000000-0000-4000-8000-000000000002';
+ const wrong=req(body);wrong.headers.set('Authorization','Bearer '+token(Date.now(),h.h.user.id));
+ assert.equal((await h.operations.handleRequest(wrong,'delete')).status,409);assert.equal(inserts,1);
 });

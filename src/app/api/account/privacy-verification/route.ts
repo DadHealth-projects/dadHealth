@@ -1,5 +1,5 @@
 import { handleConfirmation } from '@/lib/privacy/operations';
-import { authenticatePrivacy, configuredSeconds, hashSecret, isId, newSecret, objectBody, PrivacyError, privacyFailure, privacyResponse, requireRecentIdentity } from '@/lib/privacy/auth';
+import { tracePrivacy, privacyStage, privacyRpcFailure, authenticatePrivacy, configuredSeconds, hashSecret, isId, newSecret, objectBody, PrivacyError, privacyFailure, privacyResponse, requireRecentIdentity } from '@/lib/privacy/auth';
 import { acquireAppleRevocationToken, openCleanup, sealCleanup } from '@/lib/privacy/external-cleanup';
 import { createAdminSupabaseClient } from '@/utils/supabase/admin';
 export const runtime = 'nodejs';
@@ -8,9 +8,11 @@ function readCookie(request: Request, name: string) {
  return request.headers.get('cookie')?.split(';').map(v => v.trim()).find(v => v.startsWith(name+'='))?.slice(name.length+1);
 }
 // Explicit authenticated navigation, never an account deletion or export.
-export async function GET(request: Request) {
+export function GET(request: Request) { return tracePrivacy(request, () => getVerification(request)); }
+async function getVerification(request: Request) {
  try {
   const { user, authenticatedAt } = await authenticatePrivacy(request); requireRecentIdentity(authenticatedAt);
+  privacyStage(request, 'apple_redirect');
   const operationId = new URL(request.url).searchParams.get('apple');
   const subject = user.identities?.find(i => i.provider === 'apple')?.identity_data?.sub;
   if (!isId(operationId) || typeof subject !== 'string') throw new PrivacyError('invalid_request',400);
@@ -21,11 +23,13 @@ export async function GET(request: Request) {
   const url = new URL('https://appleid.apple.com/auth/authorize');
   url.search = new URLSearchParams({client_id:client,redirect_uri:new URL('/api/account/privacy-verification',origin).href,response_type:'code',response_mode:'form_post',state,nonce}).toString();
   return new Response(null,{status:303,headers:{Location:url.href,'Set-Cookie':cookie('privacy_apple_state',state,seconds),'Cache-Control':'no-store','Referrer-Policy':'no-referrer'}});
- } catch(error) { return privacyFailure(error); }
+ } catch(error) { return privacyFailure(error, request); }
 }
-export async function POST(request: Request) {
+export function POST(request: Request) { return tracePrivacy(request, () => postVerification(request)); }
+async function postVerification(request: Request) {
  if (request.headers.get('content-type')?.startsWith('application/x-www-form-urlencoded')) {
   try {
+   privacyStage(request, 'apple_callback');
    const raw = await request.text(); if (raw.length>16384) throw new PrivacyError('invalid_request',400);
    const form = new URLSearchParams(raw); const state = form.get('state');
    if (!state || state !== readCookie(request,'privacy_apple_state')) throw new PrivacyError('apple_confirmation_required',403);
@@ -43,16 +47,17 @@ export async function POST(request: Request) {
    const token = await acquireAppleRevocationToken(code,subject,true,context.nonce);
    const seconds = configuredSeconds('PRIVACY_CONFIRMATION_SECONDS');
    const expires = Date.now()+seconds*1000;
+   privacyStage(request, 'confirmation_rpc');
    const saved = await admin.rpc('confirm_account_privacy_operation', {
     p_user_id:context.owner,p_id:context.operationId,p_kind:'delete',p_hash:hashSecret(newSecret()),p_destination:null,
     p_expires_at:new Date(expires).toISOString(),p_cleanup_material:sealCleanup({appleRefreshToken:token,appleWeb:true}),
    });
-   if(saved.error)throw new PrivacyError('confirmation_unavailable');
+   if(saved.error)throw privacyRpcFailure(saved.error, 'confirmation_unavailable');
    // The provider grant stays encrypted in server storage; the browser carries
    // only its owner/operation-bound verification reference.
    headers.append('Set-Cookie',cookie('privacy_apple_grant',sealCleanup({owner:context.owner,operationId:context.operationId,expires}),seconds));
    return new Response(null,{status:303,headers});
-  } catch(error) { return privacyFailure(error); }
+  } catch(error) { return privacyFailure(error, request); }
  }
  // Email is always obtained from verified Auth, never from request parameters.
  const copy = request.clone();
@@ -61,6 +66,7 @@ export async function POST(request: Request) {
   if (body?.action === 'verify_email') {
    await objectBody(request,['action']);
    const {admin,user,authenticatedAt} = await authenticatePrivacy(request); requireRecentIdentity(authenticatedAt);
+   privacyStage(request, 'email_verification');
    if (!user.email) throw new PrivacyError('account_email_missing',409);
    if (!user.email_confirmed_at) {
     const result = await admin.auth.resend({type:'signup',email:user.email});
@@ -68,6 +74,6 @@ export async function POST(request: Request) {
    }
    return privacyResponse({state:user.email_confirmed_at?'verified':'verification_requested', email:user.email});
   }
- } catch(error) { return privacyFailure(error); }
+ } catch(error) { return privacyFailure(error, request); }
  return handleConfirmation(request);
 }
