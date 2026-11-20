@@ -95,7 +95,10 @@ function PrivacyRequestForOwner({owner,apple,openAuthModal}:{owner?:string;apple
   <h1 className="font-heading text-3xl font-bold">Your data</h1>
   <p>Sign in with your existing account to confirm an export or deletion. An email address alone does not authorise either action.</p>
   <button className={button} onClick={openAuthModal}>{owner?'Confirm sign-in':'Sign in'}</button>
-  {download?<a className={button} href={'/api/account/exports/'+download+'/download'}>Download my data</a>:null}
+  {download && owner ? <div className="flex flex-wrap gap-3">
+    <a className={button} href={'/api/account/exports/'+download+'/download?format=pdf'}>Read my data (PDF)</a>
+    <a className={button} href={'/api/account/exports/'+download+'/download?format=json'}>Structured copy (JSON)</a>
+  </div> : null}
   <p>Exports contain saved check-ins, Journal, activity and account information. Photos are listed, not attached. Unsynced device drafts are not included. Keep your file safe.</p>
   <p>Deleting your account permanently removes personal information. Empty community placeholders may remain to preserve replies. Calendars you own are removed; invited-parent associations are removed.</p>
   <p>Deletion does not cancel subscriptions. Manage Apple subscriptions in Settings → your name → Subscriptions, Google Play subscriptions in Payments & subscriptions, or web subscriptions through your membership controls.</p>
