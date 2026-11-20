@@ -1,0 +1,146 @@
+[
+  {
+    "seedKey": "jamie-2026-11-19:new-dad-crew:1",
+    "circle": "New Dad Crew",
+    "prompt": "What's the one thing nobody told you about the first few weeks?",
+    "circleId": "017f31fa-aa8c-4450-aa8d-51b4cbf86754"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:new-dad-crew:2",
+    "circle": "New Dad Crew",
+    "prompt": "How are you actually sleeping, and what's keeping you going?",
+    "circleId": "017f31fa-aa8c-4450-aa8d-51b4cbf86754"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:new-dad-crew:3",
+    "circle": "New Dad Crew",
+    "prompt": "What's one small win from this week?",
+    "circleId": "017f31fa-aa8c-4450-aa8d-51b4cbf86754"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:new-dad-crew:4",
+    "circle": "New Dad Crew",
+    "prompt": "What's the hardest part of the night shift, and any tricks that help?",
+    "circleId": "017f31fa-aa8c-4450-aa8d-51b4cbf86754"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:new-dad-crew:5",
+    "circle": "New Dad Crew",
+    "prompt": "When did you last do something just for you?",
+    "circleId": "017f31fa-aa8c-4450-aa8d-51b4cbf86754"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:new-dad-crew:6",
+    "circle": "New Dad Crew",
+    "prompt": "What would you tell yourself on day one?",
+    "circleId": "017f31fa-aa8c-4450-aa8d-51b4cbf86754"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:single-dads:1",
+    "circle": "Single Dads",
+    "prompt": "What does a good day look like for you and your kids right now?",
+    "circleId": "fe154973-295e-412b-ae60-a92c8baf1724"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:single-dads:2",
+    "circle": "Single Dads",
+    "prompt": "How do you switch off when the house finally goes quiet?",
+    "circleId": "fe154973-295e-412b-ae60-a92c8baf1724"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:single-dads:3",
+    "circle": "Single Dads",
+    "prompt": "What's one thing you've learned doing this on your own?",
+    "circleId": "fe154973-295e-412b-ae60-a92c8baf1724"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:single-dads:4",
+    "circle": "Single Dads",
+    "prompt": "How do you handle the handover days?",
+    "circleId": "fe154973-295e-412b-ae60-a92c8baf1724"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:single-dads:5",
+    "circle": "Single Dads",
+    "prompt": "Who's in your corner, and who do you wish was?",
+    "circleId": "fe154973-295e-412b-ae60-a92c8baf1724"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:single-dads:6",
+    "circle": "Single Dads",
+    "prompt": "What's one thing you're proud of this week?",
+    "circleId": "fe154973-295e-412b-ae60-a92c8baf1724"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:dad-strength:1",
+    "circle": "Dad Strength",
+    "prompt": "What did you train this week, even if it was a 20-minute session?",
+    "circleId": "bf6bb92e-b4a4-46e9-bb03-945c799ee180"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:dad-strength:2",
+    "circle": "Dad Strength",
+    "prompt": "How do you fit exercise in around the kids?",
+    "circleId": "bf6bb92e-b4a4-46e9-bb03-945c799ee180"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:dad-strength:3",
+    "circle": "Dad Strength",
+    "prompt": "What's the one habit keeping you consistent?",
+    "circleId": "bf6bb92e-b4a4-46e9-bb03-945c799ee180"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:dad-strength:4",
+    "circle": "Dad Strength",
+    "prompt": "What's the best kid-friendly workout you've done together?",
+    "circleId": "bf6bb92e-b4a4-46e9-bb03-945c799ee180"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:dad-strength:5",
+    "circle": "Dad Strength",
+    "prompt": "What do you do on the days motivation is nowhere?",
+    "circleId": "bf6bb92e-b4a4-46e9-bb03-945c799ee180"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:dad-strength:6",
+    "circle": "Dad Strength",
+    "prompt": "What's your current goal, and what's getting in the way?",
+    "circleId": "bf6bb92e-b4a4-46e9-bb03-945c799ee180"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:every-kind-of-dad:1",
+    "circle": "Every Kind of Dad",
+    "prompt": "What kind of dad are you, in your own words?",
+    "circleId": "ea936e66-fe3d-470c-a31f-659ea410f34d"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:every-kind-of-dad:2",
+    "circle": "Every Kind of Dad",
+    "prompt": "What does being a good dad mean to you?",
+    "circleId": "ea936e66-fe3d-470c-a31f-659ea410f34d"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:every-kind-of-dad:3",
+    "circle": "Every Kind of Dad",
+    "prompt": "What's one thing you do differently from how you were raised?",
+    "circleId": "ea936e66-fe3d-470c-a31f-659ea410f34d"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:every-kind-of-dad:4",
+    "circle": "Every Kind of Dad",
+    "prompt": "What do you wish people understood about your situation?",
+    "circleId": "ea936e66-fe3d-470c-a31f-659ea410f34d"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:every-kind-of-dad:5",
+    "circle": "Every Kind of Dad",
+    "prompt": "What's something about being a dad that surprised you?",
+    "circleId": "ea936e66-fe3d-470c-a31f-659ea410f34d"
+  },
+  {
+    "seedKey": "jamie-2026-11-19:every-kind-of-dad:6",
+    "circle": "Every Kind of Dad",
+    "prompt": "Who's a dad you look up to, and why?",
+    "circleId": "ea936e66-fe3d-470c-a31f-659ea410f34d"
+  }
+]
