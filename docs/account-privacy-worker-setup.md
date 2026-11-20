@@ -4,9 +4,9 @@ The privacy worker is POST-only and independent of the mobile app. Reuse the
 existing Supabase Cron/pg_net/Vault infrastructure, with a separate job and secret
 from notification dispatch. Do not add a Vercel GET cron.
 
-## Setup (operator actions, not performed by Codex)
+## Setup (authorised operator actions)
 
-1. Verify the three Item 05 privacy migrations are installed. Verify pg_cron,
+1. Verify the three account-privacy migrations are installed. Verify pg_cron,
    pg_net and Vault are available. Do not run the combined schema.
 2. Generate a strong random secret in a password manager. Set it as the Vercel
    Production environment variable `PRIVACY_WORKER_SECRET`. Deploy the worker
@@ -36,6 +36,8 @@ that does not cancel requests already accepted by the worker.
 
 ## Read-only verification
 
+Supply `operation_id` explicitly as a psql variable for the operation being investigated; there is no default account or operation.
+
 ```sql
 select jobid, jobname, schedule, active from cron.job
 where jobname = 'account-privacy-worker';
@@ -49,7 +51,7 @@ order by created desc limit 20;
 select state, attempts, account_removed_at, completed_at, next_attempt_at,
        lease_until, failure_code
 from public.account_privacy_operations
-where id = '0bbfa65e-4083-4485-85d0-a1cf7ef1e2c6';
+where id = :'operation_id'::uuid;
 ```
 
 Never select decrypted secrets, request headers or response bodies for sharing.
