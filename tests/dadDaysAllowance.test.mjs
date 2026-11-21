@@ -22,9 +22,9 @@ function setup({ pro = false, countError = false, profile = null, profileError =
       async gte() { return { count: 2, error: countError ? { code: '57014' } : null }; },
     };
   } };
-  return new Function('NextResponse', 'getRequestUser', 'supabaseAdmin', 'startOfMonth', 'getSubscriptionSummary', 'FREE_SEARCH_LIMIT', 'console', 'youngestChildBand', `${js}; return GET;`)(
+  return new Function('NextResponse', 'getRequestUser', 'supabaseAdmin', 'startOfMonth', 'getSubscriptionSummary', 'FREE_SEARCH_LIMIT', 'console', 'youngestChildBand', 'diagnostics', `${js}; return GET;`)(
     { json: (body, options) => ({ body, status: options?.status ?? 200 }) },
-    async () => signedIn ? ({ id: 'test-user' }) : null, admin, () => '2026-09-01', async () => ({isPro:pro}), 3, { error() {} }, ageExports.youngestChildBand,
+    async () => signedIn ? ({ id: 'test-user' }) : null, admin, () => '2026-09-01', async () => ({isPro:pro}), 3, { error() {} }, ageExports.youngestChildBand, () => ({stage(){}, reply:body=>({body,status:200}),fail:(error,status)=>({body:{error},status})}),
   );
 }
 

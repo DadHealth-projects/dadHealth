@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getSubscriptionSummary } from '@/lib/native-subscriptions/store'
@@ -70,10 +71,12 @@ async function getRequestUser(req: NextRequest) {
  * client-side history read is unavailable during session restoration.
  */
 export async function GET(req: NextRequest) {
+  const diagnostic = diagnostics(req)
   try {
     const user = await getRequestUser(req)
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user) return diagnostic.fail('session_expired', 401)
 
+    diagnostic.stage('allowance')
     const [subscription, countResult, profile] = await Promise.all([
       getSubscriptionSummary(supabaseAdmin, user.id),
       supabaseAdmin
@@ -85,14 +88,11 @@ export async function GET(req: NextRequest) {
     ])
 
     if (countResult.error) {
-      console.error('[dad-days/allowance] read failed', {
-        countCode: countResult.error?.code,
-      })
-      return NextResponse.json({ error: 'allowance_unavailable' }, { status: 503 })
+      return diagnostic.fail('allowance_unavailable', 503)
     }
 
     const isPro = subscription.isPro
-    return NextResponse.json({
+    return diagnostic.reply({
       isPro,
       searchesUsed: isPro ? null : countResult.count ?? 0,
       limit: isPro ? null : FREE_SEARCH_LIMIT,
@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
         ? null : youngestChildBand(profile.data?.kids_ages),
     })
   } catch {
-    return NextResponse.json({ error: 'allowance_unavailable' }, { status: 503 })
+    return diagnostic.fail('allowance_unavailable', 503)
   }
 }
 
@@ -213,100 +213,70 @@ const getJsonFromText = (text: string) => {
   }
 }
 
-const getDadDaysErrorDetails = (err: unknown) => {
-  const error = err as any
-
-  const providerError = error?.response?.data?.error ?? error?.error
-
-  const message =
-    [error?.message, providerError?.message]
-      .filter(Boolean)
-      .join(' ')
-      .trim() || String(err)
-
+// Only fixed codes and stages cross the diagnostics boundary. Never log errors,
+// prompts, provider payloads, coordinates, account identifiers or credentials.
+function diagnostics(req: NextRequest) {
+  const supplied = req.headers.get('x-dad-days-request-id')
+  const requestId = supplied && /^[a-f0-9-]{36}$/i.test(supplied) ? supplied : randomUUID()
+  const started = Date.now()
+  let stage = 'authentication'
   return {
-    name: error?.name,
-    status:
-      error?.status ??
-      error?.response?.status ??
-      providerError?.status,
-    type: error?.type ?? providerError?.type,
-    code: error?.code ?? providerError?.code,
-    requestId:
-      error?.request_id ?? providerError?.request_id,
-    message,
+    stage(value: string) { stage = value },
+    reply(body: object, status = 200, code = 'ok') {
+      if (status >= 400 || process.env.DAD_DAYS_DEBUG === '1') {
+        console.info('[DadDays]', { requestId, stage, status, code, durationMs: Date.now() - started })
+      }
+      return NextResponse.json(body, { status, headers: { 'X-Dad-Days-Request-ID': requestId, 'Cache-Control': 'private, no-store' } })
+    },
+    fail(code: string, status: number) { return this.reply({ error: code }, status, code) },
   }
 }
 
-const getPublicDadDaysError = (err: unknown) => {
-  const details = getDadDaysErrorDetails(err)
-
-  const lowerMessage = details.message.toLowerCase()
-  const lowerType = String(details.type ?? '').toLowerCase()
-  const lowerCode = String(details.code ?? '').toLowerCase()
-
-  if (
-    details.status === 401 ||
-    details.status === 403 ||
-    lowerType.includes('authentication') ||
-    lowerMessage.includes('api key') ||
-    lowerMessage.includes('permission')
-  ) {
-    return {
-      status: 503,
-      message:
-        'Dad Days is temporarily unavailable because the AI service is not configured correctly.',
-    }
-  }
-
-  if (
-    details.status === 429 ||
-    lowerType.includes('rate') ||
-    lowerCode.includes('rate') ||
-    lowerMessage.includes('rate limit')
-  ) {
-    return {
-      status: 429,
-      message: 'Dad Days is busy right now. Please wait a minute and try again.',
-    }
-  }
-
-  return {
-    status: 500,
-    message: 'We could not generate Dad Days right now. Please try again shortly.',
-  }
+function validResults(value: unknown): value is DadDayResult[] {
+  return Array.isArray(value) && value.every(item => item &&
+    ['name', 'description', 'address', 'estimatedCost', 'ageRange', 'websiteUrl'].every(key => typeof item[key] === 'string') &&
+    typeof item.distanceMiles === 'number' && Number.isFinite(item.distanceMiles) &&
+    typeof item.requiresBooking === 'boolean')
 }
 
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
-  let requestBody: Partial<Body> | null = null
+  const diagnostic = diagnostics(req)
+  let stage = 'validation'
+  const at = (value: string) => { stage = value; diagnostic.stage(value) }
 
   try {
+    at('configuration')
     const anthropicKey = process.env.ANTHROPIC_API_KEY
 
     if (!anthropicKey || !supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
-        { error: 'Server misconfigured' },
-        { status: 503 }
-      )
+      return diagnostic.fail('provider_configuration', 503)
     }
 
+    at('validation')
     const body = (await req.json()) as Partial<Body>
-    requestBody = body
+    if (!body || typeof body !== 'object') return diagnostic.fail('invalid_request', 400)
 
     const budget = body.budget as Budget | undefined
     const childAge = body.childAge as ChildAge | undefined
     const quickFilters = Array.isArray(body.quickFilters) ? body.quickFilters.filter((filter): filter is string => typeof filter === 'string').slice(0, 6) : []
 
     if (!budget || !childAge || !Object.hasOwn(ageMap, childAge) || !Object.hasOwn(budgetMap, budget)) {
-      return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
+      return diagnostic.fail('invalid_request', 400)
     }
 
+    const hasCoordinates = typeof body.latitude === 'number' && Number.isFinite(body.latitude) && Math.abs(body.latitude) <= 90 &&
+      typeof body.longitude === 'number' && Number.isFinite(body.longitude) && Math.abs(body.longitude) <= 180
+    const hasPostcode = typeof body.postcode === 'string' && body.postcode.trim().length > 0 && body.postcode.length <= 12
+    if ((!hasCoordinates && !hasPostcode) || (body.radius !== undefined && ![5, 10, 20, 50].includes(body.radius))) {
+      return diagnostic.fail('invalid_request', 400)
+    }
+    at('authentication')
     const user = await getRequestUser(req)
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return diagnostic.fail('session_expired', 401)
     }
 
     const userId = user.id
@@ -315,14 +285,17 @@ export async function POST(req: NextRequest) {
 
     let searchesUsed: number | null = null
 
-    const { count: hourlyCount } = await supabaseAdmin
+    at('allowance')
+    const { count: hourlyCount, error: hourlyError } = await supabaseAdmin
       .from('dad_day_searches')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
       .gte('searched_at', oneHourAgo())
 
+    if (hourlyError || typeof hourlyCount !== 'number') return diagnostic.fail('allowance_unavailable', 503)
+
     if (typeof hourlyCount === 'number' && hourlyCount >= 10) {
-      return NextResponse.json({ error: 'rate_limit_exceeded' }, { status: 429 })
+      return diagnostic.fail('rate_limit_exceeded', 429)
     }
 
     const isPro = (await getSubscriptionSummary(supabaseAdmin, userId)).isPro
@@ -331,23 +304,24 @@ export async function POST(req: NextRequest) {
     if (isPro) {
       searchesUsed = null
     } else {
-      const { count } = await supabaseAdmin
+      const { count, error: countError } = await supabaseAdmin
         .from('dad_day_searches')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId)
         .gte('searched_at', startOfMonth())
 
-      const used = typeof count === 'number' ? count : 0
+      if (countError || typeof count !== 'number') return diagnostic.fail('allowance_unavailable', 503)
+      const used = count
       searchesUsed = used
 
       if (used >= FREE_SEARCH_LIMIT) {
-        return NextResponse.json(
+        return diagnostic.reply(
           {
             error: 'search_limit_reached',
             searchesUsed: used,
             limit: FREE_SEARCH_LIMIT,
           },
-          { status: 403 }
+          403, 'search_limit_reached'
         )
       }
     }
@@ -368,6 +342,7 @@ export async function POST(req: NextRequest) {
       maxRetries: 0,
     })
 
+    at('provider')
     const response = (await anthropic.messages.create({
       model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
       max_tokens: 4000,
@@ -382,9 +357,12 @@ export async function POST(req: NextRequest) {
 
     const text = textBlock?.text ?? ''
 
-    const results = getJsonFromText(text) as DadDayResult[]
+    at('provider_response')
+    const results: unknown = getJsonFromText(text)
+    if (!validResults(results)) return diagnostic.fail('provider_response_invalid', 502)
 
-    await supabaseAdmin.from('dad_day_searches').insert({
+    at('save_usage')
+    const { error: saveError } = await supabaseAdmin.from('dad_day_searches').insert({
       user_id: userId,
       budget,
       radius,
@@ -393,17 +371,20 @@ export async function POST(req: NextRequest) {
       searched_at: new Date().toISOString(),
     })
 
-    return NextResponse.json({
+    if (saveError) return diagnostic.fail('usage_save_failed', 503)
+    return diagnostic.reply({
       results,
       searchesUsed: isPro ? null : searchesUsed + 1,
       limit: isPro ? null : FREE_SEARCH_LIMIT,
     })
   } catch (err) {
-    const publicError = getPublicDadDaysError(err)
-
-    return NextResponse.json(
-      { error: publicError.message },
-      { status: publicError.status }
-    )
+    const providerStatus = (err as { status?: number })?.status
+    const code = stage === 'validation' ? 'invalid_request'
+      : stage === 'authentication' ? 'session_unavailable'
+      : stage === 'allowance' ? 'allowance_unavailable'
+      : stage === 'provider_response' ? 'provider_response_invalid'
+      : stage === 'provider' ? (providerStatus === 429 ? 'provider_busy' : providerStatus === 401 || providerStatus === 403 ? 'provider_configuration' : 'provider_failed')
+      : 'server_failed'
+    return diagnostic.fail(code, stage === 'validation' ? 400 : stage === 'provider_response' ? 502 : 503)
   }
 }
