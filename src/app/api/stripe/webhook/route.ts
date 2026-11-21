@@ -1,3 +1,4 @@
+import { stripePaidEvidence } from '@/lib/analytics/provider-evidence';
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe/server";
@@ -61,6 +62,8 @@ export async function POST(request: Request) {
           current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
           auto_renews: !sub.cancel_at_period_end && sub.status !== "canceled",
           last_verified_at: verificationStartedAt,
+          trial_end: sub.trial_end ? new Date(sub.trial_end*1000).toISOString() : null,
+          ...(sub.trial_start && sub.trial_end ? {trialFacts:{transactionId:`trial:${sub.id}:${sub.trial_start}`,startedAt:new Date(sub.trial_start*1000).toISOString(),endsAt:new Date(sub.trial_end*1000).toISOString()}} : {}),
         });
         break;
       }
@@ -83,6 +86,27 @@ export async function POST(request: Request) {
           current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
           auto_renews: !sub.cancel_at_period_end && sub.status !== "canceled",
           last_verified_at: verificationStartedAt,
+          trial_end: sub.trial_end ? new Date(sub.trial_end*1000).toISOString() : null,
+          ...(sub.trial_start && sub.trial_end ? {trialFacts:{transactionId:`trial:${sub.id}:${sub.trial_start}`,startedAt:new Date(sub.trial_start*1000).toISOString(),endsAt:new Date(sub.trial_end*1000).toISOString()}} : {}),
+        });
+        break;
+      }
+      case "invoice.paid": {
+        const invoice=event.data.object as Stripe.Invoice;
+        const subscriptionId=typeof invoice.subscription==='string'?invoice.subscription:invoice.subscription?.id;
+        if(!subscriptionId) break;
+        const verificationStartedAt=new Date().toISOString();
+        const sub=await getStripe().subscriptions.retrieve(subscriptionId);
+        const userId=getUserIdFromSubscription(sub);
+        if(!userId || await privacyOwnerRemoved(createAdminSupabaseClient(),userId,'stripe',sub.id)) break;
+        const payment=stripePaidEvidence(invoice,sub.id);
+        await syncUserProfile(userId,{
+          stripe_customer_id:typeof sub.customer==='string'?sub.customer:sub.customer.id,
+          stripe_subscription_id:sub.id,subscription_status:sub.status,
+          current_period_end:new Date(sub.current_period_end*1000).toISOString(),
+          auto_renews:!sub.cancel_at_period_end && sub.status!=='canceled',last_verified_at:verificationStartedAt,
+          trial_end:sub.trial_end?new Date(sub.trial_end*1000).toISOString():null,
+          verifiedPayment:payment,
         });
         break;
       }

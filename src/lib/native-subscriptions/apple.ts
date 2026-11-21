@@ -163,6 +163,11 @@ export function appleEntitlementInput(
     autoRenews: renewal ? renewal.autoRenewStatus === AutoRenewStatus.ON : null,
     environment: verified.environment,
     lastVerifiedAt,
+    ...(typeof transaction.price === 'number' && Number.isFinite(transaction.price) && transaction.price > 0
+      && transaction.purchaseDate && Number.isFinite(transaction.purchaseDate) && !transaction.revocationDate ? {
+        verifiedPayment: { transactionId: transaction.transactionId,
+          paidAt: new Date(transaction.purchaseDate).toISOString(), servicePeriodStart: new Date(transaction.purchaseDate).toISOString(), amount: transaction.price, verified: true as const },
+      } : {}),
     ...(trialing && transaction.transactionId && transaction.purchaseDate && transaction.expiresDate
         && Number.isFinite(transaction.purchaseDate) && Number.isFinite(transaction.expiresDate)
       && transaction.purchaseDate < transaction.expiresDate ? {

@@ -187,7 +187,7 @@ test('web subscription presentation uses the same canonical server summary', asy
 // Phase 04 behavioural coverage. SQL execution remains a separate local gate.
 async function cancellationModules() {
  const ts=(await import('typescript')).default,vm=(await import('node:vm')).default;
- const load=async(path,mocks={})=>{mocks={'@/lib/privacy/operations':{privacyOwnerRemoved:async()=>false,RemovedPrivacyOwnerError:class extends Error{}},...mocks};const exports={};vm.runInNewContext(ts.transpileModule(await source(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,process:{env:{ADMIN_SECRET_KEY:'test-admin'}},URLSearchParams,require:n=>{assert.ok(n in mocks,`Unexpected dependency ${n}`);return mocks[n];}});return exports;};
+ const load=async(path,mocks={})=>{mocks={'@/lib/analytics/billing':{collectVerifiedBilling:async()=>({suppressed:true,collected:0})},'@/lib/privacy/operations':{privacyOwnerRemoved:async()=>false,RemovedPrivacyOwnerError:class extends Error{}},...mocks};const exports={};vm.runInNewContext(ts.transpileModule(await source(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,process:{env:{ADMIN_SECRET_KEY:'test-admin'}},URLSearchParams,require:n=>{assert.ok(n in mocks,`Unexpected dependency ${n}`);return mocks[n];}});return exports;};
  const types=await load('src/lib/native-subscriptions/types.ts');
  const cancellation=await load('src/lib/native-subscriptions/cancellation.ts',{'./types':types,'@apple/app-store-server-library':await import('@apple/app-store-server-library')});
  return {load,cancellation,types};
@@ -239,8 +239,8 @@ test('feedback API uses authenticated ownership, receipt-only response, safe con
 test('store sends snapshot and evidence in one RPC without changing canonical upsert signature',async()=>{
  const {load,types}=await cancellationModules();const store=await load('src/lib/native-subscriptions/store.ts',{'./types':types});const calls=[];
  const input={userId:'owner',provider:'apple',providerSubscriptionId:'sub',status:'active',currentPeriodEnd:'2099-01-01T00:00:00Z',environment:'sandbox',lastVerifiedAt:'2026-11-12T00:00:00Z',cancellationEvidence:{source:'apple_renewal_disabled',scheduledEndAt:null}};
- assert.equal(await store.upsertSubscriptionEntitlement({rpc:async(...args)=>{calls.push(args);return {data:'id',error:null};}},input),'id');
- assert.equal(calls.length,1);assert.equal(calls[0][0],'upsert_subscription_with_cancellation_evidence');assert.equal(calls[0][1].p_snapshot.p_user_id,'owner');assert.equal(calls[0][1].p_evidence.source,'apple_renewal_disabled');
+ assert.equal(await store.upsertSubscriptionEntitlement({rpc:async(...args)=>{calls.push(args);return {data:{id:'id',previous:null,current:null},error:null};}},input),'id');
+ assert.equal(calls.length,1);assert.equal(calls[0][0],'upsert_subscription_analytics_snapshot');assert.equal(calls[0][1].p_snapshot.p_user_id,'owner');assert.equal(calls[0][1].p_evidence.source,'apple_renewal_disabled');
 });
 test('Apple selected management checks ownership; legacy Stripe management remains unchanged',async()=>{
  const {load,cancellation}=await cancellationModules();let selected=null,created=[],ownedCalls=[];
@@ -260,11 +260,11 @@ test('Apple selected management checks ownership; legacy Stripe management remai
  assert.ok(ownedCalls.every(x=>x[0]==='owner'));
 });
 
-test('legacy Stripe and Google writes retain the original RPC and payload',async()=>{
+test('Stripe and Google snapshots preserve canonical payload through the atomic analytics wrapper',async()=>{
  const {load,types}=await cancellationModules();const store=await load('src/lib/native-subscriptions/store.ts',{'./types':types});
  for(const provider of ['stripe','google']){const calls=[];const input={userId:'owner',provider,providerSubscriptionId:'sub',status:'active',currentPeriodEnd:'2099-01-01T00:00:00Z',environment:'production',lastVerifiedAt:'2026-11-12T00:00:00Z'};
- await store.upsertSubscriptionEntitlement({rpc:async(...args)=>{calls.push(args);return {data:'id',error:null};}},input);
- assert.equal(calls[0][0],'upsert_subscription_entitlement');assert.equal(calls[0][1].p_provider,provider);assert.equal(calls[0][1].p_evidence,undefined);assert.equal(calls[0][1].p_current_period_end,input.currentPeriodEnd);}
+ await store.upsertSubscriptionEntitlement({rpc:async(...args)=>{calls.push(args);return {data:{id:'id',previous:null,current:null},error:null};}},input);
+ assert.equal(calls[0][0],'upsert_subscription_analytics_snapshot');assert.equal(calls[0][1].p_snapshot.p_provider,provider);assert.equal(calls[0][1].p_evidence,null);assert.equal(calls[0][1].p_snapshot.p_current_period_end,input.currentPeriodEnd);}
 });
 async function appleHandlerHarness(){
  const {load,cancellation}=await cancellationModules();const h={writes:[],failed:0,completed:0,duplicate:false};
@@ -290,7 +290,7 @@ test('ordinary Apple verification supplies no reactivation evidence; explicit en
  h.verified.renewal.originalTransactionId='wrong';
  await h.call(); assert.equal(h.writes.at(-1).cancellationEvidence,null);
  const {load,types}=await cancellationModules(); const store=await load('src/lib/native-subscriptions/store.ts',{'./types':types});
- const calls=[]; const admin={rpc:async(...args)=>{calls.push(args);return {data:'sub',error:null};}};
+ const calls=[]; const admin={rpc:async(...args)=>{calls.push(args);return {data:{id:'sub',previous:null,current:null},error:null};}};
  await store.upsertSubscriptionEntitlement(admin,{userId:'owner',provider:'apple',providerSubscriptionId:'sub',status:'active',currentPeriodEnd:'2099-01-01T00:00:00Z',environment:'sandbox',autoRenews:true});
  assert.equal(calls[0][1].p_evidence,null);
  assert.equal(calls[0][1].p_snapshot.p_auto_renews,true);

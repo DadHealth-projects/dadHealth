@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getSubscriptionSummary } from '@/lib/native-subscriptions/store'
 import { createAdminSupabaseClient } from '@/utils/supabase/admin'
 import { createServerSupabaseClient } from '@/utils/supabase/server'
+import { youngestChildBand } from '@/lib/familyAges'
 
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -73,13 +74,14 @@ export async function GET(req: NextRequest) {
     const user = await getRequestUser(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const [subscription, countResult] = await Promise.all([
+    const [subscription, countResult, profile] = await Promise.all([
       getSubscriptionSummary(supabaseAdmin, user.id),
       supabaseAdmin
         .from('dad_day_searches')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .gte('searched_at', startOfMonth()),
+      supabaseAdmin.from('user_profile').select('kids_ages,custody_pattern').eq('user_id', user.id).maybeSingle(),
     ])
 
     if (countResult.error) {
@@ -94,8 +96,10 @@ export async function GET(req: NextRequest) {
       isPro,
       searchesUsed: isPro ? null : countResult.count ?? 0,
       limit: isPro ? null : FREE_SEARCH_LIMIT,
-      // Age is selected per search; it is not an account-profile entitlement field.
-      childAge: null,
+      // A failed/unknown profile read never invents a child age. Search remains usable
+      // through an explicit selection; this is not an entitlement field.
+      childAge: profile.error || profile.data?.custody_pattern === 'no_children'
+        ? null : youngestChildBand(profile.data?.kids_ages),
     })
   } catch {
     return NextResponse.json({ error: 'allowance_unavailable' }, { status: 503 })
@@ -295,7 +299,7 @@ export async function POST(req: NextRequest) {
     const childAge = body.childAge as ChildAge | undefined
     const quickFilters = Array.isArray(body.quickFilters) ? body.quickFilters.filter((filter): filter is string => typeof filter === 'string').slice(0, 6) : []
 
-    if (!budget || !childAge) {
+    if (!budget || !childAge || !Object.hasOwn(ageMap, childAge) || !Object.hasOwn(budgetMap, budget)) {
       return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
     }
 

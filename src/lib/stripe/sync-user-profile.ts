@@ -1,3 +1,4 @@
+import type { SubscriptionEntitlementInput } from '../native-subscriptions/types';
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 import { upsertSubscriptionEntitlement } from "@/lib/native-subscriptions/store";
 
@@ -10,12 +11,19 @@ export async function syncUserProfile(
     current_period_end?: string | null;
     auto_renews?: boolean | null;
     last_verified_at?: string;
+    trial_end?: string | null;
+    trialFacts?: SubscriptionEntitlementInput['trialFacts'];
+    verifiedPayment?: SubscriptionEntitlementInput['verifiedPayment'];
   }
 ) {
   if (!fields.stripe_subscription_id || !fields.subscription_status) return;
 
   await upsertSubscriptionEntitlement(createAdminSupabaseClient(), {
     userId,
+    trialEnd: fields.trial_end,
+    trialFacts: fields.trialFacts,
+    verifiedPayment: fields.verifiedPayment,
+    latestTransactionId: fields.verifiedPayment?.transactionId,
     provider: "stripe",
     providerSubscriptionId: fields.stripe_subscription_id,
     providerAccountId: fields.stripe_customer_id ?? null,

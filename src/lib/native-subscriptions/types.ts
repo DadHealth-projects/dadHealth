@@ -28,6 +28,8 @@ export interface CancellationEvidence {
 }
 
 export interface SubscriptionEntitlementInput {
+  /** Internal verified-provider evidence, never accepted from client JSON. */
+  verifiedPayment?: { transactionId: string; paidAt: string; amount: number; verified: true; servicePeriodStart?: string };
   trialFacts?: { transactionId: string; startedAt: string; endsAt: string };
   cancellationEvidence?: CancellationEvidence | null;
   userId: string;

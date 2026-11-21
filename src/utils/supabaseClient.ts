@@ -1,3 +1,4 @@
+import { analyticsPersistenceFetch } from '@/lib/analytics';
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -15,7 +16,7 @@ function readSupabaseBrowserEnv() {
 
 export function createClient(): SupabaseClient {
   const { url, key } = readSupabaseBrowserEnv();
-  return createBrowserClient(url, key);
+  return createBrowserClient(url, key, {global:{fetch:analyticsPersistenceFetch}});
 }
 
 let browserClient: SupabaseClient | undefined;

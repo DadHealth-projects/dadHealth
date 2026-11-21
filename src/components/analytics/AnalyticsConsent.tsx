@@ -19,6 +19,7 @@ export default function AnalyticsConsent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
+    initAnalytics(); // Resume revocation receipts even when consent remains denied.
     try {
       const stored = window.localStorage.getItem(ANALYTICS_CONSENT_KEY);
       if (stored === "granted" || stored === "denied") {
@@ -61,7 +62,7 @@ export default function AnalyticsConsent() {
     setSettingsOpen(false);
 
     if (value === "granted") {
-      initAnalytics();
+      initAnalytics(true);
       return;
     }
 

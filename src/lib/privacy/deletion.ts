@@ -1,9 +1,30 @@
 import { PrivacyError } from './auth';
 import { checkpoint, type Operation, type PrivacyAdmin } from './operations';
 import { deleteOneSignalOwner, openCleanup, sealCleanup, revokeAppleToken, revokeWearableAuthorization } from './external-cleanup';
+import { erasePosthogOwner } from '@/lib/analytics/privacy';
 
 export async function processDeletion(admin: PrivacyAdmin, o: Operation) {
   const progress = { ...o.checkpoint };
+  if (!progress.analytics) {
+    // Durable exposure, never rollout flags, decides whether remote erasure is required.
+    const local = await admin.rpc('prepare_analytics_erasure', { p_owner: o.user_id });
+    if (local.error || !['draining', 'clear', 'required'].includes(local.data)) throw new PrivacyError('analytics_cleanup_failed');
+    if (local.data === 'draining') {
+      if (o.attempts >= 8) throw new PrivacyError('analytics_cleanup_pending');
+      return;
+    }
+    if (local.data === 'required') {
+      const completed = await erasePosthogOwner(o.user_id, progress, () => checkpoint(admin, o, { checkpoint: progress }));
+      if (!completed) {
+        if (o.attempts >= 8) throw new PrivacyError('analytics_cleanup_pending');
+        return;
+      }
+      const confirmed = await admin.rpc('confirm_analytics_erasure', { p_owner: o.user_id });
+      if (confirmed.error) throw new PrivacyError('analytics_cleanup_failed');
+    }
+    progress.analytics = true;
+    await checkpoint(admin, o, { checkpoint: progress });
+  }
   if (!progress.external) {
     const owner = await admin.auth.admin.getUserById(o.user_id);
     if (owner.error || !owner.data.user) throw new PrivacyError('cleanup_identity_unavailable');

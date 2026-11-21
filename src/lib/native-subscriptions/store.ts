@@ -1,3 +1,4 @@
+import { collectVerifiedBilling } from '@/lib/analytics/billing';
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 import { privacyOwnerRemoved, RemovedPrivacyOwnerError } from '@/lib/privacy/operations';
 
@@ -35,11 +36,10 @@ export async function upsertSubscriptionEntitlement(
     p_environment: input.environment,
     p_last_verified_at: input.lastVerifiedAt ?? new Date().toISOString(),
   };
-  const { data, error } = input.provider === 'apple'
-    ? await admin.rpc('upsert_subscription_with_cancellation_evidence', {
-      p_snapshot: snapshot, p_evidence: input.cancellationEvidence ?? null,
-    })
-    : await admin.rpc('upsert_subscription_entitlement', snapshot);
+  const { data: transition, error } = await admin.rpc('upsert_subscription_analytics_snapshot', {
+    p_snapshot: snapshot, p_evidence: input.provider === 'apple' ? input.cancellationEvidence ?? null : null,
+  });
+  const data = transition?.id;
 
   if (error) {
     if (error.code === "23505") throw new SubscriptionOwnershipError();
@@ -58,6 +58,13 @@ export async function upsertSubscriptionEntitlement(
       });
       if (recorded.error) console.warn('[notifications/trial] evidence not recorded', { code: recorded.error.code });
     } catch { console.warn('[notifications/trial] evidence recording unavailable'); }
+  }
+  // Background provider verification does not establish optional analytics consent.
+  // Keep this adapter inactive until an applicable consent policy is approved.
+  // A stale/replayed update returns the newer accepted row, never a fabricated transition.
+  if (transition?.current?.last_verified_at &&
+      Date.parse(transition.current.last_verified_at) === Date.parse(snapshot.p_last_verified_at)) {
+    await collectVerifiedBilling(admin, { ...input, trialEnd: input.trialEnd ?? transition.trialPeriod?.endsAt ?? null, lastVerifiedAt: snapshot.p_last_verified_at }, transition.previous, null, input.verifiedPayment);
   }
   return data;
 }

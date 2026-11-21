@@ -1,3 +1,4 @@
+import { googlePaidEvidence } from '../analytics/provider-evidence';
 import { createHmac } from "node:crypto";
 import { GoogleAuth, OAuth2Client } from "google-auth-library";
 
@@ -15,9 +16,11 @@ interface GoogleLineItem {
   latestSuccessfulOrderId?: string;
   autoRenewingPlan?: { autoRenewEnabled?: boolean };
   offerDetails?: { basePlanId?: string; offerId?: string };
+  offerPhase?: { freeTrial?: Record<string, never> };
 }
 
 export interface GoogleSubscriptionPurchase {
+  verifiedPayment?: SubscriptionEntitlementInput['verifiedPayment'];
   kind?: string;
   regionCode?: string;
   startTime?: string;
@@ -75,6 +78,14 @@ export async function verifyGooglePurchase(purchaseToken: string): Promise<Googl
   const client = await publisherClient().getClient();
   const response = await client.request<GoogleSubscriptionPurchase>({ url: purchaseUrl(purchaseToken) });
   if (!response.data?.lineItems?.length) throw new Error("Google Play subscription is incomplete");
+  // Optional evidence failure never changes purchase verification/access.
+  if(process.env.ANALYTICS_BILLING_EVIDENCE_ENABLED==='true') {
+    const orderId=response.data.lineItems?.find(item=>item.latestSuccessfulOrderId)?.latestSuccessfulOrderId ?? response.data.latestOrderId;
+    if(orderId) try {
+      const order=await client.request<Parameters<typeof googlePaidEvidence>[0]>({url:`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(DAD_HEALTH_ANDROID_PACKAGE)}/orders/${encodeURIComponent(orderId)}`});
+      response.data.verifiedPayment=googlePaidEvidence(order.data,purchaseToken,orderId);
+    } catch { /* No payment evidence means no conversion fact. */ }
+  }
   return response.data;
 }
 
@@ -134,6 +145,10 @@ export function googleEntitlementInput(
 
   return {
     userId,
+    verifiedPayment: purchase.verifiedPayment,
+    ...(status==='trialing' && lineItem.offerPhase?.freeTrial && purchase.startTime && lineItem.expiryTime && Date.parse(purchase.startTime)<Date.parse(lineItem.expiryTime) ? {
+      trialFacts:{transactionId:lineItem.latestSuccessfulOrderId ?? purchase.latestOrderId ?? purchaseToken,startedAt:purchase.startTime,endsAt:lineItem.expiryTime},
+    } : {}),
     provider: "google",
     providerSubscriptionId: purchaseToken,
     providerAccountId: purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId ?? null,
