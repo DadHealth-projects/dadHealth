@@ -1,0 +1,214 @@
+{
+  "name": "Dad Health consented funnel / production",
+  "description": "Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.",
+  "panels": [
+    {
+      "name": "Main sequential funnel — unique consented accounts",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "dateRange": {
+            "date_from": "-30d"
+          },
+          "properties": [
+            {
+              "type": "hogql",
+              "key": "not startsWith(distinct_id, 'anonymous-')",
+              "value": null
+            }
+          ],
+          "series": [
+            {
+              "kind": "EventsNode",
+              "event": "onboarding_started",
+              "name": "onboarding_started",
+              "math": "dau"
+            },
+            {
+              "kind": "EventsNode",
+              "event": "onboarding_completed",
+              "name": "onboarding_completed",
+              "math": "dau"
+            },
+            {
+              "kind": "EventsNode",
+              "event": "first_checkin",
+              "name": "first_checkin",
+              "math": "dau"
+            },
+            {
+              "kind": "EventsNode",
+              "event": "paywall_viewed",
+              "name": "paywall_viewed",
+              "math": "dau"
+            },
+            {
+              "kind": "EventsNode",
+              "event": "trial_started",
+              "name": "trial_started",
+              "math": "dau",
+              "properties": [
+                {
+                  "type": "event",
+                  "key": "environment",
+                  "operator": "exact",
+                  "value": [
+                    "production"
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "EventsNode",
+              "event": "trial_converted",
+              "name": "trial_converted",
+              "math": "dau",
+              "properties": [
+                {
+                  "type": "event",
+                  "key": "environment",
+                  "operator": "exact",
+                  "value": [
+                    "production"
+                  ]
+                }
+              ]
+            }
+          ],
+          "funnelsFilter": {
+            "funnelVizType": "steps",
+            "funnelOrderType": "ordered",
+            "funnelWindowInterval": 30,
+            "funnelWindowIntervalUnit": "day"
+          }
+        }
+      },
+      "description": "Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.",
+      "saved": true,
+      "tags": [
+        "dadhealth-consented-funnel-v1"
+      ]
+    },
+    {
+      "name": "Funnel stage totals and distinct accounts (not sequential conversion)",
+      "query": {
+        "kind": "DataTableNode",
+        "source": {
+          "kind": "HogQLQuery",
+          "query": "SELECT event, count() AS event_total, uniqExact(distinct_id) AS unique_accounts FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND not startsWith(distinct_id, 'anonymous-') AND event IN ('onboarding_started','onboarding_completed','first_checkin','paywall_viewed','trial_started','trial_converted') AND (event NOT IN ('trial_started','trial_converted','trial_cancelled','subscription_cancelled') OR properties.environment = 'production') GROUP BY event ORDER BY event"
+        }
+      },
+      "description": "Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.",
+      "saved": true,
+      "tags": [
+        "dadhealth-consented-funnel-v1"
+      ]
+    },
+    {
+      "name": "First workout and Bond — totals / accounts",
+      "query": {
+        "kind": "DataTableNode",
+        "source": {
+          "kind": "HogQLQuery",
+          "query": "SELECT event, count() AS event_total, uniqExact(distinct_id) AS unique_accounts FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND not startsWith(distinct_id, 'anonymous-') AND event IN ('first_workout_logged','first_bond_log')  GROUP BY event ORDER BY event"
+        }
+      },
+      "description": "Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.",
+      "saved": true,
+      "tags": [
+        "dadhealth-consented-funnel-v1"
+      ]
+    },
+    {
+      "name": "return_day_reached — totals / accounts by day",
+      "query": {
+        "kind": "DataTableNode",
+        "source": {
+          "kind": "HogQLQuery",
+          "query": "SELECT properties.day AS day, count() AS event_total, uniqExact(distinct_id) AS unique_accounts FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND not startsWith(distinct_id, 'anonymous-') AND event = 'return_day_reached' GROUP BY day ORDER BY day"
+        }
+      },
+      "description": "Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.",
+      "saved": true,
+      "tags": [
+        "dadhealth-consented-funnel-v1"
+      ]
+    },
+    {
+      "name": "streak_reached — totals / accounts by milestone",
+      "query": {
+        "kind": "DataTableNode",
+        "source": {
+          "kind": "HogQLQuery",
+          "query": "SELECT properties.milestone AS milestone, count() AS event_total, uniqExact(distinct_id) AS unique_accounts FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND not startsWith(distinct_id, 'anonymous-') AND event = 'streak_reached' GROUP BY milestone ORDER BY milestone"
+        }
+      },
+      "description": "Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.",
+      "saved": true,
+      "tags": [
+        "dadhealth-consented-funnel-v1"
+      ]
+    },
+    {
+      "name": "Verified cancellations — totals / accounts",
+      "query": {
+        "kind": "DataTableNode",
+        "source": {
+          "kind": "HogQLQuery",
+          "query": "SELECT event, count() AS event_total, uniqExact(distinct_id) AS unique_accounts FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND not startsWith(distinct_id, 'anonymous-') AND event IN ('trial_cancelled','subscription_cancelled') AND properties.environment = 'production' GROUP BY event ORDER BY event"
+        }
+      },
+      "description": "Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.",
+      "saved": true,
+      "tags": [
+        "dadhealth-consented-funnel-v1"
+      ]
+    },
+    {
+      "name": "Authenticated app opens — totals / accounts",
+      "query": {
+        "kind": "DataTableNode",
+        "source": {
+          "kind": "HogQLQuery",
+          "query": "SELECT event, count() AS event_total, uniqExact(distinct_id) AS unique_accounts FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND not startsWith(distinct_id, 'anonymous-') AND event IN ('app_opened')  GROUP BY event ORDER BY event"
+        }
+      },
+      "description": "Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.",
+      "saved": true,
+      "tags": [
+        "dadhealth-consented-funnel-v1"
+      ]
+    },
+    {
+      "name": "Paywall views by upgrade source",
+      "query": {
+        "kind": "DataTableNode",
+        "source": {
+          "kind": "HogQLQuery",
+          "query": "SELECT properties.source AS upgrade_source, count() AS event_total, uniqExact(distinct_id) AS unique_accounts FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND not startsWith(distinct_id, 'anonymous-') AND event = 'paywall_viewed' GROUP BY upgrade_source ORDER BY event_total DESC"
+        }
+      },
+      "description": "Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.",
+      "saved": true,
+      "tags": [
+        "dadhealth-consented-funnel-v1"
+      ]
+    },
+    {
+      "name": "Anonymous opens — separate identities, not accounts",
+      "query": {
+        "kind": "DataTableNode",
+        "source": {
+          "kind": "HogQLQuery",
+          "query": "SELECT count() AS event_total, uniqExact(distinct_id) AS anonymous_identities FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND startsWith(distinct_id, 'anonymous-') AND event = 'app_opened'"
+        }
+      },
+      "description": "Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.",
+      "saved": true,
+      "tags": [
+        "dadhealth-consented-funnel-v1"
+      ]
+    }
+  ]
+}
