@@ -3,7 +3,13 @@ import { parseAnalyticsEvent, uuid } from './contract';
 import type { createAdminSupabaseClient } from '@/utils/supabase/admin';
 type Admin = ReturnType<typeof createAdminSupabaseClient>;
 export class AnalyticsError extends Error {
-  constructor(public code: string, public status = 503) { super(code); }
+  readonly databaseCode: string | undefined;
+  constructor(public code: string, public status = 503, databaseCode?: unknown) {
+    super(code);
+    // Only SQLSTATE/PostgREST identifiers; never database messages, hints or details.
+    this.databaseCode = typeof databaseCode === 'string' && /^(?:[0-9A-Z]{5}|PGRST[0-9]{3})$/.test(databaseCode)
+      ? databaseCode : undefined;
+  }
 }
 export const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 export function workerAuthorized(header: string | null, expected: string | undefined) {
@@ -31,7 +37,7 @@ export async function ingest(admin: Admin, value: unknown, verifiedOwner: string
     const secret=b.action==='grant'?randomUUID()+randomUUID():String(b.secret);
     const result=await admin.rpc(b.action==='grant'?'issue_analytics_consent':'renew_analytics_consent',
       {p_owner:b.owner,p_hash:hash(secret),...(b.action==='renew'?{p_consent:b.consent}:{})});
-    if(result.error) throw new AnalyticsError('storage_unavailable');
+    if(result.error) throw new AnalyticsError('storage_unavailable', 503, result.error.code);
     if(!uuid(result.data?.consent) || !Number.isFinite(Date.parse(result.data?.expiresAt))) throw new AnalyticsError('consent_unavailable',403);
     return {owner:b.owner,consent:result.data.consent,secret,expiresAt:result.data.expiresAt};
   }
@@ -94,12 +100,12 @@ export async function rateLimit(
     p_limit: limit,
   });
 
-  if (error) throw new AnalyticsError('storage_unavailable');
+  if (error) throw new AnalyticsError('storage_unavailable', 503, error.code);
   if (data !== true) throw new AnalyticsError('rate_limited', 429);
 }
 export function analyticsResponse(error: unknown) {
   const e=error instanceof AnalyticsError?error:new AnalyticsError('unavailable');
-  if(e.status>=500) console.warn('[analytics]',{stage:'operation',code:e.code});
+  if(e.status>=500) console.warn('[analytics]',{stage:'operation',code:e.code,databaseCode:e.databaseCode});
   return Response.json({error:'Analytics unavailable'},{status:e.status,headers:{'Cache-Control':'private, no-store'}});
 }
 export type Delivery = {id:string;lease:string;lease_until:string;consent_id:string;distinct_id:string;event:string;occurred_at:string;created_at:string;properties:Record<string,unknown>;attempts:number};
@@ -123,11 +129,15 @@ export async function deliver(item: Delivery, transport: typeof fetch=fetch): Pr
   const result=(await response.json()).results?.[item.id.toLowerCase()]?.result;
   return result==='ok'||result==='warning'?'sent':result==='retry'?'retry':'failed';
 }
-export async function runAnalyticsWorker(admin: Admin, transport: typeof fetch=fetch) {
-  const deadline = Date.now() + 45_000;
+export async function runAnalyticsMaintenance(admin: Admin) {
   const cleanup=await admin.rpc('cleanup_optional_analytics'); if(cleanup.error) throw new AnalyticsError('retention_failed');
   const recovery=await admin.rpc('recover_analytics_actions');
   if(recovery.error) throw new AnalyticsError('recovery_failed');
+  return { maintained: true };
+}
+export async function runAnalyticsWorker(admin: Admin, transport: typeof fetch=fetch) {
+  const deadline = Date.now() + 45_000;
+  await runAnalyticsMaintenance(admin);
   // Remote retention remains an explicit rollout prerequisite, not an assumed default.
   if(process.env.ANALYTICS_DELIVERY_ENABLED!=='true' || process.env.ANALYTICS_REMOTE_RETENTION_APPROVED!=='true' || process.env.ANALYTICS_PRIVACY_ENABLED!=='true') return {sent:0,paused:true};
   let sent=0;

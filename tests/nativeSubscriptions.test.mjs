@@ -90,7 +90,9 @@ test('Google RTDN orders verified snapshots by server verification time, not mes
   const savedSnapshot = route.indexOf('entitlement.lastVerifiedAt = verificationStartedAt');
   assert.ok(route.indexOf('const verificationStartedAt = new Date().toISOString()') < verifiedPurchase);
   assert.ok(savedSnapshot > verifiedPurchase);
-  assert.doesNotMatch(route, /publishTime|publishedAt/);
+  // Explanatory comments may name publishTime; executable code must not use
+  // notification publication time as the timestamp of a freshly verified state.
+  assert.doesNotMatch(route.replace(/\/\*[^]*?\*\//g, '').replace(/\/\/[^\r\n]*/g, ''), /publishTime|publishedAt/);
 });
 
 test('Google verified purchase state maps renewal, cancellation and expiry from current Play data', async () => {

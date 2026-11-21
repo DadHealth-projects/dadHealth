@@ -1,6 +1,6 @@
 # Optional analytics foundation and funnel instrumentation
 
-Local implementation only. Funnel instrumentation, native consent controls and local PostHog dashboard artifacts are included; production activation is not included. See [onboarding/dashboard handoff](analytics-onboarding-dashboard.md) for the C/D file map and acceptance checks. Native collection is default-off. The approved local retention is seven days for unsent events and thirty days for delivery receipts. Remote retention is unresolved: keep remote delivery disabled.
+Local implementation only. Funnel instrumentation, native consent controls and local PostHog dashboard artifacts are included; production activation is not included. See [onboarding/dashboard handoff](analytics-onboarding-dashboard.md) for the C/D file map and acceptance checks. Native collection is default-off. The approved local retention is seven days for unsent events and thirty days for delivery receipts. Remote retention decision: EU PostHog project 162656 remains on Free with its one-year event-retention window. Keep remote delivery disabled pending compatibility review. See [retention and export compatibility](analytics-retention-export.md).
 
 ## Contract and identity
 

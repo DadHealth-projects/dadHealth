@@ -1,0 +1,151 @@
+﻿import { createHash } from 'node:crypto';
+import { PrivacyError } from './auth';
+import { checkpoint, type Operation, type PrivacyAdmin } from './operations';
+
+type Profile = { id: string; distinctIds: string[]; properties: Record<string, unknown>; createdAt: unknown; providerProfile: Record<string, unknown> };
+type Event = { id: string; event: string; timestamp: string; distinctId: string; properties: Record<string, unknown> };
+type State = { phase: 'profiles' | 'events' | 'verify' | 'verify_profiles' | 'complete'; cutoff: string; startedAt: string;
+  aliases?: string[]; profiles?: Profile[]; cursor?: string; hash?: string; count?: number;
+  verifyCursor?: string; verifyHash?: string; verifyCount?: number;
+  profileCursor?: string; profileVisited?: string[]; profileRead?: Profile[]; rebuilds?: number };
+// Internal transport seam, not a client input. Production deliberately has no
+// adapter until an owner-filtered bulk export capability is confirmed. /query/
+// is an interactive API, not a supported bulk-export fallback.
+export type RemoteAnalyticsEventReader = (input: {
+  aliases: string[]; cutoff: string; cursor?: string; limit: number;
+}) => Promise<unknown>;
+const uuid = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(s);
+const object = (v: unknown): v is Record<string, unknown> => Boolean(v && typeof v === 'object' && !Array.isArray(v));
+const canonical = (v: unknown): string => JSON.stringify(v, (_key, item) => object(item)
+  ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
+const hash = (v: string) => createHash('sha256').update(v).digest('hex');
+
+/** Bounded pages, durable CAS checkpoints, then a second complete pass. No SDK,
+ * capture, provider writes or email lookup. Profiles must be linked to Auth UUID.
+ * A changed provider result fails closed instead of completing a mixed export. */
+export async function captureRemoteAnalytics(admin: PrivacyAdmin, op: Operation, transport: typeof fetch = fetch,
+  readEvents?: RemoteAnalyticsEventReader) {
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const result = await admin.rpc(name, { p_id: op.id, p_lease: op.lease_token, ...args });
+    if (result.error || !result.data) throw new PrivacyError('analytics_export_storage_unavailable');
+    return result.data;
+  };
+  const initial = await call('begin_account_export_analytics');
+  if (initial.ready === true) return true; // Includes immutable, already handed-off legacy exports.
+  if (!uuid(initial.owner) || initial.owner !== op.user_id || !Number.isSafeInteger(initial.revision))
+    throw new PrivacyError('analytics_export_owner_mismatch');
+  if (!readEvents) throw new PrivacyError('analytics_export_capability_required');
+  let state = initial.state as State, revision: number = initial.revision;
+  if (!state || !Number.isFinite(Date.parse(state.cutoff)) || !Number.isFinite(Date.parse(state.startedAt)))
+    throw new PrivacyError('analytics_export_invalid');
+  const host = process.env.ANALYTICS_POSTHOG_API_HOST;
+  const project = process.env.POSTHOG_PROJECT_ID;
+  const key = process.env.POSTHOG_API_KEY;
+  // Fixed approved project. A token for a different region/project must fail closed.
+  if (host !== 'https://eu.posthog.com' || project !== '162656' || !key)
+    throw new PrivacyError('analytics_export_configuration_required');
+  const base = `${host}/api/projects/${project}`;
+  async function request(path: string, body?: unknown) {
+    const response = await transport(base + path, { method: body ? 'POST' : 'GET', redirect: 'error',
+      signal: AbortSignal.timeout(8000), headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {}) });
+    if (!response.ok) throw new PrivacyError('analytics_export_provider_unavailable');
+    const value = await response.json();
+    if (!object(value)) throw new PrivacyError('analytics_export_invalid');
+    return value;
+  }
+  async function profiles() {
+    const result: Profile[] = [...(state.profileRead ?? [])], visited = new Set(state.profileVisited ?? []);
+    let path: string | null = state.profileCursor ?? `/persons/?distinct_id=${encodeURIComponent(op.user_id)}&limit=100`;
+    {
+      if (visited.has(path)) throw new PrivacyError('analytics_export_pagination_invalid');
+      visited.add(path);
+      const page = await request(path);
+      if (!Array.isArray(page.results)) throw new PrivacyError('analytics_export_invalid');
+      for (const row of page.results) {
+        if (!object(row) || !uuid(row.uuid) || !Array.isArray(row.distinct_ids) || !row.distinct_ids.includes(op.user_id)
+          || !row.distinct_ids.every(id => typeof id === 'string' && id.length > 0) || !object(row.properties))
+          throw new PrivacyError('analytics_export_identity_unverified');
+        const profile: Profile = { id: row.uuid, distinctIds: [...new Set(row.distinct_ids as string[])].sort(), properties: row.properties, createdAt: row.created_at ?? null, providerProfile: row };
+        const previous = result.find(p => p.id === profile.id);
+        if (previous && canonical(previous) !== canonical(profile)) throw new PrivacyError('analytics_export_changed');
+        if (!previous) result.push(profile);
+      }
+      if (page.next === null || page.next === undefined) path = null;
+      else {
+        if (typeof page.next !== 'string') throw new PrivacyError('analytics_export_pagination_invalid');
+        const next = new URL(page.next, base + '/');
+        if (next.origin !== host || next.pathname !== `/api/projects/${project}/persons/`
+          || next.searchParams.get('distinct_id') !== op.user_id || next.username || next.password || next.hash)
+          throw new PrivacyError('analytics_export_pagination_invalid');
+        path = '/persons/' + next.search;
+      }
+      // Do not silently truncate unusually large/ambiguous identity graphs.
+      if (visited.size > 20) throw new PrivacyError('analytics_export_identity_review_required');
+    }
+    return { rows: result.sort((a, b) => a.id.localeCompare(b.id)), next: path, visited: [...visited] };
+  }
+  async function events(cursor?: string) {
+    if (!state.aliases?.length || (cursor && !uuid(cursor))) throw new PrivacyError('analytics_export_invalid');
+    const page = await readEvents!({ aliases: state.aliases, cutoff: state.cutoff, cursor, limit: 101 });
+    if (!object(page) || !Array.isArray(page.results) || page.results.length > 101 || page.error || page.query_status || page.is_cached === true)
+      throw new PrivacyError('analytics_export_invalid');
+    const rows: Event[] = [];
+    for (const row of page.results) {
+      if (!Array.isArray(row) || row.length !== 5 || !uuid(row[0]) || typeof row[1] !== 'string'
+        || typeof row[2] !== 'string' || !Number.isFinite(Date.parse(row[2])) || Date.parse(row[2]) > Date.parse(state.cutoff)
+        || !state.aliases.includes(row[3])) throw new PrivacyError('analytics_export_invalid');
+      const properties = typeof row[4] === 'string' ? JSON.parse(row[4]) : row[4];
+      if (!object(properties)) throw new PrivacyError('analytics_export_invalid');
+      const event: Event = { id: row[0], event: row[1], timestamp: new Date(row[2]).toISOString(), distinctId: row[3], properties };
+      // UUID collisions/conflicting copies cannot silently discard information.
+      if ((cursor && event.id <= cursor) || (rows.length && event.id <= rows[rows.length - 1].id)) throw new PrivacyError('analytics_export_changed');
+      rows.push(event);
+    }
+    return { more: rows.length === 101, rows: rows.slice(0, 100) };
+  }
+  async function save(next: State, records: Event[] = []) {
+    const result = await call('save_account_export_analytics', { p_revision: revision, p_state: next, p_records: records });
+    if (result.revision !== revision + 1) throw new PrivacyError('analytics_export_conflict');
+    revision = result.revision; state = next;
+  }
+  async function rebuild() {
+    const result = await call('restart_account_export_analytics', { p_revision: revision });
+    if (result.revision !== revision + 1) throw new PrivacyError('analytics_export_conflict');
+    revision = result.revision; state = result.state;
+  }
+  // Bound work per worker turn. Successful paging releases the lease without
+  // consuming the transient-failure budget; the existing scheduler continues.
+  for (let page = 0; page < 2; page++) {
+    if (state.phase === 'profiles' || state.phase === 'verify_profiles') {
+      const result = await profiles();
+      if (result.next) {
+        await save({ ...state, aliases: state.aliases ?? [op.user_id], profileRead: result.rows,
+          profileCursor: result.next, profileVisited: result.visited });
+      } else if (state.phase === 'verify_profiles') {
+        if (canonical(result.rows) !== canonical(state.profiles)) await rebuild();
+        else await save({ ...state, phase: 'complete', profileRead: undefined, profileCursor: undefined, profileVisited: undefined });
+      } else {
+        const aliases = [...new Set([op.user_id, ...result.rows.flatMap(p => p.distinctIds)])].sort();
+        await save({ ...state, phase: 'events', profiles: result.rows, aliases, hash: '', count: 0,
+          profileRead: undefined, profileCursor: undefined, profileVisited: undefined });
+      }
+    } else if (state.phase === 'events' || state.phase === 'verify') {
+      const verify = state.phase === 'verify';
+      const result = await events(verify ? state.verifyCursor : state.cursor);
+      let digest = (verify ? state.verifyHash : state.hash) ?? '';
+      for (const event of result.rows) digest = hash(digest + canonical(event));
+      const count = ((verify ? state.verifyCount : state.count) ?? 0) + result.rows.length;
+      const cursor = result.rows.at(-1)?.id ?? (verify ? state.verifyCursor : state.cursor);
+      if (verify && !result.more) {
+        if (count !== state.count || digest !== state.hash) await rebuild();
+        else await save({ ...state, phase: 'verify_profiles', verifyCount: count, verifyHash: digest });
+      } else if (verify) await save({ ...state, verifyCursor: cursor, verifyCount: count, verifyHash: digest });
+      else await save({ ...state, phase: result.more ? 'events' : 'verify', cursor, count, hash: digest }, result.rows);
+    }
+    if (state.phase === 'complete') { await call('finish_account_export_analytics'); return true; }
+  }
+  await checkpoint(admin, op, { state: 'queued', lease_token: null, lease_until: null,
+    attempts: Math.max(0, op.attempts - 1), next_attempt_at: new Date().toISOString() });
+  return false;
+}

@@ -150,3 +150,29 @@ test('worker authorizes durable exposure before an uncertain provider request an
  assert.ok(stages.indexOf('finish_optional_analytics')>stages.indexOf('provider'));
  delete process.env.ANALYTICS_REMOTE_RETENTION_APPROVED;
 });
+
+test('native registration correlates rate-configuration failure before issue RPC and successful grant after verification',async()=>{
+ process.env.ANALYTICS_INGEST_ENABLED='true';process.env.ANALYTICS_PRIVACY_ENABLED='true';
+ const priorSecret=process.env.ANALYTICS_RATE_SECRET,priorTrust=process.env.ANALYTICS_TRUST_VERCEL_IP;
+ delete process.env.ANALYTICS_RATE_SECRET;process.env.ANALYTICS_TRUST_VERCEL_IP='true';
+ const calls=[];const admin={auth:{getUser:async()=>({data:{user:{id:owner}}})},rpc:async(name,args)=>{calls.push({name,args});return {data:name==='analytics_rate_limit'?true:{consent,expiresAt:new Date(Date.now()+30*86400000).toISOString()}};}};
+ const route=load('src/app/api/analytics/events/route.ts',{
+ '@/utils/supabase/admin':{createAdminSupabaseClient:()=>admin},'@/utils/supabase/server':{createServerSupabaseClient:()=>{throw Error('native must use verified bearer');}},'@/lib/analytics/service':api});
+ const req=()=>new Request('https://fixture.invalid/api/analytics/events',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer fixture','x-vercel-forwarded-for':'192.0.2.1','X-Analytics-Request-ID':id},body:JSON.stringify({action:'grant',owner})});
+ try {
+  let response=await route.POST(req());assert.equal(response.status,503);assert.equal(response.headers.get('x-analytics-request-id'),id);assert.equal(response.headers.get('x-analytics-failure-code'),'configuration_required');assert.equal(calls.length,0);
+  process.env.ANALYTICS_RATE_SECRET='fixture';response=await route.POST(req());assert.equal(response.status,200);assert.equal(response.headers.get('x-analytics-request-id'),id);
+  const saved=await response.json();assert.equal(saved.owner,owner);assert.equal(saved.consent,consent);assert.equal(saved.secret.length,72);
+  assert.equal(calls[1].name,'issue_analytics_consent');assert.equal(calls[1].args.p_owner,owner);assert.notEqual(calls[1].args.p_hash,saved.secret);
+ } finally {if(priorSecret===undefined)delete process.env.ANALYTICS_RATE_SECRET;else process.env.ANALYTICS_RATE_SECRET=priorSecret;if(priorTrust===undefined)delete process.env.ANALYTICS_TRUST_VERCEL_IP;else process.env.ANALYTICS_TRUST_VERCEL_IP=priorTrust;}
+});
+test('maintenance-only endpoint authenticates and cannot dispatch even with delivery enabled',async()=>{
+ const calls=[];const admin={rpc:async(name)=>{calls.push(name);return {data:0};}};
+ const old=process.env.ANALYTICS_WORKER_SECRET, oldDelivery=process.env.ANALYTICS_DELIVERY_ENABLED;process.env.ANALYTICS_WORKER_SECRET='fixture';process.env.ANALYTICS_DELIVERY_ENABLED='true';
+ try {
+ const route=load('src/app/api/analytics/maintenance/route.ts',{'@/utils/supabase/admin':{createAdminSupabaseClient:()=>admin},'@/lib/analytics/service':api});
+ assert.equal((await route.POST(new Request('https://fixture.invalid',{method:'POST'}))).status,401);assert.deepEqual(calls,[]);
+ const response=await route.POST(new Request('https://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'}}));
+ assert.equal(response.status,200);assert.deepEqual(calls,['cleanup_optional_analytics','recover_analytics_actions']);
+ } finally {if(old===undefined)delete process.env.ANALYTICS_WORKER_SECRET;else process.env.ANALYTICS_WORKER_SECRET=old;if(oldDelivery===undefined)delete process.env.ANALYTICS_DELIVERY_ENABLED;else process.env.ANALYTICS_DELIVERY_ENABLED=oldDelivery;}
+});
