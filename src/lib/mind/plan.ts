@@ -13,6 +13,15 @@ export type MindPlanResult =
       startedOn: string; actions: PlanAction[]; completions: Completion[];
       completed: boolean; nextAction: number | null; canComplete: boolean;
     } };
+export type PlanFailureCause = 'rpc_error' | 'empty_response' | 'server_unavailable' | 'invalid_shape' | 'invalid_content';
+/**
+ * Brief 04: trace intermittent "plan unavailable" instead of hiding it. The client
+ * response stays the same; the server log names the cause. Only the operation,
+ * cause and database/server codes are logged, never the member, plan or copy.
+ */
+export function logPlanFailure(operation: string, cause: PlanFailureCause | 'route_exception', code?: unknown) {
+  console.warn('[mind-plan] unavailable', { operation, cause, ...(typeof code === 'string' && code ? { code: code.slice(0, 64) } : {}) });
+}
 const unavailable = (): MindPlanResult => ({ state: 'unavailable', reason: 'plan_unavailable' });
 const date = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
   && Number.isFinite(Date.parse(v+'T00:00:00Z')) && new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v;
@@ -32,9 +41,10 @@ export async function operateMindPlan(admin: Admin, owner: string, operation: Op
       p_user_id:owner, p_operation:operation, p_plan_id:target?.planId ?? null,
       p_action_number:target?.actionNumber ?? null,
     });
-    if (error || !row || typeof row!=='object') return unavailable();
+    if (error) { logPlanFailure(operation, 'rpc_error', error.code); return unavailable(); }
+    if (!row || typeof row!=='object') { logPlanFailure(operation, 'empty_response'); return unavailable(); }
     if (row.state==='locked' || row.state==='not_started') return { state:row.state };
-    if (row.state==='unavailable') return unavailable();
+    if (row.state==='unavailable') { logPlanFailure(operation, 'server_unavailable', row.reason); return unavailable(); }
     if (row.state==='conflict' && ['plan_mismatch','action_out_of_order','daily_limit'].includes(row.reason)) {
       return { state:'conflict', reason:row.reason };
     }
@@ -43,7 +53,9 @@ export async function operateMindPlan(admin: Admin, owner: string, operation: Op
       || !p || !isPlanId(p.id) || p.version!=='mind-plan-v1' || p.copyStatus!=='draft'
       || !['balanced','gentle','presence'].includes(p.variant) || !instant(p.createdAt) || !date(p.startedOn)
       || !Array.isArray(p.actions) || p.actions.length!==7 || !Array.isArray(p.completions)
-      || p.completions.length>7 || typeof p.completed!=='boolean' || typeof p.canComplete!=='boolean') return unavailable();
+      || p.completions.length>7 || typeof p.completed!=='boolean' || typeof p.canComplete!=='boolean') {
+      logPlanFailure(operation, 'invalid_shape', typeof row.state === 'string' ? row.state : undefined); return unavailable();
+    }
     const actions: PlanAction[] = p.actions.map((a: any) => {
       if (!a || !['BreathingSession','Journal'].includes(a.route)
         || !['id','title','instruction'].every(k=>typeof a[k]==='string' && a[k].length>0)) throw Error('Invalid action');
@@ -53,11 +65,16 @@ export async function operateMindPlan(admin: Admin, owner: string, operation: Op
     if (completions.some((c,i)=>c.actionNumber!==i+1 || (i>0 && c.completedOn<=completions[i-1].completedOn))
       || p.completed!==(completions.length===7)
       || p.nextAction!==(p.completed?null:completions.length+1)
-      || p.canComplete!==(!p.completed && (!completions.length || row.currentDate>completions[completions.length-1].completedOn))) return unavailable();
+      || p.canComplete!==(!p.completed && (!completions.length || row.currentDate>completions[completions.length-1].completedOn))) {
+      logPlanFailure(operation, 'invalid_content', 'progress_mismatch'); return unavailable();
+    }
     return { state:'available', currentDate:row.currentDate, timezone:row.timezone,
       receipt:row.receipt==null?null:completion(row.receipt), plan:{
         id:p.id,version:p.version,copyStatus:p.copyStatus,variant:p.variant,createdAt:p.createdAt,
         startedOn:p.startedOn,actions,completions,completed:p.completed,nextAction:p.nextAction,canComplete:p.canComplete,
       } };
-  } catch { return unavailable(); }
+  } catch (error) {
+    logPlanFailure(operation, 'invalid_content', error instanceof Error ? error.message : undefined);
+    return unavailable();
+  }
 }

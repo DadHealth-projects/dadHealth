@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authenticateNativeSubscriptionRequest } from '@/lib/native-subscriptions/auth';
-import { isPlanId, operateMindPlan } from './plan';
+import { isPlanId, logPlanFailure, operateMindPlan } from './plan';
 
 const headers = { 'Cache-Control':'private, no-store', Vary:'Authorization' };
 export async function handleMindPlan(request: Request, operation: 'read' | 'start' | 'complete') {
@@ -23,5 +23,5 @@ export async function handleMindPlan(request: Request, operation: 'read' | 'star
     }
     const result=await operateMindPlan(auth.admin,auth.user.id,operation,target);
     return json(result,result.state==='locked'?403:result.state==='unavailable'?503:result.state==='conflict'?409:200);
-  } catch { return json({state:'unavailable',reason:'plan_unavailable'},503); }
+  } catch { logPlanFailure(operation, 'route_exception'); return json({state:'unavailable',reason:'plan_unavailable'},503); }
 }
