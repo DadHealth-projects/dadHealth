@@ -43,7 +43,8 @@ test('streak GET authenticates ownership and only reads the status RPC', async (
   assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
   assert.equal(response.headers.get('Vary'), 'Authorization');
   assert.deepEqual(JSON.parse(JSON.stringify(h.calls)), [['read_checkin_streak_status', { p_user_id: 'owner' }]]);
-  assert.deepEqual((await response.json()).streak, valid());
+  // The database omits resetOn here (pre-20261125120000 shape); the API states it as null.
+  assert.deepEqual((await response.json()).streak, { ...valid(), resetOn: null });
 });
 test('GET rejects user, observation time and arbitrary query overrides', async () => {
   for (const query of ['?user_id=other', '?observedAt=2026-11-09', '?week=2026-11-09']) {

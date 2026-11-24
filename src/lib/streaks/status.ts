@@ -13,6 +13,8 @@ export interface StreakStatus {
   currentDate?: string;
   weekStart?: string;
   calendarDays?: string[];
+  /** Last day a running streak was reset (brief 02 calm reset message); null when none is recorded. */
+  resetOn: string | null;
 }
 export type StreakReadResult =
   | { state: 'available'; streak: StreakStatus }
@@ -42,6 +44,7 @@ export async function readStreakStatus(admin: AdminClient, owner: string): Promi
     || (row.pendingDate != null && !dateKey(row.pendingDate))
     || (row.currentDate != null && !dateKey(row.currentDate))
     || (row.weekStart != null && !dateKey(row.weekStart))
+    || (row.resetOn != null && !dateKey(row.resetOn))
     || (row.calendarDays != null && (!Array.isArray(row.calendarDays) || row.calendarDays.length !== 7 || !row.calendarDays.every(dateKey)))
     || !Array.isArray(row.protectedDates) || !row.protectedDates.every(dateKey)
     || (row.allowance !== null && row.allowance !== 0 && row.allowance !== 1)
@@ -57,6 +60,7 @@ export async function readStreakStatus(admin: AdminClient, owner: string): Promi
     protectedDates: [...row.protectedDates] as string[], allowance: row.allowance as 0 | 1 | null,
     activationAt: (row.activationAt ?? null) as string | null,
     pendingDate: (row.pendingDate ?? null) as string | null,
+    resetOn: row.state === 'current' ? (row.resetOn ?? null) as string | null : null,
     ...(row.currentDate ? { currentDate: row.currentDate as string } : {}),
     ...(row.weekStart ? { weekStart: row.weekStart as string } : {}),
     ...(row.calendarDays ? { calendarDays: [...row.calendarDays as string[]] } : {}),
