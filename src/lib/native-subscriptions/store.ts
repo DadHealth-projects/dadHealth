@@ -46,7 +46,8 @@ export async function upsertSubscriptionEntitlement(
     throw error;
   }
   if (typeof data !== "string") throw new Error("Subscription entitlement was not saved");
-  if (input.provider === 'apple' && input.trialFacts) {
+  // Day-5 trial notice evidence: verified Apple and Google Play trials (migration 20261125100000).
+  if ((input.provider === 'apple' || input.provider === 'google') && input.trialFacts) {
     // Notification evidence cannot turn an accepted purchase/restore into failure.
     // Missing/conflicting evidence skips the notice and is operationally visible.
     try {
