@@ -21,6 +21,8 @@ export function pillarPayload(pillar: unknown): NotificationPayload | null {
 }
 
 type Admin = ReturnType<typeof createAdminSupabaseClient>;
+/** Shape returned by item03_inbox_context (see the notification migrations). */
+type Item03Context = { allowed?: boolean; timezone: string; date: string; dailyType?: string | null; pillar?: unknown; trials?: string[] };
 export async function dispatchItem03Notifications(admin: Admin) {
   const totals = { sent: 0, errors: 0 };
   // Eligibility/inbox discovery is independent of phone-alert consent/rollout.
@@ -30,13 +32,26 @@ export async function dispatchItem03Notifications(admin: Admin) {
     if (after) query = query.gt('user_id', after.user_id);
     return query;
   });
+  // One context read per account per run (it was read once per pass, doubling the
+  // database work). A failed read still counts once per pass, as before.
+  const contexts = new Map<string, Promise<Item03Context | null>>();
+  const contextFor = (userId: string) => {
+    let pending = contexts.get(userId);
+    if (!pending) {
+      pending = Promise.resolve(admin.rpc('item03_inbox_context', { p_user_id: userId })).then((result) => {
+        if (result.error) throw result.error;
+        return result.data as Item03Context | null;
+      });
+      pending.catch(() => undefined);
+      contexts.set(userId, pending);
+    }
+    return pending;
+  };
   // Explicit priority: all eligible daily work, then trials. Weekly push follows in the dispatcher.
   for (const kind of ['daily', 'trial'] as const) {
     for (const account of accounts) {
       try {
-        const result = await admin.rpc('item03_inbox_context', { p_user_id: account.user_id });
-        if (result.error) throw result.error;
-        const context = result.data;
+        const context = await contextFor(account.user_id);
         if (!context?.allowed) continue;
         if (kind === 'daily' && context.dailyType) {
           const payload: NotificationPayload | null = context.dailyType === 'morning_checkin'

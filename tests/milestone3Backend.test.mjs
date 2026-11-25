@@ -180,3 +180,23 @@ test('mind plan failures log a sanitised cause; the member response is unchanged
   assert.ok(!JSON.stringify(logs).includes('statement timeout'), 'database messages are not logged');
   assert.match(read('src/lib/mind/plan-api.ts'), /catch \{ logPlanFailure\(operation, 'route_exception'\); return json/);
 });
+
+test('dispatcher reads each account context once per run, keeps daily-before-trial order and error counts', async () => {
+  const sent = [];
+  const api = load('src/lib/notifications/item03-policy.ts', { './delivery': { sendRateLimitedNotification: async (args) => { sent.push(`${args.type}:${args.userId}`); return 'sent'; } } });
+  const rows = [{ user_id: 'a' }, { user_id: 'b' }, { user_id: 'c' }];
+  const reads = [];
+  const admin = {
+    from: () => { let after = null; const q = { select: () => q, order: () => q, limit: () => q, gt: (_k, v) => { after = v; return q; },
+      then: (resolve) => Promise.resolve({ data: rows.filter((r) => after === null || r.user_id > after), error: null }).then(resolve) }; return q; },
+    rpc: async (name, args) => {
+      reads.push(args.p_user_id);
+      if (args.p_user_id === 'c') return { data: null, error: { code: '57014' } };
+      return { data: { allowed: true, date: '2026-11-25', timezone: 'Europe/London', dailyType: 'morning_checkin', trials: ['t-' + args.p_user_id] }, error: null };
+    },
+  };
+  const totals = plain(await api.dispatchItem03Notifications(admin));
+  assert.deepEqual(reads, ['a', 'b', 'c'], 'one context read per account (previously two)');
+  assert.deepEqual(sent, ['morning_checkin:a', 'morning_checkin:b', 'trial_ending:a', 'trial_ending:b'], 'all daily work before any trial');
+  assert.deepEqual(totals, { sent: 4, errors: 2 }, 'a failed account still counts once per pass');
+});
