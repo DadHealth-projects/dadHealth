@@ -1,6 +1,9 @@
 import { PrivacyError } from './auth';
 import { checkpoint, type Operation, type PrivacyAdmin } from './operations';
 import { deleteOneSignalOwner, openCleanup, sealCleanup, revokeAppleToken, revokeWearableAuthorization } from './external-cleanup';
+
+/** On-device health connections: nothing to revoke remotely; their data is deleted with the account. */
+const NATIVE_HEALTH_PROVIDERS = new Set(['apple_health', 'health_connect']);
 import { erasePosthogOwner } from '@/lib/analytics/privacy';
 
 export async function processDeletion(admin: PrivacyAdmin, o: Operation) {
@@ -85,6 +88,15 @@ export async function processDeletion(admin: PrivacyAdmin, o: Operation) {
       if (!integration || typeof integration.provider !== 'string') throw new PrivacyError('integration_inventory_failed');
       const key = `revoked_${integration.provider}`;
       if (progress[key]) continue;
+      // Apple Health and Health Connect have no server-side authorisation to revoke: access
+      // is an on-device permission, and imported rows (body_metrics, sleep_logs,
+      // user_integrations) are removed with the account by ON DELETE CASCADE. Handle them
+      // explicitly instead of routing them through Garmin/Fitbit revocation, which rejects them.
+      if (NATIVE_HEALTH_PROVIDERS.has(integration.provider)) {
+        progress[key] = true;
+        await checkpoint(admin, o, { checkpoint: progress });
+        continue;
+      }
       await revokeWearableAuthorization(integration, async next => {
         const integrations = external.integrations as Record<string, unknown>[];
         external.integrations = integrations.map(item => item === integration ? next : item);
