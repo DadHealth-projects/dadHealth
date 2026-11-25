@@ -1,5 +1,6 @@
 -- Background job load reduction (live evidence 2026-11-25, read-only MCP). NOT a migration:
--- run by hand in the SQL editor ONLY after the client approves the latency change below.
+-- run by hand in the SQL editor. Client-approved and APPLIED 2026-11-25 (jobs 30/31 at
+-- ~12:10 UTC, job 33 created); recorded here as the exact production state.
 --
 -- Evidence (pg_stat_statements since 2026-11-17, ~8 days):
 --   * pg_cron bookkeeping (cron.job_run_details insert/update) = 45% of all database time;
@@ -26,11 +27,16 @@
 select cron.alter_job(30, schedule => '*/5 * * * *');
 select cron.alter_job(31, schedule => '*/5 * * * *');
 
--- Daily at 04:17 UTC, delete cron run history older than 7 days (bounded batch).
+-- Daily at 04:17 UTC, delete cron run history older than 7 days, at most 5,000 rows per
+-- run so a large first backlog never becomes one long write on the throttled disk.
+-- Applied and verified in production 2026-11-25 (job 33).
 select cron.schedule(
   'cron-run-history-retention',
   '17 4 * * *',
-  $$delete from cron.job_run_details where end_time < now() - interval '7 days'$$
+  $$delete from cron.job_run_details where runid in (
+      select runid from cron.job_run_details
+      where end_time < now() - interval '7 days'
+      order by runid limit 5000)$$
 );
 
 -- Post-check (read-only), after 24 hours:
