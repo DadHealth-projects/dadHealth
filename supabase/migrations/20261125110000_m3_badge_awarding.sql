@@ -38,7 +38,16 @@ where not exists(select 1 from public.badges b where b.award_key=c.award_key)
   and not exists(select 1 from keyed k where k.award_key=c.award_key)
 order by c.sort_order;
 
--- Members read only their own earned badges; the catalogue stays readable.
+-- Live audit 2026-11-25: badges has RLS enabled and no policy, so no client can
+-- read the catalogue (the badges screen and the earned_badges -> badges embed
+-- return nothing). Signed-in members may read it; there is no client write path.
+drop policy if exists badges_catalogue_read on public.badges;
+create policy badges_catalogue_read on public.badges for select to authenticated using (true);
+revoke insert,update,delete,truncate on public.badges from public,anon,authenticated;
+revoke select on public.badges from public,anon;
+grant select on public.badges to authenticated;
+
+-- Members read only their own earned badges.
 alter table public.earned_badges enable row level security;
 drop policy if exists "Users can CRUD own earned_badges" on public.earned_badges;
 drop policy if exists earned_badges_read_own on public.earned_badges;
