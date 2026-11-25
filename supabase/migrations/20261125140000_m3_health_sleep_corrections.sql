@@ -3,7 +3,8 @@
 -- Apple Health / Health Connect could never be cleared. The app now sends hours = 0
 -- for a day only after a successful read with data; that clears ONLY the same
 -- provider's imported row for that day (never manual entries or other sources).
--- Everything else is unchanged (bodies otherwise identical to the live versions,
+-- Uploads now also require the member's own live connection row (disconnect and
+-- deletion stop late writes). Everything else is unchanged (bodies otherwise identical to the live versions,
 -- verified by fingerprint on 2026-11-25). Owner is still auth.uid().
 -- Rollback: re-run both function definitions from supabase/schema.sql.
 begin;
@@ -25,6 +26,15 @@ declare
 begin
   if current_user_id is null then
     raise exception 'Authentication required';
+  end if;
+  -- Server-side ownership and in-flight protection: only the signed-in member's own
+  -- live connection may write. After disconnect (row deleted) or account deletion, late
+  -- uploads from a device are rejected instead of re-creating health history.
+  if not exists (
+    select 1 from user_integrations
+    where user_id = current_user_id and provider = 'apple_health'
+  ) then
+    raise exception using errcode = '42501', message = 'integration_not_connected';
   end if;
 
   with written as (
@@ -117,6 +127,15 @@ declare
 begin
   if current_user_id is null then
     raise exception 'Authentication required';
+  end if;
+  -- Server-side ownership and in-flight protection: only the signed-in member's own
+  -- live connection may write. After disconnect (row deleted) or account deletion, late
+  -- uploads from a device are rejected instead of re-creating health history.
+  if not exists (
+    select 1 from user_integrations
+    where user_id = current_user_id and provider = 'health_connect'
+  ) then
+    raise exception using errcode = '42501', message = 'integration_not_connected';
   end if;
 
   with written as (
