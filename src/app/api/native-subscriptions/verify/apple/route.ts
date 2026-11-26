@@ -5,6 +5,7 @@ import { authenticateNativeSubscriptionRequest } from "@/lib/native-subscription
 import { consumeSubscriptionVerificationAttempt } from "@/lib/native-subscriptions/rate-limit";
 import { nativeSubscriptionErrorResponse } from "@/lib/native-subscriptions/route-response";
 import { findSubscriptionEntitlement, getSubscriptionSummary, upsertSubscriptionEntitlement } from "@/lib/native-subscriptions/store";
+import { retentionOfferApplied } from "@/lib/native-subscriptions/retention-offer";
 
 export const runtime = "nodejs";
 
@@ -55,7 +56,8 @@ export async function POST(request: Request) {
       appleEntitlementInput(auth.user.id, verified, null, undefined, verificationStartedAt),
     );
     const summary = await getSubscriptionSummary(auth.admin, auth.user.id);
-    return NextResponse.json({ ok: true, summary });
+    // Brief 01: the retention offer counts as accepted only from Apple's verified transaction.
+    return NextResponse.json({ ok: true, summary, retentionOfferApplied: retentionOfferApplied(verified.transaction) });
   } catch (error) {
     return nativeSubscriptionErrorResponse(error);
   }

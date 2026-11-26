@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { PromotionalOfferSignatureCreator } from '@apple/app-store-server-library';
+import { OfferType, PromotionalOfferSignatureCreator } from '@apple/app-store-server-library';
 import { canCancel } from './cancellation';
 import type { SubscriptionEntitlementRow } from './types';
 
@@ -55,4 +55,14 @@ export function signRetentionOffer(item: SubscriptionEntitlementRow, userId: str
   const creator = new PromotionalOfferSignatureCreator(config.privateKey, config.keyId, config.bundleId);
   const signature = creator.createSignature(item.product_id!, config.offerId, userId.toLowerCase(), nonce.toLowerCase(), now);
   return { productId: item.product_id!, offer: { identifier: config.offerId, keyIdentifier: config.keyId, nonce: nonce.toLowerCase(), signature, timestamp: now } };
+}
+
+/**
+ * Authoritative acceptance check: Apple's verified transaction carries the promotional offer type and
+ * our configured offer identifier. A purchase without the offer (or with another offer) is never "accepted".
+ */
+export function retentionOfferApplied(transaction: { offerType?: number; offerIdentifier?: string } | null | undefined,
+  config: RetentionOfferConfig | null = retentionOfferConfig()) {
+  return Boolean(config && transaction && transaction.offerType === OfferType.PROMOTIONAL_OFFER
+    && transaction.offerIdentifier === config.offerId);
 }

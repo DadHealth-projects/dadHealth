@@ -71,3 +71,20 @@ test('route is authenticated, owner-scoped and reports unavailable instead of in
   assert.match(route, /state: 'offer_unavailable' \}, \{ status: 404/);
   assert.doesNotMatch(route, /console\.(log|info)/);
 });
+
+test('acceptance comes only from a verified promotional-offer transaction with our offer id', () => {
+  const config = lib.retentionOfferConfig(env);
+  assert.equal(lib.retentionOfferApplied({ offerType: 2, offerIdentifier: 'retention_50_3m' }, config), true);
+  assert.equal(lib.retentionOfferApplied({ offerType: 2, offerIdentifier: 'another_offer' }, config), false, 'another offer');
+  assert.equal(lib.retentionOfferApplied({ offerType: 1, offerIdentifier: 'retention_50_3m' }, config), false, 'introductory trial is not the retention offer');
+  assert.equal(lib.retentionOfferApplied({ offerType: 3, offerIdentifier: 'retention_50_3m' }, config), false, 'offer code');
+  assert.equal(lib.retentionOfferApplied({}, config), false, 'normal renewal / purchase');
+  assert.equal(lib.retentionOfferApplied(null, config), false);
+  assert.equal(lib.retentionOfferApplied({ offerType: 2, offerIdentifier: 'retention_50_3m' }, null), false, 'not configured: never accepted');
+});
+
+test('Apple verify returns the offer flag computed from the verified transaction only', () => {
+  const route = readFileSync(new URL('../src/app/api/native-subscriptions/verify/apple/route.ts', import.meta.url), 'utf8');
+  assert.match(route, /retentionOfferApplied: retentionOfferApplied\(verified\.transaction\)/);
+  assert.doesNotMatch(route, /retentionOfferApplied[^;]*body\./, 'never from the client request');
+});
