@@ -12,26 +12,15 @@ export async function readWeeklyReport(admin: AdminClient, owner: string, week?:
   let release = week ? reportReleaseForWeek(week) : latestReleasedReportWeek(now);
   // Reuse the canonical database predicate, including manual/legacy grants.
   // Unlike coercing a missing result to false, require an actual boolean.
-  // Reliability (client-approved 2026-11-26): the access check and the snapshot read used to run
-  // one after the other, and each can take seconds at the API edge, so a slow pair crossed the
-  // app's 15 s limit. The access check starts first and the owner-filtered snapshot read starts
-  // alongside it. Decisions keep their order: access first, then release, then the snapshot.
-  // Rule change (approved): the member's own snapshot may be read while access is being checked;
-  // it is discarded, never returned or projected, unless access is confirmed as a boolean.
-  const released = now.getTime() >= Date.parse(release.deliveryAt);
-  const accessRead = Promise.resolve(admin.rpc('user_has_pro_access', { p_user_id: owner }));
-  const snapshotRead = released ? (() => {
-    let query = admin.from('weekly_report_snapshots')
-      .select('user_id,reporting_week_start,delivery_at,captured_at,payload')
-      .eq('user_id', owner);
-    query = week ? query.eq('reporting_week_start', release.weekStart)
-      : query.lte('delivery_at', now.toISOString()).order('reporting_week_start', { ascending: false }).limit(1);
-    return Promise.resolve(query.maybeSingle()).catch(() => ({ data: null, error: { message: 'read_failed' } }));
-  })() : null;
-  const { data: access, error: accessError } = await accessRead.catch(() => ({ data: null, error: { message: 'access_failed' } }));
+  const { data: access, error: accessError } = await admin.rpc('user_has_pro_access', { p_user_id: owner });
   if (accessError || typeof access !== 'boolean') return { state: 'unavailable', reason: 'entitlement_unavailable' };
-  if (!released || !snapshotRead) return { state: 'unavailable', reason: 'not_released' };
-  const { data, error } = await snapshotRead;
+  if (now.getTime() < Date.parse(release.deliveryAt)) return { state: 'unavailable', reason: 'not_released' };
+  let query = admin.from('weekly_report_snapshots')
+    .select('user_id,reporting_week_start,delivery_at,captured_at,payload')
+    .eq('user_id', owner);
+  query = week ? query.eq('reporting_week_start', release.weekStart)
+    : query.lte('delivery_at', now.toISOString()).order('reporting_week_start', { ascending: false }).limit(1);
+  const { data, error } = await query.maybeSingle();
   if (error) return { state: 'unavailable', reason: 'read_failed' };
   if (!data) return { state: 'unavailable', reason: 'snapshot_missing' };
   // Validate persisted metadata before projection; never send the raw stored JSON.
