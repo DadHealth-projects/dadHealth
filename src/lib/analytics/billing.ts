@@ -70,6 +70,7 @@ export function journalObservation(input: SubscriptionEntitlementInput) {
   return {
     status: input.status, autoRenews: input.autoRenews ?? null, latestTransactionId: input.latestTransactionId ?? null,
     trialEnd: input.trialEnd ?? null, trialFacts: input.trialFacts ?? null, verifiedPayment: input.verifiedPayment ?? null,
+    ...(input.retentionOffer ? { retentionOffer: input.retentionOffer } : {}),
   };
 }
 
@@ -88,7 +89,17 @@ export function journalFacts(row: BillingJournalRow): BillingFact[] {
     latestTransactionId: o.latestTransactionId ?? undefined, trialEnd: o.trialEnd ?? o.trialPeriodEndsAt ?? null,
     trialFacts: o.trialFacts ?? undefined, lastVerifiedAt: new Date(row.verified_at).toISOString(),
   } as SubscriptionEntitlementInput;
-  return billingFacts(input, (row.previous as SubscriptionEntitlementRow | null) ?? null, o.verifiedPayment ?? undefined);
+  const facts = billingFacts(input, (row.previous as SubscriptionEntitlementRow | null) ?? null, o.verifiedPayment ?? undefined);
+  // Brief 06 "50% offer accepted": one fact per verified offer transaction, at its purchase time.
+  const offer = o.retentionOffer;
+  const properties = { provider: row.provider, environment: row.environment };
+  if (offer && typeof offer.transactionId === 'string' && offer.transactionId && Number.isFinite(Date.parse(offer.purchasedAt))
+    && permittedProperties('retention_offer_accepted', properties, 'server')) {
+    facts.push({ event: 'retention_offer_accepted', properties, timestamp: new Date(offer.purchasedAt).toISOString(),
+      key: 'billing:' + createHash('sha256').update([row.provider, row.environment, row.provider_subscription_id,
+        'retention_offer_accepted', offer.transactionId].join(':')).digest('hex') });
+  }
+  return facts;
 }
 
 /**

@@ -86,6 +86,14 @@ export async function recordRetentionOfferRedemption(admin: RpcClient, userId: s
   return true;
 }
 
+/** The verified offer transaction to journal for analytics, or null when our offer was not used. */
+export function retentionOfferEvidence(transaction: RedemptionTransaction | null | undefined,
+  config: RetentionOfferConfig | null = retentionOfferConfig()): { transactionId: string; purchasedAt: string } | null {
+  if (!transaction || !retentionOfferApplied(transaction, config) || !transaction.transactionId
+    || typeof transaction.purchaseDate !== 'number' || !Number.isFinite(transaction.purchaseDate)) return null;
+  return { transactionId: transaction.transactionId, purchasedAt: new Date(transaction.purchaseDate).toISOString() };
+}
+
 /**
  * Authoritative acceptance check: Apple's verified transaction carries the promotional offer type and
  * our configured offer identifier. A purchase without the offer (or with another offer) is never "accepted".

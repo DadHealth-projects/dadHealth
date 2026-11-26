@@ -31,6 +31,8 @@ export interface SubscriptionEntitlementInput {
   /** Internal verified-provider evidence, never accepted from client JSON. */
   verifiedPayment?: { transactionId: string; paidAt: string; amount: number; verified: true; servicePeriodStart?: string };
   trialFacts?: { transactionId: string; startedAt: string; endsAt: string };
+  /** Apple-verified transaction that used our configured retention offer (client audit A3). */
+  retentionOffer?: { transactionId: string; purchasedAt: string };
   cancellationEvidence?: CancellationEvidence | null;
   userId: string;
   provider: SubscriptionProvider;

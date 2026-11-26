@@ -21,6 +21,8 @@ export const serverEventRules = {
   trial_converted: { provider: ['apple','google','stripe'], environment: ['production','sandbox','test','legacy'] },
   trial_cancelled: { provider: ['apple','google','stripe'], environment: ['production','sandbox','test','legacy'], reason: ['unavailable','too_expensive','not_using','missing_feature','technical_problem','other'] },
   subscription_cancelled: { provider: ['apple','google','stripe'], environment: ['production','sandbox','test','legacy'], reason: ['unavailable','too_expensive','not_using','missing_feature','technical_problem','other'] },
+  // Brief 06 "50% offer accepted": only from an Apple-verified promotional-offer transaction (server).
+  retention_offer_accepted: { provider: ['apple'], environment: ['production','sandbox','test','legacy'] },
 } as const satisfies Record<string, Record<string, Rule>>;
 export const eventRules = { ...clientEventRules, ...serverEventRules };
 export type AnalyticsEventName = keyof typeof clientEventRules;

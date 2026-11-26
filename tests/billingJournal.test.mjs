@@ -144,3 +144,27 @@ test('maintenance retries journalled transitions for all owners', () => {
   const route = readFileSync(new URL('../src/app/api/analytics/maintenance/route.ts', import.meta.url), 'utf8');
   assert.match(route, /drainBillingTransitions\(admin, null, 100\)/);
 });
+
+test('offer acceptance: one fact per verified offer transaction, at purchase time, provider and environment only', () => {
+  const offer = row({ observed: { ...row().observed, autoRenews: true, retentionOffer: { transactionId: 'otx', purchasedAt: '2026-11-27T09:00:00Z' } } });
+  const facts = billingOn.journalFacts(offer).filter(f => f.event === 'retention_offer_accepted');
+  assert.equal(facts.length, 1);
+  assert.equal(facts[0].timestamp, '2026-11-27T09:00:00.000Z');
+  assert.equal(JSON.stringify(facts[0].properties), JSON.stringify({ provider: 'apple', environment: 'sandbox' }));
+  assert.match(facts[0].key, /^billing:[a-f0-9]{64}$/);
+  assert.equal(billingOn.journalFacts(offer).find(f => f.event === 'retention_offer_accepted').key, facts[0].key, 'stable key');
+  for (const bad of [{ transactionId: '', purchasedAt: '2026-11-27T09:00:00Z' }, { transactionId: 'otx', purchasedAt: 'never' }]) {
+    assert.equal(billingOn.journalFacts(row({ observed: { ...row().observed, retentionOffer: bad } })).some(f => f.event === 'retention_offer_accepted'), false);
+  }
+  assert.equal(JSON.stringify(billingOn.journalObservation({ status: 'active', retentionOffer: { transactionId: 'otx', purchasedAt: 'x' } }).retentionOffer),
+    JSON.stringify({ transactionId: 'otx', purchasedAt: 'x' }));
+  assert.equal('retentionOffer' in billingOn.journalObservation({ status: 'active' }), false);
+});
+
+test('both Apple routes pass verified offer evidence into the journalled save', () => {
+  const lf = t => t.replace(/\r\n/g, '\n');
+  const verify = lf(readFileSync(new URL('../src/app/api/native-subscriptions/verify/apple/route.ts', import.meta.url), 'utf8'));
+  assert.match(verify, /const offer = retentionOfferEvidence\(verified\.transaction\);\n\s+await upsertSubscriptionEntitlement\(\n\s+auth\.admin,\n\s+\{ \.\.\.appleEntitlementInput\([^)]*\), \.\.\.\(offer \? \{ retentionOffer: offer \} : \{\}\) \},/);
+  const notify = lf(readFileSync(new URL('../src/app/api/native-subscriptions/notifications/apple/route.ts', import.meta.url), 'utf8'));
+  assert.match(notify, /\.\.\.\(retentionOfferEvidence\(verified\.transaction\) \? \{ retentionOffer: retentionOfferEvidence\(verified\.transaction\)! \} : \{\}\) \},/);
+});

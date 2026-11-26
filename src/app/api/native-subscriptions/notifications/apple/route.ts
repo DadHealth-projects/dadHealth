@@ -6,7 +6,7 @@ import { claimProviderEvent, completeProviderEvent, failProviderEvent } from "@/
 import { findSubscriptionEntitlement, upsertSubscriptionEntitlement } from "@/lib/native-subscriptions/store";
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 import { privacyOwnerRemoved, RemovedPrivacyOwnerError } from '@/lib/privacy/operations';
-import { recordRetentionOfferRedemption } from '@/lib/native-subscriptions/retention-offer';
+import { recordRetentionOfferRedemption, retentionOfferEvidence } from '@/lib/native-subscriptions/retention-offer';
 
 export const runtime = "nodejs";
 
@@ -57,7 +57,8 @@ export async function POST(request: Request) {
         verified.renewal,
         verified.notification.data?.status,
         providerUpdatedAt,
-      ), cancellationEvidence: appleCancellationEvidence(verified) },
+      ), cancellationEvidence: appleCancellationEvidence(verified),
+      ...(retentionOfferEvidence(verified.transaction) ? { retentionOffer: retentionOfferEvidence(verified.transaction)! } : {}) },
     );
     // Client audit A3: an accepted retention offer is recorded before the event is acknowledged,
     // so a failed save returns 500 and Apple retries it. Idempotent on Apple's transaction id.

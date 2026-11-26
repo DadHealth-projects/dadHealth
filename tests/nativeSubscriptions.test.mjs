@@ -277,7 +277,7 @@ async function appleHandlerHarness(){
  '@/lib/native-subscriptions/apple':{verifyAppleNotification:async()=>h.verified,appleEntitlementInput:(owner,verified,renewal,status,lastVerifiedAt)=>({userId:owner,lastVerifiedAt,status:verified.transaction.revocationDate?'revoked':'active'})},
  '@/lib/native-subscriptions/provider-events':{claimProviderEvent:async()=>h.duplicate?null:'claim',completeProviderEvent:async()=>h.completed++,failProviderEvent:async()=>h.failed++},
  '@/lib/native-subscriptions/store':{findSubscriptionEntitlement:async()=>({user_id:'owner'}),upsertSubscriptionEntitlement:async(admin,input)=>h.writes.push(input)},
- '@/lib/native-subscriptions/retention-offer':{recordRetentionOfferRedemption:async(admin,owner,verified,source)=>{h.offerRecords.push({owner,source,writesBefore:h.writes.length,completedBefore:h.completed});if(h.offerRecordError)throw h.offerRecordError;return false;}},
+ '@/lib/native-subscriptions/retention-offer':{retentionOfferEvidence:()=>null,recordRetentionOfferRedemption:async(admin,owner,verified,source)=>{h.offerRecords.push({owner,source,writesBefore:h.writes.length,completedBefore:h.completed});if(h.offerRecordError)throw h.offerRecordError;return false;}},
  '@/utils/supabase/admin':{createAdminSupabaseClient:()=>({})}});
  h.call=()=>h.route.POST({json:async()=>({signedPayload:'mock-signed-payload'})});return h;
 }

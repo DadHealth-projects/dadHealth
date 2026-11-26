@@ -1,10 +1,11 @@
-// Opt-in isolated proof of migration 20261126170000 (billing transition journal), client audit A6,
-// on in-process PostgreSQL (PGlite) with the real TypeScript drain. Never connects to any server.
-//   npm i --no-save @electric-sql/pglite@0.2 && node --test tests/billingJournal.database.mjs
-// Stand-ins (labelled): upsert_subscription_analytics_snapshot keeps its contract (newest verified
-// state wins; returns id/previous/current/trialPeriod); record_account_billing_analytics keeps its
-// contract (account choice must precede the event and its verification; idempotent event key;
-// deletion suppresses). The journal, its functions and the drain are the real ones.
+// Opt-in isolated proof of migration 20261126170000 (billing transition journal; client audit
+// A3/A6) on in-process PostgreSQL (PGlite) with the real TypeScript drain. Never connects to any
+// server.   npm i --no-save @electric-sql/pglite@0.2 && node --test tests/billingJournal.database.mjs
+// Real: the journal, its functions, record_account_billing_analytics and
+// record_verified_billing_analytics as redefined by the migration, enqueue_analytics_fact
+// (20261120130000) and the consent/outbox tables, all extracted from the migrations.
+// Stand-in (labelled): upsert_subscription_analytics_snapshot keeps its contract (newest verified
+// state wins; returns id/previous/current/trialPeriod).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -16,7 +17,18 @@ let PGlite = null;
 try { ({ PGlite } = await import('@electric-sql/pglite')); } catch { /* opt-in */ }
 const skip = !PGlite && 'PGlite not installed (opt-in)';
 const require = createRequire(import.meta.url);
-const MIGRATION = readFileSync(new URL('../supabase/migrations/20261126170000_m3_billing_transition_journal.sql', import.meta.url), 'utf8');
+const read = name => readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const MIGRATION = process.env.BILLING_JOURNAL_MIGRATION ? readFileSync(process.env.BILLING_JOURNAL_MIGRATION, 'utf8')
+  : read('20261126170000_m3_billing_transition_journal.sql');
+const FOUNDATION = read('20261120120000_optional_analytics_foundation.sql');
+const FUNNEL = read('20261120130000_analytics_funnel_facts.sql');
+const CHOICE = read('20261126130000_account_billing_analytics_consent.sql');
+const table = (sql, name) => { const m = new RegExp(`create table public\\.${name} \\([\\s\\S]*?\\n\\);`).exec(sql); assert.ok(m, name); return m[0]; };
+function fn(sql, name) {
+  const start = sql.search(new RegExp(`create (or replace )?function public\\.${name}\\(`));
+  const tag = /\bas\s+(\$[a-z_]*\$)/i.exec(sql.slice(start)); const body = start + tag.index + tag[0].length;
+  return sql.slice(start, sql.indexOf(tag[1], body) + tag[1].length) + ';';
+}
 const ON = { ANALYTICS_BILLING_COLLECTION_ENABLED: 'true', ANALYTICS_INGEST_ENABLED: 'true', ANALYTICS_PRIVACY_ENABLED: 'true' };
 function load(path, mocks = {}) {
   const exports = {};
@@ -27,6 +39,7 @@ function load(path, mocks = {}) {
 }
 const billing = load('src/lib/analytics/billing.ts', { './contract': load('src/lib/analytics/contract.ts') });
 const A = '00000000-0000-4000-8000-00000000000a', SUB = '20000000-0000-4000-8000-00000000000a';
+const ago = hours => new Date(Date.now() - hours * 3600e3).toISOString();
 
 async function fresh() {
   const db = new PGlite();
@@ -36,10 +49,17 @@ async function fresh() {
     create function auth.role() returns text language sql stable as $$ select nullif(current_setting('request.jwt.claim.role', true), '') $$;
     grant usage on schema auth to anon, authenticated, service_role; grant execute on all functions in schema auth to anon, authenticated, service_role;
     grant usage on schema public to anon, authenticated, service_role;
+    create table public.account_deletion_tombstones(user_id uuid primary key);
     create table public.subscription_entitlements(id uuid primary key, user_id uuid not null references auth.users(id) on delete cascade,
       provider text, provider_subscription_id text, environment text, status text, auto_renews boolean, trial_end timestamptz,
       current_period_end timestamptz, last_verified_at timestamptz, provider_account_id text, unique(id, user_id), unique(provider, provider_subscription_id));
-    create table public.account_deletion_tombstones(user_id uuid primary key);
+    create table public.subscription_cancellation_feedback(user_id uuid, request_id uuid, subscription_id uuid, reason text,
+      details text, submitted_at timestamptz, retain_until timestamptz, primary key(user_id, request_id));
+    create table public.analytics_funnel_keys(user_id uuid, key text, primary key(user_id, key));
+    ${table(FOUNDATION, 'analytics_consents')}
+    ${table(FOUNDATION, 'analytics_outbox')}
+    ${table(CHOICE, 'account_billing_analytics_consent')}
+    ${fn(FUNNEL, 'enqueue_analytics_fact')}
     -- Stand-in with the real contract: newest verified state wins; returns previous/current.
     create function public.upsert_subscription_analytics_snapshot(p_snapshot jsonb, p_evidence jsonb) returns jsonb language plpgsql as $$
     declare prior public.subscription_entitlements; accepted public.subscription_entitlements;
@@ -58,131 +78,125 @@ async function fresh() {
       return jsonb_build_object('id', accepted.id, 'previous', case when prior.id is null then null else to_jsonb(prior) end,
         'current', to_jsonb(accepted), 'trialPeriod', null);
     end $$;
-    create table public.account_billing_analytics_consent(user_id uuid primary key, granted boolean, granted_at timestamptz);
-    create table public.recorded_billing(key text primary key, owner uuid, event text, at timestamptz);
-    -- Stand-in with the real contract: choice must precede event and verification; key is idempotent.
-    create function public.record_account_billing_analytics(p_owner uuid, p_provider text, p_environment text, p_subscription text,
-      p_verified_at timestamptz, p_event text, p_key text, p_at timestamptz, p_properties jsonb, p_observed_after timestamptz default null)
-    returns boolean language plpgsql security definer as $$
-    declare c public.account_billing_analytics_consent;
-    begin
-      if exists (select 1 from public.account_deletion_tombstones where user_id = p_owner) then return false; end if;
-      select * into c from public.account_billing_analytics_consent where user_id = p_owner;
-      if not found or not c.granted or p_at < c.granted_at or p_verified_at < c.granted_at then return false; end if;
-      if p_event like '%cancelled' and (p_observed_after is null or p_observed_after < c.granted_at) then return false; end if;
-      insert into public.recorded_billing values (p_key, p_owner, p_event, p_at) on conflict do nothing;
-      return found;
-    end $$;
     insert into auth.users values ('${A}');
     ${MIGRATION}`);
   return db;
 }
 async function asService(db) { await db.exec("reset role; select set_config('request.jwt.claim.role','service_role',false); set role service_role;"); }
-async function asOwner(db) { await db.exec('reset role;'); }
 /** supabase-js-shaped client over PGlite: named arguments, thenable with abortSignal(). */
 function client(db) {
   return { rpc(name, params) {
     const keys = Object.keys(params);
     const run = (async () => {
       try {
-        const sql = `select * from public.${name}(${keys.map((k, i) => `${k} => $${i + 1}`).join(', ')})`;
-        const values = keys.map(k => params[k] !== null && typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]);
-        const r = await db.query(sql, values);
-        const fn = r.fields.length === 1 && r.fields[0].name === name;
-        return { data: fn ? r.rows[0]?.[name] ?? null : r.rows, error: null };
+        const r = await db.query(`select * from public.${name}(${keys.map((k, i) => `${k} => $${i + 1}`).join(', ')})`,
+          keys.map(k => params[k] !== null && typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]));
+        const scalar = r.fields.length === 1 && r.fields[0].name === name;
+        return { data: scalar ? r.rows[0]?.[name] ?? null : r.rows, error: null };
       } catch (e) { return { data: null, error: { code: e.code ?? 'XX000', message: 'private' } }; }
     })();
     return { abortSignal: () => run, then: (a, b) => run.then(a, b) };
   } };
 }
 const snapshot = (at, over = {}) => ({ p_user_id: A, p_provider: 'apple', p_provider_subscription_id: 'orig', p_environment: 'sandbox',
-  p_status: 'active', p_auto_renews: true, p_current_period_end: '2026-12-20T00:00:00Z', p_last_verified_at: at, ...over });
+  p_status: 'active', p_auto_renews: true, p_current_period_end: '2099-12-20T00:00:00Z', p_last_verified_at: at, ...over });
 const observation = (over = {}) => ({ status: 'active', autoRenews: true, latestTransactionId: 'tx', trialEnd: null, trialFacts: null, verifiedPayment: null, ...over });
 const save = (db, at, snapOver = {}, obsOver = {}) => db.query('select public.upsert_subscription_with_billing_journal($1, null, $2) v',
   [JSON.stringify(snapshot(at, snapOver)), JSON.stringify(observation(obsOver))]).then(r => r.rows[0].v);
-const journal = async db => { await asOwner(db); const r = (await db.query('select verified_at, attempts, previous, observed from public.billing_analytics_transitions order by verified_at')).rows; await asService(db); return r; };
-const recorded = async db => { await asOwner(db); const r = (await db.query('select event, at from public.recorded_billing order by at')).rows; await asService(db); return r; };
+async function owner(db, sql, params) { await db.exec('reset role;'); const r = (await db.query(sql, params)).rows; await asService(db); return r; }
+const journal = db => owner(db, 'select verified_at, attempts, previous, observed from public.billing_analytics_transitions order by verified_at');
+const outbox = db => owner(db, 'select event, occurred_at, properties from public.analytics_outbox order by occurred_at');
+async function consentAt(db, at) {
+  await owner(db, `insert into public.account_billing_analytics_consent(user_id, granted, granted_at, revision) values ($1, true, $2, 1)
+    on conflict (user_id) do update set granted = true, granted_at = excluded.granted_at`, [A, at]);
+}
 
-test('billing journal: a crash after the verified save cannot lose the transition; replay, order, consent and deletion hold', { skip }, async () => {
-  const db = await fresh();
-  await db.exec(`insert into public.account_billing_analytics_consent values ('${A}', true, '2026-11-01T00:00:00Z')`);
-  await asService(db);
-
-  // 1. First save (no previous): journalled; 2. cancellation saved, then the process "crashes"
-  // before anything is recorded; 3. a later update arrives, so the live row's previous state is
-  // now already "auto-renew off" (the exact loss in the audit).
-  assert.equal((await save(db, '2026-11-25T10:00:00Z')).journalFailed, false);
-  const cancel = await save(db, '2026-11-26T10:00:00Z', { p_auto_renews: false }, { autoRenews: false });
-  assert.ok(cancel.journalId, 'journalled in the same call');
-  await save(db, '2026-11-27T10:00:00Z', { p_auto_renews: false }, { autoRenews: false });
+test('billing journal + real recording chain: a crash after the save cannot lose the transition', { skip }, async () => {
+  const db = await fresh(); await asService(db); await consentAt(db, ago(150));
+  // First save; then the cancellation is saved and the process "crashes" before recording; then
+  // a later update arrives, so the live row is no longer at the cancellation's verification.
+  await save(db, ago(100));
+  const cancelAt = ago(90);
+  assert.ok((await save(db, cancelAt, { p_auto_renews: false }, { autoRenews: false })).journalId);
+  const laterAt = ago(80);
+  await save(db, laterAt, { p_auto_renews: false }, { autoRenews: false });
   const rows = await journal(db);
   assert.equal(rows.length, 3);
   assert.equal(rows[1].previous.auto_renews, true, 'the cancellation row kept its verified previous state');
-  assert.equal(rows[1].previous.provider_account_id, undefined, 'only the fields needed for billing facts are journalled');
-  assert.equal(rows[1].previous.last_verified_at.startsWith('2026-11-25'), true);
+  assert.equal(rows[1].previous.provider_account_id, undefined, 'only billing-fact fields are journalled');
 
-  // Recovery: the drain (real TypeScript) records exactly one cancellation at its original time.
-  const first = await billing.drainBillingTransitions(client(db), A);
-  assert.equal(first.processed, 3); assert.equal(first.failed, 0); assert.equal(first.collected, 1);
-  assert.deepEqual((await recorded(db)).map(r => r.event), ['subscription_cancelled']);
-  assert.equal(new Date((await recorded(db))[0].at).toISOString(), '2026-11-26T10:00:00.000Z');
-  assert.equal((await journal(db)).length, 0, 'rows removed only after recording');
-
-  // Replay: draining again, and re-saving an already accepted or older snapshot, adds nothing.
-  assert.equal((await billing.drainBillingTransitions(client(db), A)).processed, 0);
-  assert.equal((await save(db, '2026-11-27T10:00:00Z', { p_auto_renews: false }, { autoRenews: false })).journalId, null, 'same verification: not journalled again');
-  assert.equal((await save(db, '2026-11-20T10:00:00Z', { p_auto_renews: true })).journalId, null, 'older (out of order) snapshot: not journalled');
+  const drained = await billing.drainBillingTransitions(client(db), A);
+  assert.equal(drained.failed, 0); assert.equal(drained.processed, 3); assert.equal(drained.collected, 1);
+  const events = await outbox(db);
+  assert.deepEqual(events.map(e => e.event), ['subscription_cancelled'], 'recorded although no longer the latest verification');
+  assert.equal(new Date(events[0].occurred_at).getTime(), new Date(cancelAt).getTime(), 'at its original verified time');
+  assert.equal(events[0].properties.reason, 'unavailable', 'no feedback given: reason unavailable');
   assert.equal((await journal(db)).length, 0);
-  assert.equal((await recorded(db)).length, 1);
 
-  // A failed record leaves the row for retry (attempts counted), then a later drain succeeds.
-  await save(db, '2026-11-28T10:00:00Z', { p_auto_renews: true }, { autoRenews: true });
-  await save(db, '2026-11-29T10:00:00Z', { p_auto_renews: false }, { autoRenews: false });
-  await asOwner(db); await db.exec('alter function public.record_account_billing_analytics(uuid,text,text,text,timestamptz,text,text,timestamptz,jsonb,timestamptz) rename to record_off'); await asService(db);
-  const failed = await billing.drainBillingTransitions(client(db), A);
-  // The renewal-on row has no facts and completes; only the cancellation row waits for retry.
-  assert.equal(failed.failed, 1); assert.equal((await journal(db)).length, 1);
-  assert.equal((await journal(db))[0].attempts, 1);
-  await asOwner(db); await db.exec('alter function public.record_off(uuid,text,text,text,timestamptz,text,text,timestamptz,jsonb,timestamptz) rename to record_account_billing_analytics'); await asService(db);
-  const retried = await billing.drainBillingTransitions(client(db), A);
-  assert.equal(retried.failed, 0); assert.equal((await journal(db)).length, 0);
-  assert.equal((await recorded(db)).filter(r => r.event === 'subscription_cancelled').length, 2, 'the second cancellation, once');
+  // Replay and out-of-order saves add nothing; re-draining adds nothing.
+  assert.equal((await save(db, laterAt, { p_auto_renews: false }, { autoRenews: false })).journalId, null, 'same verification replayed');
+  assert.equal((await save(db, ago(120))).journalId, null);
+  assert.equal((await billing.drainBillingTransitions(client(db), A)).processed, 0);
+  assert.equal((await outbox(db)).length, 1);
 
-  // A journal problem never fails the verified save; a failed save leaves no journal.
+  // Journal problem never fails the save; failed save leaves no journal (one transaction).
   const bad = await db.query('select public.upsert_subscription_with_billing_journal($1, null, $2) v',
-    [JSON.stringify(snapshot('2026-11-30T10:00:00Z')), JSON.stringify({ ...observation(), private: 'x' })]).then(r => r.rows[0].v);
-  assert.equal(bad.journalFailed, true); assert.ok(bad.id, 'subscription still saved');
-  await asOwner(db);
-  assert.equal((await db.query("select last_verified_at::text t from public.subscription_entitlements")).rows[0].t.startsWith('2026-11-30'), true);
-  await asService(db);
-  await assert.rejects(save(db, '2026-12-01T10:00:00Z', { p_status: 'explode' }), /save failed/);
-  assert.equal((await journal(db)).length, 0, 'rolled back together');
-
-  // Consent after the event: suppressed (no retrospective consent) and the row still completes.
-  await asOwner(db); await db.exec(`update public.account_billing_analytics_consent set granted_at='2026-12-10T00:00:00Z'`); await asService(db);
-  await save(db, '2026-12-02T10:00:00Z', { p_auto_renews: false }, { autoRenews: false });
-  await save(db, '2026-12-03T10:00:00Z', { p_auto_renews: true }, { autoRenews: true });
-  await save(db, '2026-12-04T10:00:00Z', { p_auto_renews: false }, { autoRenews: false });
-  const before = (await recorded(db)).length;
-  await billing.drainBillingTransitions(client(db), A);
-  assert.equal((await recorded(db)).length, before, 'nothing recorded before the choice was made');
+    [JSON.stringify(snapshot(ago(70))), JSON.stringify({ ...observation(), private: 'x' })]).then(r => r.rows[0].v);
+  assert.equal(bad.journalFailed, true); assert.ok(bad.id);
+  await assert.rejects(save(db, ago(69), { p_status: 'explode' }), /save failed/);
   assert.equal((await journal(db)).length, 0);
+  await db.close();
+});
 
-  // Unsent rows expire after 7 days; deletion removes rows and suppresses recording.
-  await save(db, '2026-12-05T10:00:00Z', { p_auto_renews: true }, { autoRenews: true });
-  await asOwner(db); await db.exec("update public.billing_analytics_transitions set created_at = clock_timestamp() - interval '8 days'"); await asService(db);
+test('reason linkage, offer acceptance, consent timing, expiry, deletion and privileges', { skip }, async () => {
+  const db = await fresh(); await asService(db); await consentAt(db, ago(150));
+  await save(db, ago(100));
+  // Feedback inside the interval (after the previous verification, before the cancellation).
+  await owner(db, `insert into public.subscription_cancellation_feedback values ($1, gen_random_uuid(), $2, 'too_expensive', 'PRIVATE free text', $3, null)`, [A, SUB, ago(95)]);
+  await save(db, ago(90), { p_auto_renews: false }, { autoRenews: false });
+  // Feedback given before the previous verification is not linked to a later cancellation.
+  await owner(db, `insert into public.subscription_cancellation_feedback values ($1, gen_random_uuid(), $2, 'not_using', null, $3, null)`, [A, SUB, ago(89)]);
+  await save(db, ago(85), { p_auto_renews: true }, { autoRenews: true });
+  await save(db, ago(84), { p_auto_renews: false }, { autoRenews: false });
+  // An accepted offer: journalled with its verified save, recorded once at its purchase time.
+  await save(db, ago(60), { p_auto_renews: true }, { autoRenews: true, retentionOffer: { transactionId: 'offer-tx-1', purchasedAt: ago(61) } });
+  await billing.drainBillingTransitions(client(db), A);
+  const events = await outbox(db);
+  assert.deepEqual(events.map(e => [e.event, e.properties.reason ?? null]),
+    [['subscription_cancelled', 'too_expensive'], ['subscription_cancelled', 'unavailable'], ['retention_offer_accepted', null]]);
+  assert.doesNotMatch(JSON.stringify(events), /PRIVATE/, 'free text never enters analytics');
+  assert.deepEqual(Object.keys(events[2].properties).sort(), ['environment', 'provider']);
+  // The same offer transaction seen again (e.g. the notification after the app) is one event.
+  await save(db, ago(50), { p_auto_renews: true }, { autoRenews: true, retentionOffer: { transactionId: 'offer-tx-1', purchasedAt: ago(61) } });
+  await billing.drainBillingTransitions(client(db), A);
+  assert.equal((await outbox(db)).filter(e => e.event === 'retention_offer_accepted').length, 1);
+
+  // Choice made after the event: suppressed, and the row still completes (no retrospective consent).
+  await consentAt(db, ago(30));
+  await save(db, ago(40), { p_auto_renews: false }, { autoRenews: false });
+  const before = (await outbox(db)).length;
+  await billing.drainBillingTransitions(client(db), A);
+  assert.equal((await outbox(db)).length, before); assert.equal((await journal(db)).length, 0);
+  // Withdrawn choice: suppressed.
+  await owner(db, 'update public.account_billing_analytics_consent set granted = false where user_id = $1', [A]);
+  await save(db, ago(20), { p_auto_renews: true }, { autoRenews: true });
+  await save(db, ago(19), { p_auto_renews: false }, { autoRenews: false });
+  await billing.drainBillingTransitions(client(db), A);
+  assert.equal((await outbox(db)).length, before);
+
+  // Unsent rows expire after 7 days; deletion removes rows; client roles have no access.
+  await save(db, ago(10), { p_auto_renews: true }, { autoRenews: true });
+  await owner(db, "update public.billing_analytics_transitions set created_at = clock_timestamp() - interval '8 days'");
   assert.equal((await billing.drainBillingTransitions(client(db), A)).processed, 0);
-  assert.equal((await journal(db)).length, 0, 'expired, never sent');
-  await save(db, '2026-12-06T10:00:00Z', { p_auto_renews: false }, { autoRenews: false });
-  await asOwner(db); await db.exec(`delete from auth.users where id='${A}'`);
-  assert.equal((await db.query('select count(*)::int n from public.billing_analytics_transitions')).rows[0].n, 0, 'deleted with the account');
-
-  // Privileges: client roles cannot read the journal or call its functions.
+  assert.equal((await journal(db)).length, 0);
+  await save(db, ago(5), { p_auto_renews: false }, { autoRenews: false });
+  await db.exec('reset role;'); await db.exec(`delete from auth.users where id='${A}'`);
+  assert.equal((await db.query('select count(*)::int n from public.billing_analytics_transitions')).rows[0].n, 0);
   for (const role of ['anon', 'authenticated']) {
     await db.exec(`reset role; set role ${role}`);
     await assert.rejects(db.query('select * from public.billing_analytics_transitions'), /permission denied/, role);
     await assert.rejects(db.query('select public.complete_billing_analytics_transition(gen_random_uuid())'), /permission denied/, role);
-    await assert.rejects(db.query("select * from public.pending_billing_analytics_transitions(null, 1)"), /permission denied/, role);
+    await assert.rejects(db.query('select * from public.pending_billing_analytics_transitions(null, 1)'), /permission denied/, role);
   }
   await db.exec("reset role; select set_config('request.jwt.claim.role','authenticated',false)");
   await assert.rejects(db.query("select public.upsert_subscription_with_billing_journal('{}'::jsonb, null, null)"), /Forbidden/);

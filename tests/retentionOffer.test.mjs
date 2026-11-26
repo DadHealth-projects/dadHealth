@@ -143,3 +143,12 @@ test('both Apple paths record after the verified save; only the notification pat
   assert.match(notify.slice(n - 40, n), /await $/);
   assert.match(notify, /'store_notification'\);/);
 });
+
+test('offer evidence for analytics comes only from our verified promotional offer', () => {
+  const config = lib.retentionOfferConfig(env);
+  assert.equal(JSON.stringify(lib.retentionOfferEvidence(offerTx(), config)), JSON.stringify({ transactionId: '2000000099', purchasedAt: '2026-11-26T12:00:00.000Z' }));
+  for (const tx of [offerTx({ offerIdentifier: 'winback' }), offerTx({ offerType: undefined }), offerTx({ purchaseDate: undefined }), offerTx({ transactionId: undefined }), null]) {
+    assert.equal(lib.retentionOfferEvidence(tx, config), null);
+  }
+  assert.equal(lib.retentionOfferEvidence(offerTx(), null), null, 'offer off');
+});

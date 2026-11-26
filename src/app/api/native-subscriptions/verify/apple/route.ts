@@ -5,7 +5,7 @@ import { authenticateNativeSubscriptionRequest } from "@/lib/native-subscription
 import { consumeSubscriptionVerificationAttempt } from "@/lib/native-subscriptions/rate-limit";
 import { nativeSubscriptionErrorResponse } from "@/lib/native-subscriptions/route-response";
 import { findSubscriptionEntitlement, getSubscriptionSummary, upsertSubscriptionEntitlement } from "@/lib/native-subscriptions/store";
-import { recordRetentionOfferRedemption, retentionOfferApplied } from "@/lib/native-subscriptions/retention-offer";
+import { recordRetentionOfferRedemption, retentionOfferApplied, retentionOfferEvidence } from "@/lib/native-subscriptions/retention-offer";
 
 export const runtime = "nodejs";
 
@@ -51,9 +51,10 @@ export async function POST(request: Request) {
       const summary = await getSubscriptionSummary(auth.admin, auth.user.id);
       return NextResponse.json({ ok: true, summary });
     }
+    const offer = retentionOfferEvidence(verified.transaction);
     await upsertSubscriptionEntitlement(
       auth.admin,
-      appleEntitlementInput(auth.user.id, verified, null, undefined, verificationStartedAt),
+      { ...appleEntitlementInput(auth.user.id, verified, null, undefined, verificationStartedAt), ...(offer ? { retentionOffer: offer } : {}) },
     );
     // Client audit A3: keep a durable record of an accepted retention offer. The purchase itself is
     // already verified and saved, so a failure here is logged, not returned; Apple's server
