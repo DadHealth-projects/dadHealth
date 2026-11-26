@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const funnel = ['onboarding_started', 'onboarding_completed', 'first_checkin', 'paywall_viewed', 'trial_started', 'trial_converted'];
-const billing = ['trial_started', 'trial_converted', 'trial_cancelled', 'subscription_cancelled'];
+const billing = ['trial_started', 'trial_converted', 'trial_cancelled', 'subscription_cancelled', 'retention_offer_accepted'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function dashboardDefinition({ account, environment = 'production' } = {}) {
   if (account && !uuid.test(account)) throw Error('Account must be an opaque Auth UUID');
@@ -12,7 +12,7 @@ export function dashboardDefinition({ account, environment = 'production' } = {}
   const env = { type: 'event', key: 'environment', operator: 'exact', value: [environment] };
   const scope = `${environment}${account ? ` / ${account}` : ''}`;
   const name = `Dad Health consented funnel / ${scope}`;
-  const description = 'Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. No 50% offer exists. Remote delivery remains off pending retention approval.';
+  const description = 'Consented occurrences only, not all registered accounts. Missing consent is not tracked drop-off. Billing stages are activation-blocked until attributable consent and verified transition context exist. Purchases without trials are outside this trial funnel. The 50% offer is counted only from Apple-verified promotional-offer transactions and stays empty until the store offer is configured. Cancellation reasons come only from a structured answer the member gave for that subscription, otherwise unavailable. Remote delivery remains off pending retention approval.';
   const totals = (events, extra = '') => ({ kind: 'DataTableNode', source: { kind: 'HogQLQuery', query:
     `SELECT event, count() AS event_total, uniqExact(distinct_id) AS unique_accounts FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND ${identity} AND event IN (${events.map(x => `'${x}'`).join(',')}) ${extra} GROUP BY event ORDER BY event` } });
   const panels = [
@@ -30,6 +30,9 @@ export function dashboardDefinition({ account, environment = 'production' } = {}
         `SELECT properties.${field} AS ${field}, count() AS event_total, uniqExact(distinct_id) AS unique_accounts FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND ${identity} AND event = '${event}' GROUP BY ${field} ORDER BY ${field}` } },
     })),
     { name: 'Verified cancellations — totals / accounts', query: totals(['trial_cancelled','subscription_cancelled'], `AND properties.environment = '${environment}'`) },
+    { name: 'Cancellations by reason (structured answers only)', query: { kind: 'DataTableNode', source: { kind: 'HogQLQuery', query:
+      `SELECT event, properties.reason AS reason, count() AS event_total, uniqExact(distinct_id) AS unique_accounts FROM events WHERE timestamp >= now() - INTERVAL 30 DAY AND ${identity} AND event IN ('trial_cancelled','subscription_cancelled') AND properties.environment = '${environment}' GROUP BY event, reason ORDER BY event, reason` } } },
+    { name: '50% offer accepted (Apple-verified) — totals / accounts', query: totals(['retention_offer_accepted'], `AND properties.environment = '${environment}'`) },
     {
       name: 'Authenticated app opens — totals / accounts',
       query: totals(['app_opened']),

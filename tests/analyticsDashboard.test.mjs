@@ -13,7 +13,14 @@ test('dashboard uses actual events; totals and accounts are distinct; billing en
  assert.equal(funnel.series[0].properties,undefined);assert.equal(funnel.series[4].properties[0].value[0],'production');
  const text=JSON.stringify(definition);assert.match(text,/unique_accounts/);assert.match(text,/event_total/);assert.match(text,/anonymous_identities/);
  assert.match(definition.description,/not all registered accounts/);assert.match(definition.description,/Purchases without trials/);
- assert.doesNotMatch(text,/offer_accepted/);
+ // Brief 06 "50% offer accepted" (client audit A3/A7): its own environment-filtered panel, only
+ // with the event the server contract allows; never part of the sequential trial funnel.
+ const offer=definition.panels.find(p=>p.name.startsWith('50% offer accepted'));
+ assert.ok(offer);assert.match(offer.query.source.query,/event IN \('retention_offer_accepted'\) AND properties\.environment = 'production'/);
+ assert.ok(source.includes('retention_offer_accepted'));assert.equal(funnel.series.some(s=>s.event==='retention_offer_accepted'),false);
+ const reasons=definition.panels.find(p=>p.name.startsWith('Cancellations by reason'));
+ assert.match(reasons.query.source.query,/GROUP BY event, reason/);
+ assert.match(definition.description,/Apple-verified promotional-offer transactions/);
 });
 test('opaque test account and sandbox filters validate; arbitrary text cannot enter queries',()=>{
  assert.throws(()=>dashboardDefinition({account:"a' OR 1=1"}));assert.throws(()=>dashboardDefinition({environment:'madeup'}));
