@@ -22,6 +22,7 @@ const { readWeeklyReport } = load('weekly-report-snapshots', {
   './weekly-report-calendar': calendar, './weekly-report': contract,
 });
 const now = new Date('2026-11-16T12:00:00Z');
+const notInstalled = { data: null, error: { code: 'PGRST202', message: 'Could not find the function' } };
 
 test('overall projection reads only the owners compatible prior snapshot and tolerates prior read failures', async () => {
   const current=snapshot(), previous=snapshot();
@@ -33,7 +34,7 @@ test('overall projection reads only the owners compatible prior snapshot and tol
   const before=JSON.stringify([current,previous]);
   for(const mode of ['valid','missing','error','wrong-owner','wrong-week','wrong-capture','throw']) {
     const reads=[];
-    const admin={rpc:async()=>({data:false,error:null}),from(){
+    const admin={rpc:async(name)=>name==='read_weekly_report_rows'?notInstalled:({data:false,error:null}),from(){
       const filters={};const query={select(){return query},eq(k,v){filters[k]=v;return query},async maybeSingle(){
         reads.push(filters);const first=reads.length===1,payload=first?current:previous;
         if(!first && mode==='throw')throw Error('private');
@@ -65,7 +66,7 @@ function snapshot() {
 }
 function harness() {
   const h = { access: false, accessError: null, queryError: null, payload: snapshot(),
-    rowOwner: 'owner', calls: [], filters: [], missing: false };
+    rowOwner: 'owner', calls: [], singleCalls: [], filters: [], missing: false };
   const query = {
     select(fields) { h.calls.push(['select', fields]); return query; },
     eq(key, value) { h.filters.push([key, value]); return query; },
@@ -76,7 +77,11 @@ function harness() {
     },
   };
   h.admin = {
-    async rpc(name, params) { h.calls.push([name, params]); return { data: h.access, error: h.accessError }; },
+    async rpc(name, params) {
+      // These cases cover the earlier three-call path, used until the single read is installed.
+      if (name === 'read_weekly_report_rows') { h.singleCalls.push(params); return notInstalled; }
+      h.calls.push([name, params]); return { data: h.access, error: h.accessError };
+    },
     from(table) { h.calls.push(['from', table]); return query; },
   };
   h.read = () => readWeeklyReport(h.admin, 'owner', '2026-11-09', now);

@@ -89,7 +89,10 @@ test('latest read is owner scoped and release filtered; exact-week never falls b
   const q = {};
   for (const method of ['select','eq','lte','order','limit']) q[method] = (...args) => { calls.push([method,...args]); return q; };
   q.maybeSingle = async () => ({ data: null });
-  const admin = { rpc: async () => ({ data: false }), from: () => q };
+  // Covers the earlier three-call path (used until read_weekly_report_rows is installed); the
+  // single read's predicates are proven on PostgreSQL in weeklyReportSingleRead.database.mjs.
+  const admin = { rpc: async (name) => name === 'read_weekly_report_rows'
+    ? { data: null, error: { code: 'PGRST202' } } : { data: false }, from: () => q };
   const { readWeeklyReport } = load('src/lib/reports/weekly-report-snapshots.ts', {
     './weekly-report-calendar': calendar, './weekly-report': load('src/lib/reports/weekly-report.ts'),
   });
