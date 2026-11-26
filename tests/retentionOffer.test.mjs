@@ -131,11 +131,12 @@ test('a failed or incomplete record throws without database detail, so callers c
 });
 
 test('both Apple paths record after the verified save; only the notification path blocks acknowledgement', () => {
-  const verify = readFileSync(new URL('../src/app/api/native-subscriptions/verify/apple/route.ts', import.meta.url), 'utf8');
+  const lf = text => text.replace(/\r\n/g, '\n'); // Windows checkouts use CRLF
+  const verify = lf(readFileSync(new URL('../src/app/api/native-subscriptions/verify/apple/route.ts', import.meta.url), 'utf8'));
   const v = verify.indexOf('recordRetentionOfferRedemption(auth.admin, auth.user.id, verified, "verified_purchase")');
   assert.ok(v > verify.indexOf('await upsertSubscriptionEntitlement('), 'verify: after the entitlement save');
   assert.match(verify.slice(verify.lastIndexOf('try {', v), v + 400), /try \{\s+await recordRetentionOfferRedemption[\s\S]+\} catch \(error\) \{\s+console\.error\("\[native-subscriptions\/apple-verify\] Retention offer record failed", \{\s+code: error instanceof Error \? error\.message/);
-  const notify = readFileSync(new URL('../src/app/api/native-subscriptions/notifications/apple/route.ts', import.meta.url), 'utf8');
+  const notify = lf(readFileSync(new URL('../src/app/api/native-subscriptions/notifications/apple/route.ts', import.meta.url), 'utf8'));
   const n = notify.indexOf("recordRetentionOfferRedemption(admin, userId,");
   assert.ok(n > notify.indexOf('await upsertSubscriptionEntitlement('), 'notification: after the entitlement save');
   assert.ok(n < notify.indexOf('await completeProviderEvent(admin, claimId);\n    return NextResponse.json({ ok: true });\n  } catch'), 'notification: before acknowledging');
