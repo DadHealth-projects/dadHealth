@@ -116,6 +116,7 @@ test('dispatcher discovers disabled optional schedules, every anniversary, and a
   '@/lib/reports/weekly-report-dispatch':{dispatchWeeklyReports:async()=>({})},'@/lib/notifications/item03-policy':{dispatchItem03Notifications:async()=>({})},
   'next/server':{NextResponse:{json:(body,options)=>({body,...options})}},'@/utils/supabase/admin':{createAdminSupabaseClient:()=>admin},
   '@/lib/notifications/buildPayload':load('src/lib/notifications/buildPayload.ts'),
+  '@/lib/safeError':load('src/lib/safeError.ts'), // real sanitiser (handoff 0245ef2 routes dispatch errors through it)
   '@/lib/notifications/delivery':{sendRateLimitedNotification:async a=>{attempts.push(a);return 'limited';}},
   '@/lib/notifications/time':{getLocalParts:()=>({localHHMM:'08:00'}),hhmmFromPgTime:v=>v.slice(0,5),isInWindow:(a,b)=>a===b,subtractMinutes:()=> '08:00'},
  },{CRON_SECRET:'local'});
