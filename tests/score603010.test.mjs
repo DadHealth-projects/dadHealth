@@ -45,6 +45,6 @@ test('SQL regression fixture covers pillars, difficult answers, missing check-in
     'missing Mind check-in earns no participation points',
     'Mini Partners',
     'pre-Change 07 historical formula remains unchanged',
-    'trend resumes when adjacent weeks both use same formula',
+    'trend compares adjacent weeks only after both use the same formula',
   ]) assert.ok(sqlRegression.includes(phrase), `missing SQL case: ${phrase}`);
 });
