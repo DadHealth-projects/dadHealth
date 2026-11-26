@@ -104,10 +104,16 @@ test('current canonical access handles upgrade, downgrade and manual grant witho
 });
 
 test('unknown or failed canonical entitlement never exposes a snapshot', async () => {
+  // Rule changed with client approval (2026-11-26, weekly report reliability): the member's own
+  // snapshot may be read in parallel with the access check, but nothing from it is ever returned
+  // or projected unless access is confirmed as a boolean. Previously no read was allowed at all.
   for (const value of [null, undefined, 'true', 1]) {
-    const h = harness(); h.access = value;
-    assert.equal((await h.read()).reason, 'entitlement_unavailable');
-    assert.equal(h.calls.some(c => c[0] === 'from'), false);
+    const h = harness(); h.access = value; h.payload.details.workouts = { value: 'PRIVATE' };
+    const result = await h.read();
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), { state: 'unavailable', reason: 'entitlement_unavailable' });
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE|payload|details|report/);
+    assert.equal(h.calls[0][0], 'user_has_pro_access', 'access check is started first');
+    assert.deepEqual(h.filters.filter(([k]) => k === 'user_id'), [['user_id', 'owner']], 'any read stays owner-filtered');
   }
   const h = harness(); h.access = true; h.accessError = Error('private');
   assert.equal((await h.read()).reason, 'entitlement_unavailable');
