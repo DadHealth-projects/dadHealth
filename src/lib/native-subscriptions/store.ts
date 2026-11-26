@@ -1,4 +1,4 @@
-import { collectVerifiedBilling } from '@/lib/analytics/billing';
+import { billingCollectionEnabled, drainBillingTransitions, journalObservation } from '@/lib/analytics/billing';
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 import { privacyOwnerRemoved, RemovedPrivacyOwnerError } from '@/lib/privacy/operations';
 
@@ -36,9 +36,19 @@ export async function upsertSubscriptionEntitlement(
     p_environment: input.environment,
     p_last_verified_at: input.lastVerifiedAt ?? new Date().toISOString(),
   };
-  const { data: transition, error } = await admin.rpc('upsert_subscription_analytics_snapshot', {
-    p_snapshot: snapshot, p_evidence: input.provider === 'apple' ? input.cancellationEvidence ?? null : null,
-  });
+  const evidence = input.provider === 'apple' ? input.cancellationEvidence ?? null : null;
+  // Client audit A6: with billing collection on, the verified transition is journalled in the
+  // same transaction as the snapshot, so a failure after the save cannot lose it.
+  const journal = billingCollectionEnabled() ? journalObservation(input) : null;
+  let { data: transition, error } = journal
+    ? await admin.rpc('upsert_subscription_with_billing_journal', { p_snapshot: snapshot, p_evidence: evidence, p_journal: journal })
+    : await admin.rpc('upsert_subscription_analytics_snapshot', { p_snapshot: snapshot, p_evidence: evidence });
+  let journalInstalled = Boolean(journal);
+  if (journal && error && ['PGRST202', '42883'].includes(String(error.code))) {
+    // Journal SQL not installed yet: save exactly as before and collect nothing (never non-durably).
+    journalInstalled = false;
+    ({ data: transition, error } = await admin.rpc('upsert_subscription_analytics_snapshot', { p_snapshot: snapshot, p_evidence: evidence }));
+  }
   const data = transition?.id;
 
   if (error) {
@@ -60,13 +70,13 @@ export async function upsertSubscriptionEntitlement(
       if (recorded.error) console.warn('[notifications/trial] evidence not recorded', { code: recorded.error.code });
     } catch { console.warn('[notifications/trial] evidence recording unavailable'); }
   }
-  // Background provider verification does not establish optional analytics consent.
-  // Keep this adapter inactive until an applicable consent policy is approved.
-  // A stale/replayed update returns the newer accepted row, never a fabricated transition.
-  if (transition?.current?.last_verified_at &&
-      Date.parse(transition.current.last_verified_at) === Date.parse(snapshot.p_last_verified_at)) {
-    await collectVerifiedBilling(admin, { ...input, trialEnd: input.trialEnd ?? transition.trialPeriod?.endsAt ?? null, lastVerifiedAt: snapshot.p_last_verified_at }, transition.previous, null, input.verifiedPayment);
-  }
+  // Billing facts come only from the journal (verified previous state saved with the snapshot);
+  // the account's separate billing choice is checked when each fact is recorded. A stale or
+  // replayed update is not journalled, so it never fabricates a transition. Draining also
+  // retries this owner's earlier rows, and never throws into the verified save.
+  if (journal && !journalInstalled) console.warn('[analytics]', { stage: 'billing_journal', code: 'journal_not_installed' });
+  if (journal && transition?.journalFailed) console.warn('[analytics]', { stage: 'billing_journal', code: 'journal_failed' });
+  if (journalInstalled) await drainBillingTransitions(admin, input.userId);
   return data;
 }
 

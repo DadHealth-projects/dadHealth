@@ -168,10 +168,12 @@ test('native registration correlates rate-configuration failure before issue RPC
  } finally {if(priorSecret===undefined)delete process.env.ANALYTICS_RATE_SECRET;else process.env.ANALYTICS_RATE_SECRET=priorSecret;if(priorTrust===undefined)delete process.env.ANALYTICS_TRUST_VERCEL_IP;else process.env.ANALYTICS_TRUST_VERCEL_IP=priorTrust;}
 });
 test('maintenance-only endpoint authenticates and cannot dispatch even with delivery enabled',async()=>{
+ // Real billing module: with collection off its journal drain makes no database call.
+ const billingApi=load('src/lib/analytics/billing.ts',{'./contract':contract});
  const calls=[];const admin={rpc:async(name)=>{calls.push(name);return {data:0};}};
  const old=process.env.ANALYTICS_WORKER_SECRET, oldDelivery=process.env.ANALYTICS_DELIVERY_ENABLED;process.env.ANALYTICS_WORKER_SECRET='fixture';process.env.ANALYTICS_DELIVERY_ENABLED='true';
  try {
- const route=load('src/app/api/analytics/maintenance/route.ts',{'@/utils/supabase/admin':{createAdminSupabaseClient:()=>admin},'@/lib/analytics/service':api});
+ const route=load('src/app/api/analytics/maintenance/route.ts',{'@/utils/supabase/admin':{createAdminSupabaseClient:()=>admin},'@/lib/analytics/service':api,'@/lib/analytics/billing':billingApi});
  assert.equal((await route.POST(new Request('https://fixture.invalid',{method:'POST'}))).status,401);assert.deepEqual(calls,[]);
  const response=await route.POST(new Request('https://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'}}));
  assert.equal(response.status,200);assert.deepEqual(calls,['cleanup_optional_analytics','recover_analytics_actions']);
