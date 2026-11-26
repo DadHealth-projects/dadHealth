@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const container = process.env.ANALYTICS_EXPORT_TEST_CONTAINER;
 test('maintenance scheduler uses authenticated POST, starts inactive and preserves existing jobs', { skip: !container }, () => {
-  assert.match(container, /^dadhealth-analytics-export-local-/);
+  assert.match(container, /^dadhealth-analytics-(?:export-)?local-/);
   const database = `maintenance_${Date.now()}`;
   const sql = input => execFileSync('docker', ['exec', '-i', container, 'psql', '-U', 'postgres', '-d', database, '-v', 'ON_ERROR_STOP=1', '-At'], { input, encoding: 'utf8' }).trim();
   execFileSync('docker', ['exec', container, 'createdb', '-U', 'postgres', database]);

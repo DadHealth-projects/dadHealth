@@ -17,7 +17,17 @@ export async function processDeletion(admin: PrivacyAdmin, o: Operation) {
       return;
     }
     if (local.data === 'required') {
-      const completed = await erasePosthogOwner(o.user_id, progress, () => checkpoint(admin, o, { checkpoint: progress }));
+      const completed = await erasePosthogOwner(o.user_id, progress, async () => {
+        // Successful pagination is progress, not a failed provider attempt.
+        const attempts = Math.max(0, o.attempts - 1);
+        await checkpoint(admin, o, { checkpoint: progress, attempts });
+        o.attempts = attempts;
+      }, fetch,
+        async aliases => {
+          const result = await admin.rpc('analytics_identity_aliases_safe', { p_owner: o.user_id, p_aliases: aliases });
+          if (result.error) throw new PrivacyError('analytics_cleanup_identity_unavailable');
+          return result.data === true;
+        });
       if (!completed) {
         if (o.attempts >= 8) throw new PrivacyError('analytics_cleanup_pending');
         return;

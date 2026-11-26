@@ -1,3 +1,5 @@
+Current implementation: [26 November closeout](../../item06-analytics-closeout.md). This directory remains a historical snapshot. Do not apply its archived migration or integration patch on top of current code.
+
 # Remote analytics export — inactive development proposal
 
 Not runtime code, not an installable migration and not provider-verified.

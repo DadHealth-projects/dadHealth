@@ -295,3 +295,65 @@ test('failed exposure initialization never blocks account creation and remains u
  sql(role+`insert into account_deletion_tombstones(user_id) values('${uid}')`);
  assert.match(sql(role+`select prepare_analytics_erasure('${uid}')`),/required$/);
 });
+
+
+test('separate account billing consent: default off, CAS, no retroactive collection, export, withdrawal and deletion', {skip:!container},async()=>{
+ sql(read('supabase/migrations/20261126130000_account_billing_analytics_consent.sql'));
+ sql(read('supabase/migrations/20261126132000_analytics_identity_guard.sql'));
+ const uid=owner(), foreign=owner(), op=randomUUID();
+ const last=s=>sql(role+s).split('\n').at(-1);
+ const choice=(granted,revision,id=randomUUID())=>JSON.parse(last(`select billing_analytics_choice('${uid}',${granted},${revision},'${id}')`));
+ assert.equal(JSON.parse(last(`select billing_analytics_choice('${uid}')`)).granted,false);
+ assert.equal(sql("select has_table_privilege('authenticated','account_billing_analytics_consent','SELECT')"),'f');
+ assert.equal(sql("select has_function_privilege('service_role','account_export_dataset(uuid)','EXECUTE')"),'f');
+ assert.throws(()=>sql(`set request.jwt.claim.role='authenticated';select billing_analytics_choice('${foreign}',true,0,'${op}')`));
+ const granted=choice(true,0,op);assert.equal(granted.revision,1);assert.equal(choice(true,0,op).revision,1);
+ const again=choice(true,1);assert.equal(again.grantedAt,granted.grantedAt);
+ assert.throws(()=>choice(false,0));
+ const subscription=randomUUID();
+ sql(`insert into subscription_entitlements(user_id,provider,environment,provider_subscription_id,status,last_verified_at) values('${uid}','apple','sandbox','${subscription}','trialing',now())`);
+ const verified=sql(`select last_verified_at from subscription_entitlements where user_id='${uid}'`);
+ const record=(at,key=randomUUID())=>`select record_account_billing_analytics('${uid}','apple','sandbox','${subscription}','${verified}','trial_started','billing:'||encode(sha256(convert_to('${key}','UTF8')),'hex'),'${at}','{"provider":"apple","environment":"sandbox"}')`;
+ assert.equal(last(record('2020-01-01')),'f');
+ const fact=randomUUID();assert.equal(last(record(verified,fact)),'t');assert.equal(last(record(verified,fact)),'f');
+ assert.equal(count(uid,'trial_started'),1);
+ const exported=JSON.parse(sql(`select account_export_dataset('${uid}')`));
+ assert.equal(exported.sections.billingAnalyticsChoice[0].granted,true);
+ assert.equal(JSON.stringify(exported).includes('secret_hash'),false);
+ const withdrawn=choice(false,2);assert.equal(withdrawn.granted,false);assert.equal(count(uid,'trial_started'),0);
+ assert.equal(last(record(verified)),'f');assert.throws(()=>choice(true,1));
+ const fresh=choice(true,3);assert.ok(Date.parse(fresh.grantedAt)>=Date.parse(granted.grantedAt));
+ assert.equal(last(record(granted.grantedAt)),'f');
+ assert.equal(last(`select analytics_identity_aliases_safe('${uid}','["${uid}","legacy-anon"]')`),'t');
+ assert.equal(last(`select analytics_identity_aliases_safe('${uid}','["${uid}","${foreign.toUpperCase()}"]')`),'f');
+ sql(`insert into account_deletion_tombstones(user_id) values('${uid}')`);
+ assert.equal(last(record(verified)),'f');assert.throws(()=>choice(true,4));
+ sql(`delete from analytics_consents where user_id='${uid}'`); // FK cleanup cannot hit a write barrier
+ sql(`delete from auth.users where id='${uid}'`);
+ assert.equal(sql(`select count(*) from account_billing_analytics_consent where user_id='${uid}'`),'0');
+});
+
+
+test('billing consent races serialize; withdrawal wins before waiting verified fact; stale grants never revive it', {skip:!container},async()=>{
+ const uid=owner();
+ const choice=(value,revision,id=randomUUID())=>`select billing_analytics_choice('${uid}',${value},${revision},'${id}')`;
+ const results=await Promise.allSettled([session(role+choice(true,0)),session(role+choice(false,0))]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ const saved=JSON.parse(sql(role+`select billing_analytics_choice('${uid}')`).split('\n').at(-1));
+ if(!saved.granted)sql(role+choice(true,1));
+ const current=JSON.parse(sql(role+`select billing_analytics_choice('${uid}')`).split('\n').at(-1));
+ const sub=randomUUID();sql(`insert into subscription_entitlements(user_id,provider,environment,provider_subscription_id,status,last_verified_at) values('${uid}','stripe','production','${sub}','active',now())`);
+ const verified=sql(`select last_verified_at from subscription_entitlements where user_id='${uid}'`);
+ const record=`select record_account_billing_analytics('${uid}','stripe','production','${sub}','${verified}','subscription_cancelled','billing:'||repeat('d',64),'${verified}','{"provider":"stripe","environment":"production","reason":"unavailable"}','${current.grantedAt}')`;
+ assert.equal(sql(role+record.replace(`'${current.grantedAt}')`,"'2020-01-01')")).split('\n').at(-1),'f','delayed cancellation with pre-consent observation is suppressed');
+ let held='';const holder=spawn('docker',args);holder.stdout.on('data',b=>held+=b);const done=new Promise((resolve,reject)=>holder.on('close',c=>c?reject(Error('holder failed')):resolve()));
+ holder.stdin.write(`${role}begin;select pg_advisory_xact_lock(hashtextextended('analytics-billing:${uid}',0));select 'HELD';\n`);
+ try{
+  for(let i=0;i<60&&!held.includes('HELD');i++)await new Promise(r=>setTimeout(r,50));assert.match(held,/HELD/);
+  const fact=session(`${role}set application_name='billing-fact-waiter';${record}`);
+  let waited=false;for(let i=0;i<30;i++){if(sql("select count(*) from pg_stat_activity where application_name='billing-fact-waiter' and wait_event='advisory'")==='1'){waited=true;break;}await new Promise(r=>setTimeout(r,50));}
+  assert.equal(waited,true);holder.stdin.end(`${choice(false,current.revision)};commit;\n`);await done;
+  assert.equal((await fact).trim().split('\n').at(-1),'f');assert.equal(count(uid,'subscription_cancelled'),0);
+  assert.throws(()=>sql(role+choice(true,current.revision)));
+ }finally{if(!holder.stdin.writableEnded)holder.stdin.end('rollback;\n');}
+});
