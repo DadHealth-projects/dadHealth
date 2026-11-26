@@ -65,9 +65,13 @@ export async function captureRemoteAnalytics(admin: PrivacyAdmin, op: Operation,
       if (!Array.isArray(page.results)) throw new PrivacyError('analytics_export_invalid');
       for (const row of page.results) {
         if (!object(row) || !uuid(row.uuid) || !Array.isArray(row.distinct_ids) || !row.distinct_ids.includes(op.user_id)
-          || !row.distinct_ids.every(id => typeof id === 'string' && id.length > 0) || !(row.properties === null || object(row.properties)))
+          || !row.distinct_ids.every(id => typeof id === 'string' && id.length > 0))
           throw new PrivacyError('analytics_export_identity_unverified');
-        const profile: Profile = { id: row.uuid, distinctIds: [...new Set(row.distinct_ids as string[])].sort(), properties: row.properties, createdAt: row.created_at ?? null, providerProfile: row };
+        let properties: Record<string, unknown> | null;
+        if (row.properties === null) properties = null;
+        else if (object(row.properties)) properties = row.properties;
+        else throw new PrivacyError('analytics_export_identity_unverified');
+        const profile: Profile = { id: row.uuid, distinctIds: [...new Set(row.distinct_ids as string[])].sort(), properties, createdAt: row.created_at ?? null, providerProfile: row };
         const previous = result.find(p => p.id === profile.id);
         if (previous && canonical(previous) !== canonical(profile)) throw new PrivacyError('analytics_export_changed');
         if (!previous) result.push(profile);
