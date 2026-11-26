@@ -18,6 +18,9 @@ function load(path, mocks = {}, logs = []) {
   });
   return exports;
 }
+// Verified trial end 72 h ahead (day 5 of a 7-day trial), owner-scoped like the real query.
+const trialEnds = (ids) => { let owner = null, wanted = []; const q = { select: () => q, eq: (_k, v) => { owner = v; return q; }, in: (_k, v) => { wanted = v; return q; },
+  then: (resolve) => Promise.resolve({ data: owner ? wanted.filter((id) => ids.includes(id)).map((id) => ({ id, ends_at: new Date(Date.now() + 72 * 36e5).toISOString() })) : [], error: null }).then(resolve) }; return q; };
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const fn = (sql, name) => {
   const start = sql.indexOf(`function public.${name}(`);
@@ -77,7 +80,7 @@ test('notification copy is warm and short and keeps every destination', async ()
   assert.equal(api.pillarPayload('mind').link, '/mind');
   assert.equal(plain(api.pillarPayload('body').data).workout_id, api.KICK_START_WORKOUT);
   // Same paginated account reader mock as tests/item03Notifications.test.mjs.
-  const admin = { from: () => { let after = null; const q = { select: () => q, order: () => q, limit: () => q,
+  const admin = { from: (table) => { if (table === 'notification_trial_episodes') return trialEnds(['episode-1']); let after = null; const q = { select: () => q, order: () => q, limit: () => q,
     gt: (_key, value) => { after = value; return q; },
     then: (resolve) => Promise.resolve({ data: [{ user_id: 'a' }].filter((r) => after === null || r.user_id > after), error: null }).then(resolve) }; return q; },
     rpc: async () => ({ data: { allowed: true, date: '2026-11-25', timezone: 'Europe/London', dailyType: null, trials: ['episode-1'] } }) };
@@ -187,7 +190,7 @@ test('dispatcher reads each account context once per run, keeps daily-before-tri
   const rows = [{ user_id: 'a' }, { user_id: 'b' }, { user_id: 'c' }];
   const reads = [];
   const admin = {
-    from: () => { let after = null; const q = { select: () => q, order: () => q, limit: () => q, gt: (_k, v) => { after = v; return q; },
+    from: (table) => { if (table === 'notification_trial_episodes') return trialEnds(['t-a', 't-b']); let after = null; const q = { select: () => q, order: () => q, limit: () => q, gt: (_k, v) => { after = v; return q; },
       then: (resolve) => Promise.resolve({ data: rows.filter((r) => after === null || r.user_id > after), error: null }).then(resolve) }; return q; },
     rpc: async (name, args) => {
       reads.push(args.p_user_id);

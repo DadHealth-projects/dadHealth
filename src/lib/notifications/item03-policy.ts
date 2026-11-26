@@ -21,6 +21,27 @@ export function pillarPayload(pillar: unknown): NotificationPayload | null {
 }
 
 type Admin = ReturnType<typeof createAdminSupabaseClient>;
+
+/**
+ * Brief 01 day-5 notice. The agreed wording "Your trial ends in 2 days" is sent only while it is
+ * true for the verified trial end: 36-84 hours left (a 7-day trial reaches day 5 with 72 hours left).
+ * A delayed run, a retry or a late push rollout outside that window sends nothing rather than a
+ * wrong countdown. Expired, cancelled and converted trials are already excluded by item03_inbox_context.
+ */
+export const TRIAL_REMINDER_MIN_HOURS = 36;
+export const TRIAL_REMINDER_MAX_HOURS = 84;
+export function trialReminderDue(endsAt: unknown, now = Date.now()) {
+  const end = typeof endsAt === 'string' ? Date.parse(endsAt) : Number.NaN;
+  if (!Number.isFinite(end)) return false;
+  const hoursLeft = (end - now) / 3_600_000;
+  return hoursLeft >= TRIAL_REMINDER_MIN_HOURS && hoursLeft <= TRIAL_REMINDER_MAX_HOURS;
+}
+/** Verified end times for this member's eligible episodes, read just before sending. */
+async function trialEndsFor(admin: Admin, userId: string, ids: string[]) {
+  const { data, error } = await admin.from('notification_trial_episodes').select('id,ends_at').eq('user_id', userId).in('id', ids);
+  if (error) throw error;
+  return new Map(((data ?? []) as Array<{ id: string; ends_at: string }>).map((row) => [row.id, row.ends_at]));
+}
 /** Shape returned by item03_inbox_context (see the notification migrations). */
 type Item03Context = { allowed?: boolean; timezone: string; date: string; dailyType?: string | null; pillar?: unknown; trials?: string[] };
 export async function dispatchItem03Notifications(admin: Admin) {
@@ -60,7 +81,10 @@ export async function dispatchItem03Notifications(admin: Admin) {
           if (payload && await sendRateLimitedNotification({ admin, userId: account.user_id,
             type: payload.type, timezone: context.timezone, eventKey: `daily:${context.date}`, payload }) === 'sent') totals.sent++;
         }
-        if (kind === 'trial') for (const episode of context.trials ?? []) {
+        const trials = kind === 'trial' ? context.trials ?? [] : [];
+        const endsAt = trials.length ? await trialEndsFor(admin, account.user_id, trials) : null;
+        for (const episode of trials) {
+          if (!trialReminderDue(endsAt?.get(episode))) continue;
           // Brief 01: "Day 5 notification: your trial ends in 2 days."
           const payload: NotificationPayload = { type: 'trial_ending', heading: 'Your trial ends in 2 days',
             content: 'Keep Pro, or review your plan. Cancel anytime before then.', link: '/', data: { destination_version: '1', trial_episode: episode } };

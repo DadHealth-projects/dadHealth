@@ -15,6 +15,13 @@ function accounts(rows) {
     gt:(_key,value)=>{after=value;return q;},
     then:resolve=>Promise.resolve({data:rows.filter(r=>after===null||r.user_id>after),error:null}).then(resolve)};return q;}};
 }
+function withTrialEnds(base, ends) {
+  // notification_trial_episodes stub: verified end per episode, owner-filtered like the real query.
+  const profiles=base.from;
+  return {from:table=>{if(table!=='notification_trial_episodes')return profiles(table);
+    let owner=null,ids=[];const q={select:()=>q,eq:(_k,v)=>{owner=v;return q;},in:(_k,v)=>{ids=v;return q;},
+      then:resolve=>Promise.resolve({data:ids.filter(id=>id in ends&&owner).map(id=>({id,ends_at:ends[id]})),error:null}).then(resolve)};return q;}};
+}
 test('rollout disabled still discovers eligible accounts for inbox creation',async()=>{
   let delivered=0;
   const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{sendRateLimitedNotification:async()=>{delivered++;return 'limited';}}});
@@ -32,7 +39,7 @@ test('pillar destinations are fixed, validated and Body uses approved free worko
 test('all daily attempts precede trial attempts with stable episode identities',async()=>{
   const sent=[];
   const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{sendRateLimitedNotification:async a=>{sent.push(a);return 'sent';}}},{ITEM03_EXACT_PUSH_ENABLED:'true'});
-  const admin={...accounts([{user_id:'a'},{user_id:'b'}]),
+  const admin={...withTrialEnds(accounts([{user_id:'a'},{user_id:'b'}]),{episode:new Date(Date.now()+72*36e5).toISOString()}),
     rpc:async()=>({data:{allowed:true,timezone:'Europe/London',date:'2026-11-16',dailyType:'morning_checkin',trials:['episode']}})};
   assert.equal((await api.dispatchItem03Notifications(admin)).sent,4);
   assert.deepEqual(sent.map(a=>a.type),['morning_checkin','morning_checkin','trial_ending','trial_ending']);
@@ -58,4 +65,33 @@ test('provider uses reservation id and completes only after provider acceptance'
 test('claim errors never send and completion errors are not reported as sent',async()=>{
   const first=deliveryHarness([{error:Error('database')}]);await assert.rejects(first.run());assert.equal(first.calls.length,1);
   const last=deliveryHarness([{data:'claim'},{data:'claim'},{error:Error('completion')}]);await assert.rejects(last.run());
+});
+
+test('trial reminder wording is only sent while "ends in 2 days" is true for the verified end',()=>{
+  const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{}});
+  const now=Date.parse('2026-11-26T09:00:00Z'), at=h=>new Date(now+h*36e5).toISOString();
+  assert.equal(api.trialReminderDue(at(72),now),true,'on time: day 5 of a 7-day trial');
+  assert.equal(api.trialReminderDue(at(36),now),true);assert.equal(api.trialReminderDue(at(84),now),true);
+  assert.equal(api.trialReminderDue(at(35.9),now),false,'delayed: under 36 h left is never "2 days"');
+  assert.equal(api.trialReminderDue(at(6),now),false,'late rollout / retry hours before the end');
+  assert.equal(api.trialReminderDue(at(-1),now),false,'expired');
+  assert.equal(api.trialReminderDue(at(90),now),false,'too early');
+  for(const bad of [null,undefined,'',  'not-a-date',123]) assert.equal(api.trialReminderDue(bad,now),false,'unknown end never sends');
+});
+
+test('delayed, expired and unknown trials send nothing; on-time sends once per episode key',async()=>{
+  const sent=[];
+  const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{sendRateLimitedNotification:async a=>{sent.push(a);return 'sent';}}},{ITEM03_EXACT_PUSH_ENABLED:'true'});
+  const h=x=>new Date(Date.now()+x*36e5).toISOString();
+  const admin={...withTrialEnds(accounts([{user_id:'a'}]),{ontime:h(70),late:h(10),expired:h(-2)}),
+    rpc:async()=>({data:{allowed:true,timezone:'Europe/London',date:'2026-11-26',dailyType:null,trials:['ontime','late','expired','missing','ontime']}})};
+  await api.dispatchItem03Notifications(admin);
+  assert.deepEqual(sent.map(a=>a.eventKey),['trial:ontime','trial:ontime'],'only the on-time episode; a repeated id reuses the same idempotent claim key');
+  assert.equal(sent[0].payload.heading,'Your trial ends in 2 days');
+});
+
+test('the end time is read per account, owner-scoped, just before sending',()=>{
+  const src=readFileSync(new URL('../src/lib/notifications/item03-policy.ts',import.meta.url),'utf8');
+  assert.match(src,/from\('notification_trial_episodes'\)\.select\('id,ends_at'\)\.eq\('user_id', userId\)\.in\('id', ids\)/);
+  assert.match(src,/for \(const episode of trials\) \{\s*if \(!trialReminderDue\(endsAt\?\.get\(episode\)\)\) continue;/);
 });
