@@ -269,7 +269,7 @@ test('Stripe and Google snapshots preserve canonical payload through the atomic 
  assert.equal(calls[0][0],'upsert_subscription_analytics_snapshot');assert.equal(calls[0][1].p_snapshot.p_provider,provider);assert.equal(calls[0][1].p_evidence,null);assert.equal(calls[0][1].p_snapshot.p_current_period_end,input.currentPeriodEnd);}
 });
 async function appleHandlerHarness(){
- const {load,cancellation}=await cancellationModules();const h={writes:[],failed:0,completed:0,duplicate:false};
+ const {load,cancellation}=await cancellationModules();const h={writes:[],failed:0,completed:0,duplicate:false,offerRecords:[],offerRecordError:null};
  h.verified={notification:{notificationUUID:'event',notificationType:'DID_CHANGE_RENEWAL_STATUS',subtype:'AUTO_RENEW_DISABLED',signedDate:2000,data:{}},transaction:{originalTransactionId:'original',transactionId:'tx',productId:'monthly',environment:'Sandbox',appAccountToken:'owner',expiresDate:Date.now()+86400000},renewal:{originalTransactionId:'original',productId:'monthly',environment:'Sandbox',autoRenewStatus:0},environment:'sandbox'};
  h.route=await load('src/app/api/native-subscriptions/notifications/apple/route.ts',{
  'next/server':{NextResponse:{json:(body,options={})=>({body,status:options.status??200})}},
@@ -277,6 +277,7 @@ async function appleHandlerHarness(){
  '@/lib/native-subscriptions/apple':{verifyAppleNotification:async()=>h.verified,appleEntitlementInput:(owner,verified,renewal,status,lastVerifiedAt)=>({userId:owner,lastVerifiedAt,status:verified.transaction.revocationDate?'revoked':'active'})},
  '@/lib/native-subscriptions/provider-events':{claimProviderEvent:async()=>h.duplicate?null:'claim',completeProviderEvent:async()=>h.completed++,failProviderEvent:async()=>h.failed++},
  '@/lib/native-subscriptions/store':{findSubscriptionEntitlement:async()=>({user_id:'owner'}),upsertSubscriptionEntitlement:async(admin,input)=>h.writes.push(input)},
+ '@/lib/native-subscriptions/retention-offer':{recordRetentionOfferRedemption:async(admin,owner,verified,source)=>{h.offerRecords.push({owner,source,writesBefore:h.writes.length,completedBefore:h.completed});if(h.offerRecordError)throw h.offerRecordError;return false;}},
  '@/utils/supabase/admin':{createAdminSupabaseClient:()=>({})}});
  h.call=()=>h.route.POST({json:async()=>({signedPayload:'mock-signed-payload'})});return h;
 }
@@ -311,4 +312,12 @@ test('delayed enabled notification preserves provider signing time independent o
 test('verified Apple expiry keeps a terminal provider watermark',async()=>{
  const h=await appleHandlerHarness();h.verified.notification.notificationType='EXPIRED';h.verified.notification.data.status=2;
  await h.call();assert.equal(h.writes[0].cancellationEvidence.source,'apple_terminal');
+});
+
+test('Apple notification records an accepted retention offer after the save and before acknowledging; a failed record is retried by Apple',async()=>{
+ const h=await appleHandlerHarness();assert.equal((await h.call()).status,200);
+ assert.deepEqual(h.offerRecords.map(r=>({...r})),[{owner:'owner',source:'store_notification',writesBefore:1,completedBefore:0}]);assert.equal(h.completed,1);
+ const f=await appleHandlerHarness();f.offerRecordError=new Error('retention_offer_record_failed');
+ assert.equal((await f.call()).status,500);assert.equal(f.writes.length,1);assert.equal(f.completed,0);assert.equal(f.failed,1);
+ const d=await appleHandlerHarness();d.duplicate=true;await d.call();assert.equal(d.offerRecords.length,0);
 });

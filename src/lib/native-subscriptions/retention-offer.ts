@@ -57,6 +57,35 @@ export function signRetentionOffer(item: SubscriptionEntitlementRow, userId: str
   return { productId: item.product_id!, offer: { identifier: config.offerId, keyIdentifier: config.keyId, nonce: nonce.toLowerCase(), signature, timestamp: now } };
 }
 
+type RedemptionTransaction = {
+  offerType?: number; offerIdentifier?: string; originalTransactionId?: string; transactionId?: string;
+  productId?: string; purchaseDate?: number;
+};
+type RpcClient = { rpc: (name: string, params: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }> };
+
+/**
+ * Durable record (client audit A3) of an Apple-verified transaction that used our retention offer.
+ * Call only after Apple's signature was verified and the owner's subscription row was saved.
+ * Returns false (and writes nothing) when the transaction did not use the configured offer.
+ * Idempotent on Apple's transaction id; throws when the record could not be saved.
+ */
+export async function recordRetentionOfferRedemption(admin: RpcClient, userId: string,
+  verified: { transaction: RedemptionTransaction | null | undefined; environment: string },
+  source: 'verified_purchase' | 'store_notification', config: RetentionOfferConfig | null = retentionOfferConfig()): Promise<boolean> {
+  const t = verified.transaction;
+  if (!t || !retentionOfferApplied(t, config)) return false;
+  if (!t.originalTransactionId || !t.transactionId || !t.productId) throw new Error('retention_offer_transaction_incomplete');
+  const { error } = await admin.rpc('record_retention_offer_redemption', {
+    p_user_id: userId, p_provider: 'apple', p_environment: verified.environment,
+    p_original_transaction_id: t.originalTransactionId, p_transaction_id: t.transactionId,
+    p_offer_identifier: t.offerIdentifier, p_product_id: t.productId,
+    p_purchased_at: typeof t.purchaseDate === 'number' && Number.isFinite(t.purchaseDate) ? new Date(t.purchaseDate).toISOString() : null,
+    p_source: source,
+  });
+  if (error) throw new Error('retention_offer_record_failed');
+  return true;
+}
+
 /**
  * Authoritative acceptance check: Apple's verified transaction carries the promotional offer type and
  * our configured offer identifier. A purchase without the offer (or with another offer) is never "accepted".

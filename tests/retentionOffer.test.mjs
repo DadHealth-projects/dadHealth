@@ -88,3 +88,57 @@ test('Apple verify returns the offer flag computed from the verified transaction
   assert.match(route, /retentionOfferApplied: retentionOfferApplied\(verified\.transaction\)/);
   assert.doesNotMatch(route, /retentionOfferApplied[^;]*body\./, 'never from the client request');
 });
+
+// Client audit A3: durable record of an accepted retention offer.
+const offerTx = (over = {}) => ({ offerType: apple.OfferType.PROMOTIONAL_OFFER, offerIdentifier: 'retention_50_3m',
+  originalTransactionId: '2000000001', transactionId: '2000000099', productId: 'pro.monthly', purchaseDate: Date.UTC(2026, 10, 26, 12), ...over });
+function rpcSpy(error = null) {
+  const calls = [];
+  return { calls, admin: { rpc: async (name, params) => { calls.push([name, params]); return { data: { recorded: true }, error }; } } };
+}
+
+test('an accepted offer is recorded once with Apple\'s verified fields and the verified owner', async () => {
+  const config = lib.retentionOfferConfig(env), spy = rpcSpy();
+  assert.equal(await lib.recordRetentionOfferRedemption(spy.admin, USER, { transaction: offerTx(), environment: 'sandbox' }, 'verified_purchase', config), true);
+  assert.equal(JSON.stringify(spy.calls), JSON.stringify([['record_retention_offer_redemption', {
+    p_user_id: USER, p_provider: 'apple', p_environment: 'sandbox', p_original_transaction_id: '2000000001',
+    p_transaction_id: '2000000099', p_offer_identifier: 'retention_50_3m', p_product_id: 'pro.monthly',
+    p_purchased_at: '2026-11-26T12:00:00.000Z', p_source: 'verified_purchase' }]]));
+});
+
+test('nothing is recorded without our verified promotional offer, or while the offer is off', async () => {
+  const config = lib.retentionOfferConfig(env);
+  for (const [label, tx, cfg] of [['no offer', offerTx({ offerType: undefined, offerIdentifier: undefined }), config],
+    ['intro offer', offerTx({ offerType: apple.OfferType.INTRODUCTORY_OFFER }), config],
+    ['other offer id', offerTx({ offerIdentifier: 'winback' }), config], ['offer off', offerTx(), null],
+    ['no transaction', null, config]]) {
+    const spy = rpcSpy();
+    assert.equal(await lib.recordRetentionOfferRedemption(spy.admin, USER, { transaction: tx, environment: 'production' }, 'store_notification', cfg), false, label);
+    assert.equal(spy.calls.length, 0, label);
+  }
+});
+
+test('a failed or incomplete record throws without database detail, so callers can retry', async () => {
+  const config = lib.retentionOfferConfig(env);
+  await assert.rejects(lib.recordRetentionOfferRedemption(rpcSpy({ code: 'P0002', message: 'private' }).admin, USER,
+    { transaction: offerTx(), environment: 'production' }, 'store_notification', config), /^Error: retention_offer_record_failed$/);
+  for (const missing of ['originalTransactionId', 'transactionId', 'productId']) {
+    const spy = rpcSpy();
+    await assert.rejects(lib.recordRetentionOfferRedemption(spy.admin, USER, { transaction: offerTx({ [missing]: undefined }), environment: 'production' },
+      'store_notification', config), /retention_offer_transaction_incomplete/, missing);
+    assert.equal(spy.calls.length, 0);
+  }
+});
+
+test('both Apple paths record after the verified save; only the notification path blocks acknowledgement', () => {
+  const verify = readFileSync(new URL('../src/app/api/native-subscriptions/verify/apple/route.ts', import.meta.url), 'utf8');
+  const v = verify.indexOf('recordRetentionOfferRedemption(auth.admin, auth.user.id, verified, "verified_purchase")');
+  assert.ok(v > verify.indexOf('await upsertSubscriptionEntitlement('), 'verify: after the entitlement save');
+  assert.match(verify.slice(verify.lastIndexOf('try {', v), v + 400), /try \{\s+await recordRetentionOfferRedemption[\s\S]+\} catch \(error\) \{\s+console\.error\("\[native-subscriptions\/apple-verify\] Retention offer record failed", \{\s+code: error instanceof Error \? error\.message/);
+  const notify = readFileSync(new URL('../src/app/api/native-subscriptions/notifications/apple/route.ts', import.meta.url), 'utf8');
+  const n = notify.indexOf("recordRetentionOfferRedemption(admin, userId,");
+  assert.ok(n > notify.indexOf('await upsertSubscriptionEntitlement('), 'notification: after the entitlement save');
+  assert.ok(n < notify.indexOf('await completeProviderEvent(admin, claimId);\n    return NextResponse.json({ ok: true });\n  } catch'), 'notification: before acknowledging');
+  assert.match(notify.slice(n - 40, n), /await $/);
+  assert.match(notify, /'store_notification'\);/);
+});
