@@ -14,6 +14,12 @@ const SNAPSHOT_FIELDS = 'user_id,reporting_week_start,delivery_at,captured_at,pa
 // Only "the function is not installed yet" selects the earlier three-call path. Every other
 // failure of the single read fails closed: access is unknown, so nothing is shown.
 const SINGLE_READ_NOT_INSTALLED = new Set(['PGRST202', '42883']);
+// While the function is not installed, skip the failed extra round trip on every read: this
+// server instance re-checks at most every 5 minutes, then uses the single read once it exists.
+const SINGLE_READ_RECHECK_MS = 5 * 60_000;
+let singleReadMissingUntil = 0;
+/** Test hook: forget a remembered "not installed" answer. */
+export function resetWeeklyReportSingleReadProbe() { singleReadMissingUntil = 0; }
 
 /**
  * No generation on GET. The owner must come from verified server authentication.
@@ -22,10 +28,12 @@ const SINGLE_READ_NOT_INSTALLED = new Set(['PGRST202', '42883']);
  */
 export async function readWeeklyReport(admin: AdminClient, owner: string, week?: string, now = new Date()): Promise<ReportReadResult> {
   const release = week ? reportReleaseForWeek(week) : latestReleasedReportWeek(now);
+  if (Date.now() < singleReadMissingUntil) return readWeeklyReportSequential(admin, owner, week, now);
   const { data, error } = await admin.rpc('read_weekly_report_rows', {
     p_user_id: owner, p_week: week ? release.weekStart : null, p_now: now.toISOString(),
   });
   if (error && SINGLE_READ_NOT_INSTALLED.has(String((error as { code?: unknown }).code ?? ''))) {
+    singleReadMissingUntil = Date.now() + SINGLE_READ_RECHECK_MS;
     return readWeeklyReportSequential(admin, owner, week, now);
   }
   if (error || !data || typeof data !== 'object' || Array.isArray(data)) return { state: 'unavailable', reason: 'entitlement_unavailable' };

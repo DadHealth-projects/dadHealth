@@ -7,12 +7,12 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 
-function load(name, dependencies = {}) {
+function load(name, dependencies = {}, DateImpl = Date) {
   const exports = {};
   const source = readFileSync(new URL(`../src/lib/reports/${name}.ts`, import.meta.url), 'utf8');
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
-  } }).outputText, { exports, Intl, Date, require: id => {
+  } }).outputText, { exports, Intl, Date: DateImpl, require: id => {
     if (!(id in dependencies)) throw Error(`Unexpected dependency: ${id}`);
     return dependencies[id];
   } });
@@ -20,9 +20,10 @@ function load(name, dependencies = {}) {
 }
 const calendar = load('weekly-report-calendar');
 const contract = load('weekly-report');
-const { readWeeklyReport } = load('weekly-report-snapshots', {
+const { readWeeklyReport, resetWeeklyReportSingleReadProbe } = load('weekly-report-snapshots', {
   './weekly-report-calendar': calendar, './weekly-report': contract,
 });
+test.beforeEach(() => resetWeeklyReportSingleReadProbe());
 const now = new Date('2026-11-16T12:00:00Z');
 
 function snapshot(weekStart = '2026-11-09', deliveryAt = '2026-11-15T06:00:00Z', total = 70) {
@@ -115,6 +116,7 @@ test('a failed single read fails closed and never falls back to separate reads',
 
 test('only a not-installed function selects the earlier path, which still checks access before reading', async () => {
   for (const code of ['PGRST202', '42883']) {
+    resetWeeklyReportSingleReadProbe();
     const order = [];
     const query = { select() { return query; }, eq() { return query; },
       async maybeSingle() { order.push('snapshot'); return { data: row(snapshot()), error: null }; } };
@@ -185,4 +187,41 @@ test('migration: access is evaluated before any snapshot read; service role only
   assert.match(sql, /revoke all on function public\.read_weekly_report_rows\(uuid, date, timestamptz\) from public, anon, authenticated;/);
   assert.match(sql, /grant execute on function public\.read_weekly_report_rows\(uuid, date, timestamptz\) to service_role;/);
   for (const m of body.matchAll(/from public\.weekly_report_snapshots s\s+where ([^;]+);/g)) assert.match(m[1], /s\.user_id = p_user_id/);
+});
+
+test('before the function is installed, a server instance skips the failed probe for 5 minutes, then re-checks', async () => {
+  let clock = Date.parse('2026-11-27T10:00:00Z');
+  class FakeDate extends Date { static now() { return clock; } }
+  const lib = load('weekly-report-snapshots', { './weekly-report-calendar': calendar, './weekly-report': contract }, FakeDate);
+  const calls = [];
+  let installed = false;
+  const query = { select() { return query; }, eq() { return query; },
+    async maybeSingle() { calls.push('snapshot'); return { data: row(snapshot()), error: null }; } };
+  const admin = {
+    async rpc(name) {
+      calls.push(name);
+      if (name === 'read_weekly_report_rows') return installed
+        ? { data: { access: false, current: row(snapshot()), prior: null }, error: null }
+        : { data: null, error: { code: 'PGRST202' } };
+      return { data: false, error: null };
+    },
+    from() { return query; },
+  };
+  const read = async () => { calls.length = 0; const r = await lib.readWeeklyReport(admin, 'owner', '2026-11-09', now); return [r.state, [...calls]]; };
+  assert.deepEqual(await read(), ['available', ['read_weekly_report_rows', 'user_has_pro_access', 'snapshot']]);
+  assert.deepEqual(await read(), ['available', ['user_has_pro_access', 'snapshot']], 'no repeated failed probe');
+  installed = true; clock += 4 * 60_000;
+  assert.deepEqual(await read(), ['available', ['user_has_pro_access', 'snapshot']], 'still within 5 minutes');
+  clock += 61_000;
+  assert.deepEqual(await read(), ['available', ['read_weekly_report_rows']], 'single read used once installed');
+  assert.deepEqual(await read(), ['available', ['read_weekly_report_rows']]);
+});
+
+test('other failures are never remembered: the next read tries the single read again', async () => {
+  let fail = true;
+  const h = harness(() => fail ? { data: null, error: { code: '57014' } } : { data: { access: true, current: row(snapshot()), prior: null }, error: null });
+  assert.equal((await readWeeklyReport(h.admin, 'owner', '2026-11-09', now)).reason, 'entitlement_unavailable');
+  fail = false;
+  assert.equal((await readWeeklyReport(h.admin, 'owner', '2026-11-09', now)).state, 'available');
+  assert.equal(h.rpcCalls.length, 2); assert.deepEqual(h.otherCalls, []);
 });
