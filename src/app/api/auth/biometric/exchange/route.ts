@@ -67,8 +67,9 @@ export async function POST(request: Request) {
     }
 
     const validDeviceId = isValidBiometricDeviceId(body?.deviceId);
-    const validCredential = isValidBiometricCredential(body?.credential);
-    const suppliedCredential = validCredential ? body.credential : "0".repeat(64);
+    const credential = body?.credential;
+    const validCredential = isValidBiometricCredential(credential);
+    const suppliedCredential = validCredential ? credential : "0".repeat(64);
     const suppliedDigest = digestBiometricCredential(suppliedCredential);
 
     const deviceResult = validDeviceId
