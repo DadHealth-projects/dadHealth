@@ -1,3 +1,11 @@
+# Current handoff status - 26 November 2026
+
+See [analytics closeout](item06-analytics-closeout.md) for current files, three forward migrations and tests. Remote export now has a durable default-off integration and supported SQL-file adapter. Provider capability remains unverified. Keep delivery disabled and job 32 inactive.
+
+The following is the historical 21 November checkpoint. Its HEAD-equality, no-migration and no-runtime-integration statements and commit manifest are superseded; do not use them for current deployment.
+
+---
+
 # Backend handoff for Harsh — 2026-11-21
 
 ## Deployment boundary

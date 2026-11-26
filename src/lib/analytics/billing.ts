@@ -36,21 +36,22 @@ export function billingFacts(input: SubscriptionEntitlementInput, previous: Subs
     add(input.status === 'trialing' ? 'trial_cancelled' : 'subscription_cancelled',`${previous.last_verified_at}:${previous.current_period_end}`,at,true);
   return facts;
 }
-/** No applicable background-billing consent is currently defined. Callers pass
- * null. This is an explicit activation boundary, not an account-wide inference. */
+/** Only the separate server-persisted account choice authorizes background facts.
+ * The legacy argument is ignored: a device capability can never authorize billing.
+ * Collection remains default-off until the consent flow passes acceptance. */
 export async function collectVerifiedBilling(admin: ReturnType<typeof createAdminSupabaseClient>, input: SubscriptionEntitlementInput,
- previous: SubscriptionEntitlementRow | null, consent: BillingConsent | null, paid?: PaidEvidence) {
-  if (!consent || consent.owner!==input.userId) return { suppressed:true, collected:0 };
+ previous: SubscriptionEntitlementRow | null, _consent: BillingConsent | null, paid?: PaidEvidence) {
+  if (process.env.ANALYTICS_BILLING_COLLECTION_ENABLED !== 'true' || process.env.ANALYTICS_INGEST_ENABLED !== 'true'
+    || process.env.ANALYTICS_PRIVACY_ENABLED !== 'true') return { suppressed:true, collected:0 };
   let collected=0;
   try {
     for (const fact of billingFacts(input,previous,paid)) {
-      if (Date.parse(fact.timestamp)<Date.parse(consent.validFrom) || Date.parse(fact.timestamp)>Date.parse(consent.validUntil)
-        || !Number.isFinite(Date.parse(consent.validFrom)) || !Number.isFinite(Date.parse(consent.validUntil))) continue;
-      const result=await admin.rpc('record_verified_billing_analytics',{
-        p_owner:input.userId,p_consent:consent.consent,p_hash:consent.secretHash,
+      const result=await admin.rpc('record_account_billing_analytics',{
+        p_owner:input.userId,
         p_provider:input.provider,p_environment:input.environment,p_subscription:input.providerSubscriptionId,
         p_verified_at:input.lastVerifiedAt,p_event:fact.event,p_key:fact.key,p_at:fact.timestamp,p_properties:fact.properties,
-      });
+        p_observed_after: fact.event.endsWith('_cancelled') ? previous?.last_verified_at ?? null : fact.timestamp,
+      }).abortSignal(AbortSignal.timeout(3000));
       if(result.error) throw result.error;
       if(result.data===true) collected++;
     }

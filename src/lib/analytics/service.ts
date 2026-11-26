@@ -116,12 +116,14 @@ export async function deliver(item: Delivery, transport: typeof fetch=fetch): Pr
   const host=process.env.ANALYTICS_POSTHOG_CAPTURE_HOST, token=process.env.ANALYTICS_POSTHOG_TOKEN;
   if(!host || !['https://us.i.posthog.com','https://eu.i.posthog.com'].includes(host) || !token) throw new AnalyticsError('configuration_required');
   if(Date.parse(item.lease_until)<=Date.now()+10000) return 'retry';
-  const response=await transport(`${host}/i/v1/analytics/events`,{method:'POST',signal:AbortSignal.timeout(8000),headers:{
+  const response=await transport(`${host}/i/v1/analytics/events`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(8000),headers:{
     Authorization:`Bearer ${token}`,'Content-Type':'application/json','User-Agent':'dadhealth-analytics/1.0.0',
     'PostHog-Sdk-Info':'dadhealth/1.0.0','PostHog-Request-Id':item.id,'PostHog-Attempt':String(item.attempts),
     'PostHog-Request-Timestamp':new Date().toISOString(),
   },body:JSON.stringify({created_at:item.created_at,batch:[{uuid:item.id,event:item.event,distinct_id:item.distinct_id,timestamp:item.occurred_at,
-    properties:item.properties,options: {
+    // Provider-only privacy control; callers cannot supply reserved properties.
+    // No client IP is forwarded. Project-level IP discard still needs verification.
+    properties:{...item.properties, $geoip_disable:true},options: {
       process_person_profile: !item.distinct_id.startsWith('anonymous-'),
       disable_skew_correction: true,
     }}]})});

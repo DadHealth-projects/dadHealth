@@ -1,4 +1,12 @@
-﻿# PostHog retention and account-export compatibility
+# Current retention/export status - 26 November 2026
+
+See [analytics closeout](item06-analytics-closeout.md) for current implementation, migrations and acceptance blockers. Owner-filtered SQL-file export is implemented locally behind a durable default-off gate. Provider capability remains unverified. Delivery and job 32 stay paused. User reports mobile activation and ingestion now working after environment corrections; the historical 503 is not treated as a current code defect.
+
+The following is the historical 21 November design/isolation record. Statements that runtime integration or its adapter are absent are superseded. The retention decision and privacy limitations still apply.
+
+---
+
+# PostHog retention and account-export compatibility
 
 Decision recorded 2026-11-21: retain existing EU project **162656** on **Free**, with its one-year event-retention window. No paid upgrade. This decision does not activate delivery. Keep `ANALYTICS_DELIVERY_ENABLED=false`, and keep job 32 inactive pending review. The earlier registration HTTP 503 has no confirmed cause. Read-only checks on November 21 found successful grant RPC responses and a valid test-account consent; fresh device ingestion acceptance remains pending. Do not change registration based on the historical failure alone.
 

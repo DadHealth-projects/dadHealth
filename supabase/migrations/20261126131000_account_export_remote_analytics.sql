@@ -1,0 +1,162 @@
+begin;
+-- Remote data is staged privately. Only the complete immutable artifact is readable.
+create table public.account_export_analytics (
+ operation_id uuid primary key references public.account_export_artifacts(operation_id) on delete cascade,
+ revision integer not null default 0, ready boolean not null default false, state jsonb not null
+);
+create table public.account_export_analytics_events (
+ operation_id uuid not null references public.account_export_analytics(operation_id) on delete cascade,
+ id uuid not null, payload jsonb not null, primary key(operation_id,id)
+);
+alter table public.account_export_analytics enable row level security;
+alter table public.account_export_analytics_events enable row level security;
+revoke all on public.account_export_analytics,public.account_export_analytics_events from public,anon,authenticated,service_role;
+
+create function public.lock_account_export_analytics(p_id uuid,p_lease uuid) returns public.account_privacy_operations
+language plpgsql security definer set search_path=pg_catalog,public as $$
+declare o public.account_privacy_operations;
+begin
+ if coalesce(auth.role(),'')<>'service_role' then raise exception 'Forbidden' using errcode='42501'; end if;
+ select * into o from public.account_privacy_operations where id=p_id;
+ if not found then raise exception 'Unavailable' using errcode='42501'; end if;
+ perform pg_advisory_xact_lock(hashtextextended('account-privacy:'||o.user_id::text,0));
+ select * into o from public.account_privacy_operations where id=p_id for update;
+ if o.kind<>'export' or o.state<>'processing' or o.lease_token is distinct from p_lease or o.lease_until<=clock_timestamp()
+ or exists(select 1 from public.account_deletion_tombstones where user_id=o.user_id)
+ or not exists(select 1 from public.account_export_artifacts where operation_id=p_id and user_id=o.user_id and expires_at>clock_timestamp()) then
+ raise exception 'Unavailable' using errcode='42501'; end if;
+ return o;
+end $$;
+revoke all on function public.lock_account_export_analytics(uuid,uuid) from public,anon,authenticated,service_role;
+
+create function public.begin_account_export_analytics(p_id uuid,p_lease uuid) returns jsonb
+language plpgsql security definer set search_path=pg_catalog,public as $$
+declare o public.account_privacy_operations; s public.account_export_analytics; captured text;
+begin
+ o:=public.lock_account_export_analytics(p_id,p_lease);
+ -- Previously handed-off email/download bytes are immutable, including legacy copies.
+ if o.handoff_at is not null then return jsonb_build_object('ready',true); end if;
+ select payload->>'generatedAt' into captured from public.account_export_artifacts where operation_id=p_id;
+ insert into public.account_export_analytics(operation_id,state) values(p_id,jsonb_build_object('phase','profiles','cutoff',captured,'startedAt',clock_timestamp())) on conflict do nothing;
+ select * into s from public.account_export_analytics where operation_id=p_id;
+ return jsonb_build_object('owner',o.user_id,'ready',s.ready,'revision',s.revision,'state',s.state);
+end $$;
+
+create function public.save_account_export_analytics(p_id uuid,p_lease uuid,p_revision integer,p_state jsonb,p_records jsonb) returns jsonb
+language plpgsql security definer set search_path=pg_catalog,public as $$
+declare o public.account_privacy_operations; s public.account_export_analytics; r jsonb;
+begin
+ o:=public.lock_account_export_analytics(p_id,p_lease);
+ if o.handoff_at is not null then raise exception 'Immutable export'; end if;
+ select * into strict s from public.account_export_analytics where operation_id=p_id for update;
+ if s.ready or s.revision<>p_revision then raise exception 'Revision conflict' using errcode='40001'; end if;
+ if p_state->>'cutoff' is distinct from s.state->>'cutoff' or p_state->>'startedAt' is distinct from s.state->>'startedAt'
+ or coalesce((p_state->>'rebuilds')::integer,0)<>coalesce((s.state->>'rebuilds')::integer,0)
+ or p_state->>'phase' not in ('profiles','events','verify','verify_profiles','complete') or jsonb_typeof(p_state->'aliases')<>'array'
+ or jsonb_typeof(p_records)<>'array' or jsonb_array_length(p_records)>100 then raise exception 'Invalid page'; end if;
+ -- A legacy alias must not be another Dad Health owner's Auth UUID.
+ if not (p_state->'aliases' ? o.user_id::text) or exists(
+ select 1 from jsonb_array_elements_text(p_state->'aliases') a(id) join auth.users u on u.id::text=lower(a.id) where u.id<>o.user_id
+ ) or exists(select 1 from jsonb_array_elements_text(p_state->'aliases') a(id) join public.account_deletion_tombstones t on t.user_id::text=lower(a.id) where t.user_id<>o.user_id) then raise exception 'Ambiguous analytics identity' using errcode='42501'; end if;
+ for r in select value from jsonb_array_elements(p_records) loop
+  if jsonb_typeof(r)<>'object' or not (p_state->'aliases' ? (r->>'distinctId')) or (r->>'timestamp')::timestamptz>(s.state->>'cutoff')::timestamptz then raise exception 'Invalid event'; end if;
+  if exists(select 1 from public.account_export_analytics_events where operation_id=p_id and id=(r->>'id')::uuid and payload<>r) then raise exception 'Conflicting event'; end if;
+  insert into public.account_export_analytics_events values(p_id,(r->>'id')::uuid,r) on conflict do nothing;
+ end loop;
+ update public.account_export_analytics set state=p_state,revision=revision+1 where operation_id=p_id;
+ return jsonb_build_object('revision',p_revision+1);
+end $$;
+
+-- Restart only the unhanded-off remote staging pass. The original local capture
+-- and its cutoff are immutable. Two rebuilds bound work under changing data.
+create function public.restart_account_export_analytics(p_id uuid,p_lease uuid,p_revision integer) returns jsonb
+language plpgsql security definer set search_path=pg_catalog,public as $$
+declare o public.account_privacy_operations; s public.account_export_analytics; next_state jsonb;
+begin
+ o:=public.lock_account_export_analytics(p_id,p_lease);
+ select * into strict s from public.account_export_analytics where operation_id=p_id for update;
+ if o.handoff_at is not null or s.ready then raise exception 'Immutable export'; end if;
+ if s.revision<>p_revision then raise exception 'Revision conflict' using errcode='40001'; end if;
+ if coalesce((s.state->>'rebuilds')::integer,0)>=2 then raise exception 'Remote export changed repeatedly' using errcode='55000'; end if;
+ next_state:=jsonb_build_object('phase','profiles','cutoff',s.state->>'cutoff','startedAt',s.state->>'startedAt',
+   'rebuilds',coalesce((s.state->>'rebuilds')::integer,0)+1);
+ delete from public.account_export_analytics_events where operation_id=p_id;
+ update public.account_export_analytics set state=next_state,revision=revision+1 where operation_id=p_id;
+ return jsonb_build_object('revision',p_revision+1,'state',next_state);
+end $$;
+revoke all on function public.restart_account_export_analytics(uuid,uuid,integer) from public,anon,authenticated;
+grant execute on function public.restart_account_export_analytics(uuid,uuid,integer) to service_role;
+
+create function public.finish_account_export_analytics(p_id uuid,p_lease uuid) returns boolean
+language plpgsql security definer set search_path=pg_catalog,public as $$
+declare o public.account_privacy_operations; s public.account_export_analytics; merged jsonb; local_events jsonb;
+begin
+ o:=public.lock_account_export_analytics(p_id,p_lease);
+ select * into strict s from public.account_export_analytics where operation_id=p_id for update;
+ if s.ready then return true; end if;
+ if o.handoff_at is not null or s.state->>'phase'<>'complete' or s.state->>'hash' is distinct from s.state->>'verifyHash'
+ or s.state->>'count' is distinct from s.state->>'verifyCount'
+ or (s.state->>'count')::bigint<>(select count(*) from public.account_export_analytics_events where operation_id=p_id) then raise exception 'Incomplete export'; end if;
+ select coalesce(payload#>'{sections,optionalAnalytics}','[]') into local_events from public.account_export_artifacts where operation_id=p_id;
+ -- Keep the remote event once, with its local capture alongside it. Preserve
+ -- differing properties and delivery state rather than silently overwriting them.
+ select coalesce(jsonb_agg(value order by value->>'id'),'[]') into merged from (
+ select e.payload||jsonb_build_object('source','posthog','localCapture',(
+   select l from jsonb_array_elements(local_events) l where l->>'id'=e.id::text limit 1)) as value
+ from public.account_export_analytics_events e where e.operation_id=p_id
+ union all
+ select l||jsonb_build_object('source','local') from jsonb_array_elements(local_events) l
+ where not exists(select 1 from public.account_export_analytics_events e where e.operation_id=p_id and e.id::text=l->>'id')
+ ) combined;
+ update public.account_export_artifacts set payload=jsonb_set(jsonb_set(jsonb_set(payload,
+ '{sections,optionalAnalytics}',merged),'{sections,posthogProfiles}',coalesce(s.state->'profiles','[]')),
+ '{sections,analyticsExportCoverage}',jsonb_build_object('project','162656','localCapturedAt',s.state->>'cutoff',
+ 'remoteReadStartedAt',s.state->>'startedAt','remoteReadCompletedAt',clock_timestamp(),
+ 'scope','Retained events at or before the local capture time, linked by the account UUID and verified provider aliases. Two matching reads; later provider ingestion is not part of this capture.',
+ 'profiles','Provider profiles at collection time. No email-based ownership guesses.','remoteEventCount',s.state->'count')) where operation_id=p_id;
+ update public.account_export_analytics set ready=true where operation_id=p_id;
+ -- No duplicate private provider dataset retained after finalization.
+ delete from public.account_export_analytics_events where operation_id=p_id;
+ update public.account_export_analytics set state=jsonb_build_object('phase','complete') where operation_id=p_id;
+ return true;
+end $$;
+revoke all on function public.begin_account_export_analytics(uuid,uuid),public.save_account_export_analytics(uuid,uuid,integer,jsonb,jsonb),public.finish_account_export_analytics(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.begin_account_export_analytics(uuid,uuid),public.save_account_export_analytics(uuid,uuid,integer,jsonb,jsonb),public.finish_account_export_analytics(uuid,uuid) to service_role;
+
+-- Preserve existing owner/expiry/deletion checks and immutable legacy handoffs.
+create function public.account_export_analytics_ready(p_id uuid) returns boolean
+language sql stable security definer set search_path=pg_catalog,public as $$
+ select exists(select 1 from public.account_privacy_operations o where o.id=p_id and o.kind='export' and
+ (o.handoff_at is not null or (coalesce(o.checkpoint->>'remoteAnalyticsExport','')<>'1'
+   and not exists(select 1 from public.account_export_analytics s where s.operation_id=o.id))
+ or exists(select 1 from public.account_export_analytics s where s.operation_id=o.id and s.ready)))
+$$;
+revoke all on function public.account_export_analytics_ready(uuid) from public,anon,authenticated,service_role;
+alter function public.read_account_export_chunk(uuid,uuid,integer,integer) rename to read_account_export_chunk_before_remote;
+create function public.read_account_export_chunk(p_id uuid,p_user_id uuid,p_offset integer default 0,p_limit integer default 65536) returns jsonb
+language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+ if coalesce(auth.role(),'')<>'service_role' then raise exception 'Forbidden' using errcode='42501'; end if;
+ if not public.account_export_analytics_ready(p_id) then return null; end if;
+ return public.read_account_export_chunk_before_remote(p_id,p_user_id,p_offset,p_limit);
+end $$;
+alter function public.read_account_export(uuid,uuid) rename to read_account_export_before_remote;
+create function public.read_account_export(p_id uuid,p_user_id uuid) returns jsonb
+language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+ if coalesce(auth.role(),'')<>'service_role' then raise exception 'Forbidden' using errcode='42501'; end if;
+ if not public.account_export_analytics_ready(p_id) then return null; end if;
+ return public.read_account_export_before_remote(p_id,p_user_id);
+end $$;
+alter function public.authorize_account_export_send(uuid,uuid) rename to authorize_account_export_send_before_remote;
+create function public.authorize_account_export_send(p_id uuid,p_lease uuid) returns jsonb
+language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+ if coalesce(auth.role(),'')<>'service_role' then raise exception 'Forbidden' using errcode='42501'; end if;
+ if not public.account_export_analytics_ready(p_id) then return null; end if;
+ return public.authorize_account_export_send_before_remote(p_id,p_lease);
+end $$;
+revoke all on function public.read_account_export_chunk_before_remote(uuid,uuid,integer,integer),public.read_account_export_before_remote(uuid,uuid),public.authorize_account_export_send_before_remote(uuid,uuid) from public,anon,authenticated,service_role;
+revoke all on function public.read_account_export_chunk(uuid,uuid,integer,integer),public.read_account_export(uuid,uuid),public.authorize_account_export_send(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.read_account_export_chunk(uuid,uuid,integer,integer),public.read_account_export(uuid,uuid),public.authorize_account_export_send(uuid,uuid) to service_role;
+commit;

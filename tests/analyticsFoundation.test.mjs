@@ -50,11 +50,12 @@ test('worker stays paused without remote retention approval but still cleans loc
 });
 test('remote cleanup requires provider completion and zero remaining events',async()=>{
  const {erasePosthogOwner}=load('src/lib/analytics/privacy.ts',{'./service':api,'./contract':contract});
- process.env.ANALYTICS_POSTHOG_API_HOST='https://eu.posthog.com';process.env.POSTHOG_PROJECT_ID='1';process.env.POSTHOG_API_KEY='fixture';
+ process.env.ANALYTICS_POSTHOG_API_HOST='https://eu.posthog.com';process.env.POSTHOG_PROJECT_ID='162656';process.env.POSTHOG_API_KEY='fixture';
  const p={};let saved=0,complete=false;const paths=[];
- const transport=async(url,init)=>{paths.push(url);return Response.json(url.includes('/deletion_status/')?{results:[{status:complete?'completed':'pending',delete_verified_at:complete?new Date().toISOString():null}]}:url.includes('/persons/?')?{results:[{uuid:id}]}:url.includes('/query/')?{results:[[0]]}:{persons_queued_for_deletion:1});};
+ const transport=async(url,init)=>{paths.push(url);return Response.json(url.includes('/deletion_status/')?{results:[{status:complete?'completed':'pending',delete_verified_at:complete?new Date().toISOString():null}]}:url.includes('/persons/?')?{results:complete?[]:[{uuid:id,distinct_ids:[owner]}]}:url.includes('/query/')?{results:[[0]]}:{persons_queued_for_deletion:1});};
  assert.equal(await erasePosthogOwner(owner,p,async()=>saved++,transport),false);assert.equal(saved,2);
  assert.equal(await erasePosthogOwner(owner,p,async()=>saved++,transport),false);complete=true;
+ assert.equal(await erasePosthogOwner(owner,p,async()=>saved++,transport),false);
  assert.equal(await erasePosthogOwner(owner,p,async()=>saved++,transport),true);assert.equal(paths.filter(v=>v.includes('bulk_delete')).length,1);
 });
 
@@ -90,7 +91,7 @@ test('worker route rejects unauthorized invocation before accessing database',as
 
 test('malformed remote count cannot be mistaken for successful erasure',async()=>{
  const {erasePosthogOwner}=load('src/lib/analytics/privacy.ts',{'./service':api,'./contract':contract});
- await assert.rejects(erasePosthogOwner(owner,{analyticsPersons:[],analyticsDeletionRequested:true},async()=>{},async()=>Response.json({results:[[null]]})),e=>e.code==='posthog_cleanup_invalid');
+ await assert.rejects(erasePosthogOwner(owner,{analyticsPersons:[],analyticsDeletionRequested:true,analyticsAliases:[owner],analyticsDiscoveryComplete:true},async()=>{},async()=>Response.json({results:[[null]]})),e=>e.code==='posthog_cleanup_invalid');
 });
 
 test('web requires explicit grant, renews known capability and never creates account consent on login',async()=>{

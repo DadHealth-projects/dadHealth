@@ -5,6 +5,7 @@ import { exportAttachment, exportAttachmentsFit, exportEncodedSizesFit, validate
 import { renderExportPdf, PDF_PRESENTATION_VERSION } from './export-pdf';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { captureRemoteAnalytics } from './export-analytics';
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -37,6 +38,15 @@ export async function processExport(admin: PrivacyAdmin, o: Operation) {
   const capture = await admin.rpc('capture_account_export', { p_id: o.id, p_lease: o.lease_token });
   if (capture.error) throw new PrivacyError('capture_failed');
   if (!capture.data) throw new PrivacyError('capture_unavailable');
+  // Once selected, a rollout change cannot silently downgrade a pending export.
+  // Already handed-off bytes and the existing local-only rollout remain intact.
+  if (!o.handoff_at && (o.checkpoint?.remoteAnalyticsExport === 1 || process.env.ANALYTICS_REMOTE_EXPORT_ENABLED === 'true')) {
+    if (o.checkpoint?.remoteAnalyticsExport !== 1) {
+      o.checkpoint = { ...o.checkpoint, remoteAnalyticsExport: 1 };
+      await checkpoint(admin, o, { checkpoint: o.checkpoint });
+    }
+    if (!await captureRemoteAnalytics(admin, o)) return;
+  }
   const metadata = await admin.rpc('read_account_export_chunk', { p_id: o.id, p_user_id: o.user_id, p_offset: 0, p_limit: 0 });
   if (metadata.error || !metadata.data || !Number.isSafeInteger(metadata.data.bytes)) throw new PrivacyError('artifact_unavailable');
   const saved = o.checkpoint?.exportPresentation as { version: number; mode: string; html: string; hashes: string[] } | undefined;
