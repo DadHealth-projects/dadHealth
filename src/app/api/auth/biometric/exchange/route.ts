@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 
 import {
@@ -121,7 +122,7 @@ export async function POST(request: Request) {
     return json({ tokenHash, type: "magiclink" }, 200);
   } catch (error) {
     if (!(error instanceof BiometricConfigurationError)) {
-      console.error("[auth/biometric/exchange] request failed", error);
+      console.error("[auth/biometric/exchange] request failed", safeError(error));
     }
     return json({ code: "exchange_unavailable" }, 503);
   }

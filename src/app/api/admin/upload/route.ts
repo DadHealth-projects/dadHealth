@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
@@ -67,7 +68,7 @@ export async function POST(req: Request) {
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
     return NextResponse.json({ url: data.publicUrl });
   } catch (err) {
-    console.error("[admin upload]", err);
+    console.error("[admin upload]", safeError(err));
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

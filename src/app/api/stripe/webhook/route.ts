@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { stripePaidEvidence } from '@/lib/analytics/provider-evidence';
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
     const stripe = getStripe();
     event = stripe.webhooks.constructEvent(rawBody, signature, secret);
   } catch (err) {
-    console.error("[stripe/webhook] Signature verification failed", err);
+    console.error("[stripe/webhook] Signature verification failed", safeError(err));
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true });
   } catch (e) {
     if (e instanceof RemovedPrivacyOwnerError) return NextResponse.json({ received: true });
-    console.error("[stripe/webhook] Handler error", e);
+    console.error("[stripe/webhook] Handler error", safeError(e));
     return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 }

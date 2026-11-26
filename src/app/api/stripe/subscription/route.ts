@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 
 import { getSubscriptionSummary } from "@/lib/native-subscriptions/store";
@@ -23,7 +24,7 @@ export async function GET() {
       status: summary.status,
     }, noStore);
   } catch (error) {
-    console.error("[stripe/subscription] Could not load canonical entitlement", error);
+    console.error("[stripe/subscription] Could not load canonical entitlement", safeError(error));
     return NextResponse.json({ error: "Subscription status unavailable" }, { ...noStore, status: 503 });
   }
 }

@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 
 import {
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
     return json({ deviceId: data.id }, 201);
   } catch (error) {
     if (!(error instanceof BiometricConfigurationError)) {
-      console.error("[auth/biometric/device] enrollment failed", error);
+      console.error("[auth/biometric/device] enrollment failed", safeError(error));
     }
     return json({ code: "enrollment_unavailable" }, 503);
   }
@@ -90,7 +91,7 @@ export async function DELETE(request: Request) {
 
     return json({ ok: true }, 200);
   } catch (error) {
-    console.error("[auth/biometric/device] revocation failed", error);
+    console.error("[auth/biometric/device] revocation failed", safeError(error));
     return json({ code: "revocation_unavailable" }, 503);
   }
 }

@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
@@ -194,12 +195,7 @@ const getPublicMealPlanError = (err: unknown) => {
 }
 
 const logMealPlanError = (err: unknown) => {
-  const details = getMealPlanErrorDetails(err)
-
-  console.error('[generate-meal-plan] failed', {
-    ...details,
-    raw: err,
-  })
+  console.error('[generate-meal-plan] failed', safeError(err))
 }
 
 const isLikelyBillingProviderError = (details: ReturnType<typeof getMealPlanErrorDetails>) => {
@@ -572,7 +568,7 @@ export async function GET(req: Request) {
     try {
       isPro = (await getSubscriptionSummary(createAdminSupabaseClient(), user.id)).isPro
     } catch (error) {
-      console.error('[generate-meal-plan] entitlement lookup failed', error)
+      console.error('[generate-meal-plan] entitlement lookup failed', safeError(error))
       return NextResponse.json(
         { error: 'We could not verify your Pro access. Please try again.', requestId },
         { status: 503, headers },
@@ -594,12 +590,12 @@ export async function GET(req: Request) {
       .limit(1)
       .maybeSingle()
     if (error) {
-      console.error('[generate-meal-plan] saved plan lookup failed', { requestId, error })
+      console.error('[generate-meal-plan] saved plan lookup failed', { requestId, ...safeError(error) })
       return NextResponse.json({ error: 'We could not load your saved meal plan.', requestId }, { status: 500, headers })
     }
     return NextResponse.json({ savedPlan: data ?? null, requestId }, { headers })
   } catch (error) {
-    console.error('[generate-meal-plan] saved plan request failed', { requestId, error })
+    console.error('[generate-meal-plan] saved plan request failed', { requestId, ...safeError(error) })
     return NextResponse.json({ error: 'We could not load your saved meal plan.', requestId }, { status: 500, headers })
   }
 }
@@ -649,7 +645,7 @@ export async function POST(req: Request) {
     try {
       isPro = (await getSubscriptionSummary(createAdminSupabaseClient(), user.id)).isPro
     } catch (error) {
-      console.error('[generate-meal-plan] entitlement lookup failed', error)
+      console.error('[generate-meal-plan] entitlement lookup failed', safeError(error))
       return NextResponse.json(
         { error: 'We could not verify your Pro access. Please try again.' },
         { status: 503 },
@@ -789,17 +785,7 @@ Return ONLY JSON in this format:
   } catch (err) {
     // Add extra context for Anthropic issues (helps diagnose prod 404s)
     const details = getMealPlanErrorDetails(err)
-    console.error('[generate-meal-plan] context', {
-      anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-      hasAnthropicKey: Boolean(process.env.ANTHROPIC_API_KEY),
-      supabaseUrlConfigured: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
-      providerStatus: details.status,
-      providerType: details.type,
-      providerCode: details.code,
-      providerRequestId: details.requestId,
-      providerMessage: details.message,
-      raw: err,
-    })
+
 
     logMealPlanError(err)
 
@@ -842,7 +828,7 @@ Return ONLY JSON in this format:
           { status: 200 },
         )
       } catch (fallbackErr) {
-        console.error('Fallback failed:', fallbackErr)
+        console.error('Fallback failed:', safeError(fallbackErr))
       }
     }
 

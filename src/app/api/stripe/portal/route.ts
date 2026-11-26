@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { getStripe } from "@/lib/stripe/server";
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ url: session.url });
   } catch (e) {
-    console.error("[stripe/portal]", e);
+    console.error("[stripe/portal]", safeError(e));
     return NextResponse.json({ error: "Could not open billing portal" }, { status: 500 });
   }
 }

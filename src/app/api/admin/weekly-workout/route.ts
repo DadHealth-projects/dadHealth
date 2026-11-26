@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
@@ -36,7 +37,7 @@ export async function GET() {
       };
     }));
   } catch (error) {
-    console.error("[admin weekly workout GET]", error);
+    console.error("[admin weekly workout GET]", safeError(error));
     return NextResponse.json({ error: "Weekly workouts could not be loaded." }, { status: 500 });
   }
 }
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[admin weekly workout POST]", error);
+    console.error("[admin weekly workout POST]", safeError(error));
     return NextResponse.json({ error: "This weekly workout could not be scheduled." }, { status: 500 });
   }
 }

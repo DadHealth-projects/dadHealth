@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
     .in("provider", ["garmin", "fitbit"]);
 
   if (error) {
-    console.error("[wearable-sync] integration query failed", error);
+    console.error("[wearable-sync] integration query failed", { code: "integration_read_failed" });
     return json({ error: "Unable to load integrations" }, 500);
   }
 
@@ -65,13 +65,14 @@ async function syncIntegration(integration: Integration, date: string) {
       }
 
       accessToken = refreshed.accessToken;
-      await supabase
+      const { error: refreshWriteError } = await supabase
         .from("user_integrations")
         .update({
           access_token: await encryptToken(refreshed.accessToken),
           refresh_token: await encryptToken(refreshed.refreshToken || refreshToken),
         })
         .eq("id", integration.id);
+      if (refreshWriteError) throw new Error("Token persistence failed");
 
       metrics = await fetchProviderMetrics(integration.provider, accessToken, date);
     }
@@ -82,23 +83,17 @@ async function syncIntegration(integration: Integration, date: string) {
 
     await upsertMetrics(integration, date, metrics.data);
 
-    await supabase
-      .from("user_integrations")
-      .update({ last_sync_at: new Date().toISOString() })
-      .eq("id", integration.id);
-
     return { integration_id: integration.id, provider: integration.provider, ok: true };
   } catch (error) {
     console.error("[wearable-sync] integration failed", {
-      integration_id: integration.id,
       provider: integration.provider,
-      error,
+      code: "integration_sync_failed",
     });
     return {
       integration_id: integration.id,
       provider: integration.provider,
       ok: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: "integration_sync_failed",
     };
   }
 }
@@ -192,25 +187,14 @@ async function upsertMetrics(integration: Integration, date: string, metrics: Da
     metricRow(integration, "resting_hr", metrics.restingHeartRate, recordedAt),
   ].filter((row): row is NonNullable<typeof row> => Boolean(row));
 
-  if (rows.length > 0) {
-    const { error } = await supabase
-      .from("body_metrics")
-      .upsert(rows, { onConflict: "user_id,metric_type,recorded_at" });
-    if (error) throw error;
-  }
-
-  if (metrics.sleepHours != null && metrics.sleepHours > 0) {
-    const { error } = await supabase.from("sleep_logs").upsert(
-      {
-        user_id: integration.user_id,
-        date,
-        hours: metrics.sleepHours,
-        source: integration.provider,
-      },
-      { onConflict: "user_id,date" }
-    );
-    if (error) throw error;
-  }
+  const { error } = await supabase.rpc("write_health_daily_totals", {
+    p_connection_id: integration.id,
+    p_metrics: rows.map(({ metric_type, value, recorded_at }) => ({ metric_type, value, recorded_at })),
+    p_sleep: metrics.sleepHours != null && metrics.sleepHours > 0
+      ? [{ date, hours: metrics.sleepHours }] : [],
+    p_complete: true,
+  });
+  if (error) throw error;
 }
 
 function metricRow(integration: Integration, metricType: string, value: number | null | undefined, recordedAt: string) {
