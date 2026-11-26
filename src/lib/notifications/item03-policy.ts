@@ -24,17 +24,19 @@ type Admin = ReturnType<typeof createAdminSupabaseClient>;
 
 /**
  * Brief 01 day-5 notice. The agreed wording "Your trial ends in 2 days" is sent only while it is
- * true for the verified trial end: 36-84 hours left (a 7-day trial reaches day 5 with 72 hours left).
+ * true for the verified trial end: 36 to under 60 hours left (rounds to 2 days). The database
+ * makes a trial eligible from 96 h after it starts (72 h left on a 7-day trial), so the notice
+ * goes out late on day 5 / day 6 rather than saying "2 days" with 3 days left.
  * A delayed run, a retry or a late push rollout outside that window sends nothing rather than a
  * wrong countdown. Expired, cancelled and converted trials are already excluded by item03_inbox_context.
  */
 export const TRIAL_REMINDER_MIN_HOURS = 36;
-export const TRIAL_REMINDER_MAX_HOURS = 84;
+export const TRIAL_REMINDER_MAX_HOURS = 60;
 export function trialReminderDue(endsAt: unknown, now = Date.now()) {
   const end = typeof endsAt === 'string' ? Date.parse(endsAt) : Number.NaN;
   if (!Number.isFinite(end)) return false;
   const hoursLeft = (end - now) / 3_600_000;
-  return hoursLeft >= TRIAL_REMINDER_MIN_HOURS && hoursLeft <= TRIAL_REMINDER_MAX_HOURS;
+  return hoursLeft >= TRIAL_REMINDER_MIN_HOURS && hoursLeft < TRIAL_REMINDER_MAX_HOURS;
 }
 /** Verified end times for this member's eligible episodes, read just before sending. */
 async function trialEndsFor(admin: Admin, userId: string, ids: string[]) {

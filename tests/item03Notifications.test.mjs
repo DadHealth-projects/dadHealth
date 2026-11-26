@@ -39,7 +39,7 @@ test('pillar destinations are fixed, validated and Body uses approved free worko
 test('all daily attempts precede trial attempts with stable episode identities',async()=>{
   const sent=[];
   const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{sendRateLimitedNotification:async a=>{sent.push(a);return 'sent';}}},{ITEM03_EXACT_PUSH_ENABLED:'true'});
-  const admin={...withTrialEnds(accounts([{user_id:'a'},{user_id:'b'}]),{episode:new Date(Date.now()+72*36e5).toISOString()}),
+  const admin={...withTrialEnds(accounts([{user_id:'a'},{user_id:'b'}]),{episode:new Date(Date.now()+48*36e5).toISOString()}),
     rpc:async()=>({data:{allowed:true,timezone:'Europe/London',date:'2026-11-16',dailyType:'morning_checkin',trials:['episode']}})};
   assert.equal((await api.dispatchItem03Notifications(admin)).sent,4);
   assert.deepEqual(sent.map(a=>a.type),['morning_checkin','morning_checkin','trial_ending','trial_ending']);
@@ -70,20 +70,36 @@ test('claim errors never send and completion errors are not reported as sent',as
 test('trial reminder wording is only sent while "ends in 2 days" is true for the verified end',()=>{
   const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{}});
   const now=Date.parse('2026-11-26T09:00:00Z'), at=h=>new Date(now+h*36e5).toISOString();
-  assert.equal(api.trialReminderDue(at(72),now),true,'on time: day 5 of a 7-day trial');
-  assert.equal(api.trialReminderDue(at(36),now),true);assert.equal(api.trialReminderDue(at(84),now),true);
+  assert.equal(api.trialReminderDue(at(48),now),true,'two days left');
+  assert.equal(api.trialReminderDue(at(36),now),true);assert.equal(api.trialReminderDue(at(59.9),now),true);
+  assert.equal(api.trialReminderDue(at(60),now),false,'2.5 days rounds to 3: not "2 days"');
+  assert.equal(api.trialReminderDue(at(72),now),false,'start of the eligible window: 3 days left');
   assert.equal(api.trialReminderDue(at(35.9),now),false,'delayed: under 36 h left is never "2 days"');
   assert.equal(api.trialReminderDue(at(6),now),false,'late rollout / retry hours before the end');
   assert.equal(api.trialReminderDue(at(-1),now),false,'expired');
-  assert.equal(api.trialReminderDue(at(90),now),false,'too early');
   for(const bad of [null,undefined,'',  'not-a-date',123]) assert.equal(api.trialReminderDue(bad,now),false,'unknown end never sends');
+});
+
+test('across the whole eligible window of a 7-day trial, every send says "2 days" truthfully and a send window exists',()=>{
+  const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{}});
+  for (const startMinute of [0, 7*60+13, 23*60+59]) {
+    const start=Date.parse('2026-11-20T00:00:00Z')+startMinute*6e4, end=start+168*36e5;
+    let sends=0;
+    // Database eligibility: from 96 h after start until the end. Dispatcher runs every 15 minutes.
+    for (let t=start+96*36e5; t<end; t+=15*6e4) {
+      if (!api.trialReminderDue(new Date(end).toISOString(), t)) continue;
+      sends++;
+      assert.equal(Math.round((end-t)/864e5), 2, 'remaining time rounds to exactly two days at every possible send');
+    }
+    assert.ok(sends>0, 'there is always a dispatcher run inside the send window');
+  }
 });
 
 test('delayed, expired and unknown trials send nothing; on-time sends once per episode key',async()=>{
   const sent=[];
   const api=load('src/lib/notifications/item03-policy.ts',{'./delivery':{sendRateLimitedNotification:async a=>{sent.push(a);return 'sent';}}},{ITEM03_EXACT_PUSH_ENABLED:'true'});
   const h=x=>new Date(Date.now()+x*36e5).toISOString();
-  const admin={...withTrialEnds(accounts([{user_id:'a'}]),{ontime:h(70),late:h(10),expired:h(-2)}),
+  const admin={...withTrialEnds(accounts([{user_id:'a'}]),{ontime:h(48),late:h(10),expired:h(-2)}),
     rpc:async()=>({data:{allowed:true,timezone:'Europe/London',date:'2026-11-26',dailyType:null,trials:['ontime','late','expired','missing','ontime']}})};
   await api.dispatchItem03Notifications(admin);
   assert.deepEqual(sent.map(a=>a.eventKey),['trial:ontime','trial:ontime'],'only the on-time episode; a repeated id reuses the same idempotent claim key');

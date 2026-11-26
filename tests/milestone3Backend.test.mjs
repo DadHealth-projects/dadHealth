@@ -18,9 +18,9 @@ function load(path, mocks = {}, logs = []) {
   });
   return exports;
 }
-// Verified trial end 72 h ahead (day 5 of a 7-day trial), owner-scoped like the real query.
+// Verified trial end 48 h ahead (inside the 2-day window), owner-scoped like the real query.
 const trialEnds = (ids) => { let owner = null, wanted = []; const q = { select: () => q, eq: (_k, v) => { owner = v; return q; }, in: (_k, v) => { wanted = v; return q; },
-  then: (resolve) => Promise.resolve({ data: owner ? wanted.filter((id) => ids.includes(id)).map((id) => ({ id, ends_at: new Date(Date.now() + 72 * 36e5).toISOString() })) : [], error: null }).then(resolve) }; return q; };
+  then: (resolve) => Promise.resolve({ data: owner ? wanted.filter((id) => ids.includes(id)).map((id) => ({ id, ends_at: new Date(Date.now() + 48 * 36e5).toISOString() })) : [], error: null }).then(resolve) }; return q; };
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const fn = (sql, name) => {
   const start = sql.indexOf(`function public.${name}(`);
