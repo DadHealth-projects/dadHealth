@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
@@ -61,7 +62,7 @@ async function removeImage(
   if (!path) return;
   const { error } = await supabase.storage.from(HAPPENING_IMAGE_BUCKET).remove([path]);
   if (error) {
-    console.error("[admin happenings image cleanup]", error);
+    console.error("[admin happenings image cleanup]", safeError(error));
     throw new ImageCleanupError();
   }
 }
@@ -71,7 +72,7 @@ function writeError(error: unknown) {
   if (candidate?.code === "23514" && candidate.message?.includes("homepage_happenings_live_limit")) {
     return NextResponse.json({ error: "Only three Happening posts can be live at once." }, { status: 409 });
   }
-  console.error("[admin happenings]", error);
+  console.error("[admin happenings]", safeError(error));
   return NextResponse.json({ error: "Happening post could not be saved." }, { status: 500 });
 }
 
@@ -85,7 +86,7 @@ export async function GET() {
     if (error) throw error;
     return NextResponse.json(data ?? []);
   } catch (error) {
-    console.error("[admin happenings GET]", error);
+    console.error("[admin happenings GET]", safeError(error));
     return NextResponse.json({ error: "Happening posts could not be loaded." }, { status: 500 });
   }
 }
@@ -191,7 +192,7 @@ export async function DELETE(req: Request) {
         { status: 500 },
       );
     }
-    console.error("[admin happenings DELETE]", error);
+    console.error("[admin happenings DELETE]", safeError(error));
     return NextResponse.json({ error: "Happening post could not be deleted." }, { status: 500 });
   }
 }

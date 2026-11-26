@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
     const { data } = supabase.storage.from(HAPPENING_IMAGE_BUCKET).getPublicUrl(path);
     return NextResponse.json({ url: data.publicUrl }, { status: 201 });
   } catch (error) {
-    console.error("[admin happenings upload]", error);
+    console.error("[admin happenings upload]", safeError(error));
     return NextResponse.json({ error: "Upload failed. Please check your connection and try again." }, { status: 500 });
   }
 }
@@ -103,7 +104,7 @@ export async function DELETE(req: Request) {
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("[admin happenings upload DELETE]", error);
+    console.error("[admin happenings upload DELETE]", safeError(error));
     return NextResponse.json({ error: "Image could not be removed." }, { status: 500 });
   }
 }

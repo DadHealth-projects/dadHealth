@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
@@ -118,7 +119,7 @@ export async function POST(req: Request) {
     try {
       isPro = (await getSubscriptionSummary(admin, user.id)).isPro;
     } catch (entitlementError) {
-      console.error("[generate-workout] entitlement lookup failed", { requestId, entitlementError });
+      console.error("[generate-workout] entitlement lookup failed", { requestId, ...safeError(entitlementError) });
       return errorResponse(
         "entitlement_unavailable",
         "We couldn't verify your Pro access. Please try again.",
@@ -193,7 +194,7 @@ Rules:
     });
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[generate-workout] request failed", { requestId, error });
+    console.error("[generate-workout] request failed", { requestId, ...safeError(error) });
     return errorResponse(
       "generation_failed",
       "We couldn't create a workout right now.",

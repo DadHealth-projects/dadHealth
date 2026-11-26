@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { getStripe } from "@/lib/stripe/server";
@@ -124,7 +125,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ url: session.url });
   } catch (e) {
-    console.error("[stripe/checkout]", e);
+    console.error("[stripe/checkout]", safeError(e));
     if (e instanceof StripeCheckoutConfigError) {
       return NextResponse.json({ error: "Stripe plan is misconfigured. Contact support." }, { status: 503 });
     }

@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 
 import { getCanonicalWeekStart, getSubscriptionSummary } from "@/lib/native-subscriptions/store";
@@ -197,7 +198,7 @@ export async function GET(request: Request) {
 
     return json({ error: "Unknown insight kind" }, 400);
   } catch (error) {
-    console.error("[pro/insights] Failed to build Pro insight", error);
+    console.error("[pro/insights] Failed to build Pro insight", safeError(error));
     return json({ error: "Insight unavailable" }, 503);
   }
 }

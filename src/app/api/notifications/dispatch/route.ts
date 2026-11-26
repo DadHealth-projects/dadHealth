@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { persistInbox, readNotificationRows } from '@/lib/notifications/inbox';
 import { POST as handleSourceEvent } from '../events/route';
 import { dispatchWeeklyReports } from "@/lib/reports/weekly-report-dispatch";
@@ -313,7 +314,7 @@ export async function GET(request: Request) {
     });
     return NextResponse.json({ ok: true, sent, skipped, errors, weekly: weeklyResult, item03: item03Result });
   } catch (e) {
-    console.error("[notifications/dispatch]", e);
+    console.error("[notifications/dispatch]", safeError(e));
     return NextResponse.json({ error: "Dispatch failed" }, { status: 500 });
   }
 }

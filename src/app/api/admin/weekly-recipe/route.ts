@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 ﻿import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
@@ -53,7 +54,7 @@ export async function GET() {
 
     return NextResponse.json({ recipes: recipesResult.data ?? [], assignments });
   } catch (error) {
-    console.error("[admin weekly recipe GET]", error);
+    console.error("[admin weekly recipe GET]", safeError(error));
     return NextResponse.json({ error: "Weekly Cook Together recipes could not be loaded." }, { status: 500 });
   }
 }
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[admin weekly recipe POST]", error);
+    console.error("[admin weekly recipe POST]", safeError(error));
     return NextResponse.json({ error: "This weekly Cook Together recipe could not be scheduled." }, { status: 500 });
   }
 }

@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
@@ -267,7 +268,7 @@ async function fetchPosthogPageviews7d(): Promise<number | null> {
     const value = json?.results?.[0]?.[0];
     return typeof value === "number" ? value : Number(value) || 0;
   } catch (err) {
-    console.error("[admin analytics posthog]", err);
+    console.error("[admin analytics posthog]", safeError(err));
     return null;
   }
 }
@@ -417,7 +418,7 @@ export async function GET(
         return NextResponse.json({ error: "Unknown resource" }, { status: 404 });
     }
   } catch (err) {
-    console.error(`[admin GET ${resource}]`, err);
+    console.error(`[admin GET ${resource}]`, safeError(err));
     if (resource === "challenges") {
       return NextResponse.json({ error: "Weekly challenges could not be loaded. Please try again." }, { status: 500 });
     }
@@ -562,7 +563,7 @@ export async function POST(
         return NextResponse.json({ error: "Unknown resource" }, { status: 404 });
     }
   } catch (err) {
-    console.error(`[admin POST ${resource}]`, err);
+    console.error(`[admin POST ${resource}]`, safeError(err));
     if (resource === "challenges") {
       return NextResponse.json({ error: "This weekly challenge could not be created. Please try again." }, { status: 500 });
     }
@@ -617,7 +618,7 @@ export async function PATCH(
         if (!data) return NextResponse.json({ error: "This weekly challenge no longer exists." }, { status: 404 });
         return NextResponse.json(data);
       } catch (err) {
-        console.error("[admin PATCH challenges active]", err);
+        console.error("[admin PATCH challenges active]", safeError(err));
         return NextResponse.json(
           { error: parsed.active ? "This weekly challenge could not be made active. Please try again." : "This weekly challenge could not be deactivated. Please try again." },
           { status: 500 },
@@ -652,7 +653,7 @@ export async function PATCH(
       if (!data) return NextResponse.json({ error: "This weekly challenge no longer exists." }, { status: 404 });
       return NextResponse.json(data);
     } catch (err) {
-      console.error("[admin PATCH challenges content]", err);
+      console.error("[admin PATCH challenges content]", safeError(err));
       return NextResponse.json({ error: "This weekly challenge could not be updated. Please try again." }, { status: 500 });
     }
   }
@@ -673,7 +674,7 @@ export async function PATCH(
       if (!data) return NextResponse.json({ error: "This Circle no longer exists." }, { status: 404 });
       return NextResponse.json(data);
     } catch (err) {
-      console.error("[admin PATCH circles]", err);
+      console.error("[admin PATCH circles]", safeError(err));
       return NextResponse.json({ error: "This Circle could not be updated. Please try again." }, { status: 500 });
     }
   }
@@ -699,7 +700,7 @@ export async function PATCH(
       if (!data) return NextResponse.json({ error: "Official Dad Date idea not found." }, { status: 404 });
       return NextResponse.json(data);
     } catch (err) {
-      console.error("[admin PATCH dad_dates]", err);
+      console.error("[admin PATCH dad_dates]", safeError(err));
       return NextResponse.json({ error: "This Dad Date idea could not be updated. Please try again." }, { status: 500 });
     }
   }
@@ -734,7 +735,7 @@ export async function PATCH(
     if (error) throw error;
     return NextResponse.json(data);
   } catch (err) {
-    console.error(`[admin PATCH ${resource}]`, err);
+    console.error(`[admin PATCH ${resource}]`, safeError(err));
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
@@ -770,7 +771,7 @@ export async function DELETE(
       if (!data) return NextResponse.json({ error: "Official Dad Date idea not found." }, { status: 404 });
       return NextResponse.json({ ok: true });
     } catch (err) {
-      console.error("[admin DELETE dad_dates]", err);
+      console.error("[admin DELETE dad_dates]", safeError(err));
       return NextResponse.json({ error: "This Dad Date idea could not be deleted. Please try again." }, { status: 500 });
     }
   }
@@ -790,7 +791,7 @@ export async function DELETE(
       if (!data) return NextResponse.json({ error: "This weekly challenge no longer exists." }, { status: 404 });
       return NextResponse.json({ ok: true });
     } catch (err) {
-      console.error("[admin DELETE challenges]", err);
+      console.error("[admin DELETE challenges]", safeError(err));
       return NextResponse.json({ error: "This weekly challenge could not be deleted. Please try again." }, { status: 500 });
     }
   }
@@ -810,7 +811,7 @@ export async function DELETE(
       if (!data) return NextResponse.json({ error: "This Circle no longer exists." }, { status: 404 });
       return NextResponse.json({ ok: true });
     } catch (err) {
-      console.error("[admin DELETE circles]", err);
+      console.error("[admin DELETE circles]", safeError(err));
       if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "23503") {
         return NextResponse.json({ error: "This Circle has posts. Remove or moderate its posts before deleting the Circle." }, { status: 409 });
       }
@@ -835,7 +836,7 @@ export async function DELETE(
         );
       }
     } catch (err) {
-      console.error("[admin DELETE workouts assignment check]", err);
+      console.error("[admin DELETE workouts assignment check]", safeError(err));
       return NextResponse.json({ error: "This workout could not be deleted. Please try again." }, { status: 500 });
     }
   }
@@ -849,7 +850,7 @@ export async function DELETE(
       if (error) throw error;
       return NextResponse.json({ ok: true });
     } catch (err) {
-      console.error(`[admin DELETE users]`, err);
+      console.error(`[admin DELETE users]`, safeError(err));
       return NextResponse.json({ error: "Internal error" }, { status: 500 });
     }
   }
@@ -871,7 +872,7 @@ export async function DELETE(
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error(`[admin DELETE ${resource}]`, err);
+    console.error(`[admin DELETE ${resource}]`, safeError(err));
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

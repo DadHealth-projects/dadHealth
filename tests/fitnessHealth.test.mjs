@@ -15,7 +15,7 @@ test('AI workout generation requires canonical Pro entitlement and preserves gen
   assert.match(source, /if \(!isPro\)[\s\S]*?"pro_required"[\s\S]*?403/);
   assert.match(source, /source: "ai_generated"/);
   assert.match(source, /from\("workouts"\)[\s\S]*?\.insert\(/);
-  assert.match(source, /durationMins: durationMins/);
+  assert.match(source, /duration_mins: durationMins/);
   assert.match(source, /equipment,/);
   assert.match(source, /focus,/);
   assert.doesNotMatch(source, /isProfilePro|FREE_MONTHLY_GENERATIONS|claim_ai_workout_generation|complete_ai_workout_generation|free_limit_reached/);

@@ -1,3 +1,4 @@
+import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, status });
   } catch (e) {
-    console.error("[stripe/sync-checkout]", e);
+    console.error("[stripe/sync-checkout]", safeError(e));
     return NextResponse.json({ error: "Could not sync subscription" }, { status: 500 });
   }
 }
