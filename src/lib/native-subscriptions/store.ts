@@ -76,7 +76,16 @@ export async function upsertSubscriptionEntitlement(
   // retries this owner's earlier rows, and never throws into the verified save.
   if (journal && !journalInstalled) console.warn('[analytics]', { stage: 'billing_journal', code: 'journal_not_installed' });
   if (journal && transition?.journalFailed) console.warn('[analytics]', { stage: 'billing_journal', code: 'journal_failed' });
-  if (journalInstalled) await drainBillingTransitions(admin, input.userId);
+  if (journalInstalled) {
+    try {
+      await drainBillingTransitions(admin, input.userId);
+    } catch {
+      console.warn('[analytics]', {
+        stage: 'billing_journal',
+        code: 'recovery_unavailable',
+      });
+    }
+  }
   return data;
 }
 
