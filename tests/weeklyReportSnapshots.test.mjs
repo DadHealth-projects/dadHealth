@@ -193,7 +193,11 @@ async function waitFor(sql) {
 
 test('canonical capture accuracy: all sources, future records, edits/deletes and November 23 activation', () => {
   database(readFileSync(new URL('../supabase/tests/weekly_report_capture_sources.test.sql', import.meta.url), 'utf8'));
-  const payload = JSON.parse(database(`select build_weekly_report_candidate('${owner}','2026-11-23','2026-11-29T18:00Z')->'snapshot';`));
+  const releaseMigration = readFileSync(new URL('../supabase/migrations/20261115110000_weekly_report_release_0600.sql', import.meta.url), 'utf8').replace(/commit;\s*$/i, '');
+  const payload = JSON.parse(database(releaseMigration.replace(/\bbegin\s*;/i, 'begin; delete from public.weekly_report_snapshots;') + `
+    select build_weekly_report_candidate('${owner}','2026-11-23','2026-11-29T06:00Z')->'snapshot';
+    rollback;
+  `));
   assert.equal(contract.projectWeeklyReportV2(payload, 'free').report.details, undefined);
   assert.ok(contract.projectWeeklyReportV2(payload, 'pro').report.details);
 });

@@ -62,7 +62,7 @@ rollback;`);
   assert.equal(Date.parse(row.delivery_at), Date.parse('2000-01-09T06:00:00Z'));
   for (const pro of [false, true]) {
     const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: row, error: null }) };
-    const admin = { rpc: async () => ({ data: pro, error: null }), from: () => q };
+    const admin = { rpc: async () => ({ data: { access: pro, current: row, prior: null }, error: null }), from: () => q };
     const read = await readWeeklyReport(admin, owner, '2000-01-03', new Date(Date.now() + 1000));
     assert.equal(read.state, 'available');
     assert.equal(read.result.access, pro ? 'pro' : 'free');
@@ -119,7 +119,7 @@ rollback;`);
   const row = JSON.parse(result.stdout.trim());
   for (const access of [false, true]) {
     const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: row }) };
-    const response = await readWeeklyReport({ rpc: async () => ({ data: access }), from: () => q }, owner, '2000-01-03');
+    const response = await readWeeklyReport({ rpc: async () => ({ data: { access, current: row, prior: null }, error: null }), from: () => q }, owner, '2000-01-03');
     assert.equal(response.state, 'available');
     assert.equal(Boolean(response.result.report.details), access);
   }
