@@ -97,11 +97,11 @@ test('collection off: no journal read, no record, nothing collected', async () =
   assert.equal(r.suppressed, true); assert.equal(db.calls.length, 0);
 });
 
-function storeWith(env, handler) {
+function storeWith(env, handler, drainError = null) {
   const billing = load('src/lib/analytics/billing.ts', { './contract': contract }, env);
   const drains = [];
   const store = load('src/lib/native-subscriptions/store.ts', {
-    '@/lib/analytics/billing': { ...billing, drainBillingTransitions: async (a, owner) => { drains.push(owner); return {}; } },
+    '@/lib/analytics/billing': { ...billing, drainBillingTransitions: async (a, owner) => { drains.push(owner); if (drainError) throw drainError; return {}; } },
     '@/utils/supabase/admin': {}, '@/lib/privacy/operations': { privacyOwnerRemoved: async () => false, RemovedPrivacyOwnerError: class extends Error {} },
     './types': load('src/lib/native-subscriptions/types.ts'),
   }, env);
@@ -167,4 +167,115 @@ test('both Apple routes pass verified offer evidence into the journalled save', 
   assert.match(verify, /const offer = retentionOfferEvidence\(verified\.transaction\);\n\s+await upsertSubscriptionEntitlement\(\n\s+auth\.admin,\n\s+\{ \.\.\.appleEntitlementInput\([^)]*\), \.\.\.\(offer \? \{ retentionOffer: offer \} : \{\}\) \},/);
   const notify = lf(readFileSync(new URL('../src/app/api/native-subscriptions/notifications/apple/route.ts', import.meta.url), 'utf8'));
   assert.match(notify, /\.\.\.\(retentionOfferEvidence\(verified\.transaction\) \? \{ retentionOffer: retentionOfferEvidence\(verified\.transaction\)! \} : \{\}\) \},/);
+});
+
+for (const [owner, budget] of [['owner', 5000], [null, 20000]]) {
+  test(`recovery stops at its ${budget}ms budget without completing unfinished rows`, async () => {
+    let now = Date.now();
+
+    class FakeDate extends Date {
+      static now() { return now; }
+    }
+
+    const exports = {};
+    const signals = [];
+    const calls = [];
+
+    vm.runInNewContext(
+      ts.transpileModule(
+        readFileSync(new URL('../src/lib/analytics/billing.ts', import.meta.url), 'utf8'),
+        {
+          compilerOptions: {
+            module: ts.ModuleKind.CommonJS,
+            target: ts.ScriptTarget.ES2022
+          }
+        }
+      ).outputText,
+      {
+        exports,
+        process: { env: ON },
+        Date: FakeDate,
+        AbortSignal: {
+          timeout(ms) {
+            signals.push(ms);
+            return AbortSignal.timeout(ms);
+          }
+        },
+        console: { warn() {} },
+        JSON, Array, Promise,
+        require: id => id === './contract' ? contract : require(id)
+      }
+    );
+
+    const db = {
+      rpc(name) {
+        calls.push(name);
+
+        return {
+          async abortSignal() {
+            if (name === 'pending_billing_analytics_transitions') {
+              now += budget - 1000;
+              return { data: [row()], error: null };
+            }
+
+            now += 1000;
+            return { data: true, error: null };
+          }
+        };
+      }
+    };
+
+    const result = await exports.drainBillingTransitions(db, owner);
+
+    assert.deepEqual(signals, [3000, 1000]);
+    assert.equal(result.processed, 0);
+    assert.equal(result.collected, 1);
+
+    assert.deepEqual(calls, [
+      'pending_billing_analytics_transitions',
+      'record_account_billing_analytics'
+    ]);
+  });
+}
+
+
+test('store: journal insertion failure preserves accepted subscription', async () => {
+  const { store, db, drains } = storeWith(ON, () => ({
+    ...saved,
+    data: {
+      ...saved.data,
+      journalId: null,
+      journalFailed: true,
+    },
+  }));
+
+  assert.equal(
+    await store.upsertSubscriptionEntitlement(db, input),
+    'sub'
+  );
+
+  assert.deepEqual(db.calls.map(c => c[0]), [
+    'upsert_subscription_with_billing_journal',
+  ]);
+
+  assert.deepEqual(drains, ['owner']);
+});
+
+test('store: unexpected recovery failure cannot invalidate accepted subscription', async () => {
+  const { store, db, drains } = storeWith(
+    ON,
+    () => saved,
+    new Error('Recovery unavailable')
+  );
+
+  assert.equal(
+    await store.upsertSubscriptionEntitlement(db, input),
+    'sub'
+  );
+
+  assert.deepEqual(db.calls.map(c => c[0]), [
+    'upsert_subscription_with_billing_journal',
+  ]);
+
+  assert.deepEqual(drains, ['owner']);
 });
