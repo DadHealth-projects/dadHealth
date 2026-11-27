@@ -62,7 +62,7 @@ export function dashboardDefinition({ account, environment = 'production' } = {}
 
 /** Explicit operator action only; default CLI below only writes a local artifact. */
 export async function provision(definition, { host, project, token, request = fetch }) {
-  if (!['https://eu.posthog.com','https://us.posthog.com'].includes(host) || !/^\d+$/.test(project) || !token) throw Error('Explicit existing project, region and private API key required');
+  if (host !== 'https://eu.posthog.com' || project !== '145008' || !token) throw Error('Explicit EU project 145008 and private API key required');
   const base = `${host}/api/projects/${project}/`;
   async function api(path, method = 'GET', body) {
     const response = await request(base + path, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

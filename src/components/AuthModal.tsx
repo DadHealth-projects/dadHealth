@@ -36,7 +36,7 @@ export default function AuthModal({ open, onClose, onSuccess, returnTo }: AuthMo
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {

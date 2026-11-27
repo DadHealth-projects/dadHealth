@@ -48,15 +48,61 @@ test('worker stays paused without remote retention approval but still cleans loc
  delete process.env.ANALYTICS_REMOTE_RETENTION_APPROVED;process.env.ANALYTICS_DELIVERY_ENABLED='true';const calls=[];
  const result=await api.runAnalyticsWorker({rpc:async n=>{calls.push(n);return {};}});assert.equal(result.paused,true);assert.deepEqual(calls,['cleanup_optional_analytics','recover_analytics_actions']);
 });
-test('remote cleanup requires provider completion and zero remaining events',async()=>{
- const {erasePosthogOwner}=load('src/lib/analytics/privacy.ts',{'./service':api,'./contract':contract});
- process.env.ANALYTICS_POSTHOG_API_HOST='https://eu.posthog.com';process.env.POSTHOG_PROJECT_ID='162656';process.env.POSTHOG_API_KEY='fixture';
- const p={};let saved=0,complete=false;const paths=[];
- const transport=async(url,init)=>{paths.push(url);return Response.json(url.includes('/deletion_status/')?{results:[{status:complete?'completed':'pending',delete_verified_at:complete?new Date().toISOString():null}]}:url.includes('/persons/?')?{results:complete?[]:[{uuid:id,distinct_ids:[owner]}]}:url.includes('/query/')?{results:[[0]]}:{persons_queued_for_deletion:1});};
- assert.equal(await erasePosthogOwner(owner,p,async()=>saved++,transport),false);assert.equal(saved,2);
- assert.equal(await erasePosthogOwner(owner,p,async()=>saved++,transport),false);complete=true;
- assert.equal(await erasePosthogOwner(owner,p,async()=>saved++,transport),false);
- assert.equal(await erasePosthogOwner(owner,p,async()=>saved++,transport),true);assert.equal(paths.filter(v=>v.includes('bulk_delete')).length,1);
+test('remote cleanup requires provider completion and zero remaining events', async () => {
+  const { erasePosthogOwner } = load(
+    'src/lib/analytics/privacy.ts',
+    { './service': api, './contract': contract },
+  );
+
+  process.env.ANALYTICS_POSTHOG_API_HOST = 'https://eu.posthog.com';
+  process.env.POSTHOG_PROJECT_ID = '145008';
+  process.env.POSTHOG_API_KEY = 'fixture';
+
+  const p = {};
+  let saved = 0;
+  let complete = false;
+  const paths = [];
+
+  const transport = async url => {
+    paths.push(url);
+
+    if (url.includes('/deletion_status/')) {
+      return Response.json({
+        results: [{
+          status: complete ? 'completed' : 'pending',
+          delete_verified_at: complete ? new Date().toISOString() : null,
+        }],
+      });
+    }
+
+    if (url.includes('/persons/?')) {
+      return Response.json({
+        results: complete ? [] : [{ uuid: id, distinct_ids: [owner] }],
+        next: null,
+      });
+    }
+
+    if (url.includes('/query/')) {
+      return Response.json({ results: [[0]], is_cached: false });
+    }
+
+    return Response.json({ persons_queued_for_deletion: 1 });
+  };
+
+  assert.equal(await erasePosthogOwner(owner, p, async () => saved++, transport), false);
+  assert.equal(saved, 2);
+
+  assert.equal(await erasePosthogOwner(owner, p, async () => saved++, transport), false);
+
+  complete = true;
+
+  assert.equal(await erasePosthogOwner(owner, p, async () => saved++, transport), false);
+  assert.equal(await erasePosthogOwner(owner, p, async () => saved++, transport), false);
+  assert.equal(await erasePosthogOwner(owner, p, async () => saved++, transport), true);
+  assert.ok(paths.some(path => path.includes('/projects/162656/')));
+  assert.ok(paths.some(path => path.includes('/projects/145008/')));
+
+  assert.equal(paths.filter(path => path.includes('bulk_delete')).length, 2);
 });
 
 test('ingestion route authenticates the asserted owner and fails closed when disabled',async()=>{
@@ -178,4 +224,37 @@ test('maintenance-only endpoint authenticates and cannot dispatch even with deli
  const response=await route.POST(new Request('https://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'}}));
  assert.equal(response.status,200);assert.deepEqual(calls,['cleanup_optional_analytics','recover_analytics_actions']);
  } finally {if(old===undefined)delete process.env.ANALYTICS_WORKER_SECRET;else process.env.ANALYTICS_WORKER_SECRET=old;if(oldDelivery===undefined)delete process.env.ANALYTICS_DELIVERY_ENABLED;else process.env.ANALYTICS_DELIVERY_ENABLED=oldDelivery;}
+});
+
+test('legacy failure prevents primary-only erasure success and wrong configured project sends nothing',async()=>{
+ const {erasePosthogOwner}=load('src/lib/analytics/privacy.ts',{'./service':api,'./contract':contract});
+ process.env.POSTHOG_API_KEY='fixture';process.env.POSTHOG_PROJECT_ID='145008';process.env.ANALYTICS_POSTHOG_API_HOST='https://eu.posthog.com';
+ const paths=[];await assert.rejects(erasePosthogOwner(owner,{},async()=>{},async url=>{paths.push(url);return new Response('',{status:503});}),e=>e.code==='posthog_cleanup_unavailable');
+ assert.equal(paths.length,1);assert.match(paths[0],/projects\/162656\//);
+ process.env.POSTHOG_PROJECT_ID='162656';await assert.rejects(erasePosthogOwner(owner,{},async()=>{},async()=>{throw Error('must not send');}),e=>e.code==='posthog_cleanup_configuration_required');
+ process.env.POSTHOG_PROJECT_ID='145008';
+});
+
+test('primary failure cannot complete deletion after legacy is verified empty',async()=>{
+ const {erasePosthogOwner}=load('src/lib/analytics/privacy.ts',{'./service':api,'./contract':contract});
+ process.env.POSTHOG_API_KEY='fixture';process.env.POSTHOG_PROJECT_ID='145008';process.env.ANALYTICS_POSTHOG_API_HOST='https://eu.posthog.com';
+ const progress={analyticsPersons:[],analyticsAliases:[owner],analyticsDiscoveryComplete:true,analyticsDeletionRequested:true};const paths=[];
+ await assert.rejects(erasePosthogOwner(owner,progress,async()=>{},async url=>{
+   paths.push(url);if(url.includes('/145008/'))return new Response('',{status:403});
+   if(url.includes('/query/'))return Response.json({results:[[0]],is_cached:false});
+   return Response.json({results:[],next:null});
+ }),e=>e.code==='posthog_cleanup_unavailable');
+ assert.ok(paths.some(p=>p.includes('/162656/')));assert.ok(paths.some(p=>p.includes('/145008/')));
+});
+test('cached or unknown freshness never completes either project erasure',async()=>{
+ const {erasePosthogOwner}=load('src/lib/analytics/privacy.ts',{'./service':api,'./contract':contract});
+ process.env.POSTHOG_API_KEY='fixture';process.env.POSTHOG_PROJECT_ID='145008';process.env.ANALYTICS_POSTHOG_API_HOST='https://eu.posthog.com';
+ for(const project of ['162656','145008'])for(const cached of [true,undefined]){
+  const ready=()=>({analyticsPersons:[],analyticsAliases:[owner],analyticsDiscoveryComplete:true,analyticsDeletionRequested:true});
+  const progress={...ready(),analyticsProject145008:ready()};
+  await assert.rejects(erasePosthogOwner(owner,progress,async()=>{},async(url,init)=>{
+   if(url.includes('/query/')){assert.equal(JSON.parse(init.body).refresh,'force_blocking');return Response.json({results:[[0]],is_cached:url.includes('/'+project+'/')?cached:false});}
+   return Response.json({results:[],next:null});
+  }),e=>e.code==='posthog_cleanup_invalid');
+ }
 });

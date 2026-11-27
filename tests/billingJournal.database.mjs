@@ -202,3 +202,282 @@ test('reason linkage, offer acceptance, consent timing, expiry, deletion and pri
   await assert.rejects(db.query("select public.upsert_subscription_with_billing_journal('{}'::jsonb, null, null)"), /Forbidden/);
   await db.close();
 });
+
+
+async function freshPrivacy() {
+  const db = await fresh();
+
+  await db.exec(`
+    create table public.account_export_artifacts(
+      user_id uuid, expires_at timestamptz
+    );
+    create table public.account_privacy_confirmations(
+      expires_at timestamptz
+    );
+    create table public.account_privacy_delivery_failures(
+      created_at timestamptz
+    );
+    create table public.account_privacy_operations(
+      completed_at timestamptz, state text
+    );
+  `);
+
+
+  // Minimal stand-in for the existing account export contract.
+  await db.exec(`
+    create function public.account_export_dataset(p_user_id uuid)
+    returns jsonb language sql as $fixture$
+      select jsonb_build_object(
+        'formatVersion', 1,
+        'generatedAt', clock_timestamp(),
+        'sections', jsonb_build_object(
+          'billingAnalyticsChoice', '[]'::jsonb,
+          'retentionOfferRedemptions', '[]'::jsonb
+        ),
+        'fieldExplanations', '{}'::jsonb
+      );
+    $fixture$;
+  `);
+
+  await db.exec(read('20261126180000_billing_journal_privacy.sql'));
+  await db.exec(
+    'grant execute on function public.cleanup_account_privacy_retention() to service_role'
+  );
+
+  await asService(db);
+  return db;
+}
+
+test('privacy: subscription saves succeed without billing consent', { skip }, async () => {
+  const db = await freshPrivacy();
+  try {
+    const result = await save(db, ago(10));
+
+    assert.ok(result.id);
+    assert.equal(result.journalId, null);
+    assert.equal(result.journalFailed, false);
+    assert.equal((await journal(db)).length, 0);
+
+    const rows = await owner(db,
+      'select status from public.subscription_entitlements'
+    );
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].status, 'active');
+  } finally {
+    await db.close();
+  }
+});
+
+test('privacy: consent cannot apply retrospectively', { skip }, async () => {
+  const db = await freshPrivacy();
+  try {
+    await consentAt(db, ago(10));
+
+    const result = await save(db, ago(20));
+
+    assert.ok(result.id);
+    assert.equal(result.journalId, null);
+    assert.equal((await journal(db)).length, 0);
+
+    await save(db, ago(5));
+    assert.equal((await journal(db)).length, 1);
+  } finally {
+    await db.close();
+  }
+});
+
+test('privacy: withdrawal purges pending rows and regrant does not restore them', { skip }, async () => {
+  const db = await freshPrivacy();
+  try {
+    await consentAt(db, ago(100));
+    await save(db, ago(90));
+
+    assert.equal((await journal(db)).length, 1);
+
+    await owner(db,
+      'update public.account_billing_analytics_consent set granted=false where user_id=$1',
+      [A]
+    );
+
+    assert.equal((await journal(db)).length, 0);
+
+    const result = await save(db, ago(80));
+    assert.ok(result.id);
+    assert.equal(result.journalId, null);
+    assert.equal((await journal(db)).length, 0);
+
+    await consentAt(db, ago(10));
+    assert.equal((await journal(db)).length, 0);
+
+    await save(db, ago(5));
+    assert.equal((await journal(db)).length, 1);
+  } finally {
+    await db.close();
+  }
+});
+
+test('privacy: deletion tombstone immediately purges pending journal', { skip }, async () => {
+  const db = await freshPrivacy();
+  try {
+    await consentAt(db, ago(100));
+    await save(db, ago(90));
+
+    assert.equal((await journal(db)).length, 1);
+
+    await owner(db,
+      'insert into public.account_deletion_tombstones(user_id) values ($1)',
+      [A]
+    );
+
+    assert.equal((await journal(db)).length, 0);
+
+    await save(db, ago(80));
+    assert.equal((await journal(db)).length, 0);
+  } finally {
+    await db.close();
+  }
+});
+
+test('privacy: independent retention removes expired rows but preserves recent rows', { skip }, async () => {
+  const db = await freshPrivacy();
+  try {
+    await consentAt(db, ago(100));
+    await save(db, ago(90));
+    await save(db, ago(80));
+
+    assert.equal((await journal(db)).length, 2);
+
+    await owner(db, `
+      update public.billing_analytics_transitions
+      set created_at=clock_timestamp()-interval '8 days'
+      where verified_at=(
+        select min(verified_at)
+        from public.billing_analytics_transitions
+      )
+    `);
+
+    await db.query('select public.cleanup_account_privacy_retention()');
+
+    const rows = await journal(db);
+    assert.equal(rows.length, 1);
+  } finally {
+    await db.close();
+  }
+});
+
+
+test('privacy: billing export preserves sections and isolates account data', { skip }, async () => {
+  const db = await freshPrivacy();
+  try {
+    const B = '00000000-0000-4000-8000-00000000000b';
+
+    await owner(db, 'insert into auth.users(id) values ($1)', [B]);
+
+    await consentAt(db, ago(100));
+    await save(db, ago(90), {}, {
+      trialFacts: {
+        transactionId: 'private-trial-transaction',
+        startedAt: '2026-11-20T10:00:00Z',
+        endsAt: '2026-11-27T10:00:00Z',
+      },
+      verifiedPayment: {
+        transactionId: 'private-payment-transaction',
+        paidAt: '2026-11-27T10:00:00Z',
+        amount: 49.99,
+        verified: true,
+        servicePeriodStart: '2026-11-27T10:00:00Z',
+      },
+      retentionOffer: {
+        transactionId: 'private-offer-transaction',
+        purchasedAt: '2026-11-27T10:00:00Z',
+      },
+    });
+
+    assert.equal((await journal(db)).length, 1);
+
+    const capture = async id => {
+      const rows = await owner(db,
+        'select public.account_export_dataset($1) as dataset',
+        [id]
+      );
+      return rows[0].dataset;
+    };
+
+    const exported = await capture(A);
+
+    assert.equal(exported.formatVersion, 1);
+    assert.deepEqual(exported.sections.billingAnalyticsChoice, []);
+    assert.deepEqual(exported.sections.retentionOfferRedemptions, []);
+    assert.equal(exported.sections.pendingBillingAnalytics.length, 1);
+
+    const entry = exported.sections.pendingBillingAnalytics[0];
+
+    assert.equal(entry.provider, 'apple');
+    assert.equal(entry.environment, 'sandbox');
+    assert.equal(entry.status, 'active');
+
+    assert.equal(entry.trialStartedAt, '2026-11-20T10:00:00Z');
+    assert.equal(entry.trialEvidenceEndsAt, '2026-11-27T10:00:00Z');
+    assert.equal(entry.paymentPaidAt, '2026-11-27T10:00:00Z');
+    assert.equal(entry.paymentAmount, 49.99);
+    assert.equal(entry.paymentVerified, true);
+    assert.equal(entry.paymentServicePeriodStart, '2026-11-27T10:00:00Z');
+    assert.equal(entry.retentionOfferPurchasedAt, '2026-11-27T10:00:00Z');
+
+    const serialized = JSON.stringify(entry);
+
+    for (const identifier of [
+      'private-trial-transaction',
+      'private-payment-transaction',
+      'private-offer-transaction',
+    ]) {
+      assert.equal(serialized.includes(identifier), false);
+    }
+
+
+    for (const key of [
+      'id', 'user_id', 'subscription_id',
+      'provider_subscription_id', 'attempts',
+      'latestTransactionId', 'consent_id'
+    ]) {
+      assert.equal(Object.hasOwn(entry, key), false);
+    }
+
+    const other = await capture(B);
+    assert.deepEqual(other.sections.pendingBillingAnalytics, []);
+
+    await owner(db,
+      'update public.account_billing_analytics_consent set granted=false where user_id=$1',
+      [A]
+    );
+
+    assert.deepEqual(
+      (await capture(A)).sections.pendingBillingAnalytics,
+      []
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test('privacy: billing export functions deny direct client access', { skip }, async () => {
+  const db = await freshPrivacy();
+  try {
+    for (const role of ['anon', 'authenticated', 'service_role']) {
+      await db.exec('reset role; set role ' + role);
+
+      for (const name of [
+        'account_export_dataset',
+        'account_export_dataset_before_billing_journal'
+      ]) {
+        await assert.rejects(
+          db.query('select public.' + name + '($1)', [A]),
+          /permission denied/
+        );
+      }
+    }
+  } finally {
+    await db.close();
+  }
+});

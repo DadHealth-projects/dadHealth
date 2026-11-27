@@ -19,7 +19,7 @@ class PrivacyError extends Error {constructor(code){super(code);this.code=code;}
 const reader=load('src/lib/privacy/posthog-export-reader.ts',{'./auth':{PrivacyError}});
 const owner='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
 const id=n=>`33333333-3333-4333-8333-${String(n).padStart(12,'0')}`;
-function config(){Object.assign(process.env,{ANALYTICS_POSTHOG_API_HOST:'https://eu.posthog.com',POSTHOG_PROJECT_ID:'162656',POSTHOG_API_KEY:'fixture',POSTHOG_OWNER_SQL_EXPORTS_VERIFIED:'true',POSTHOG_EXPORT_DOWNLOAD_HOSTS:'fixture-storage.invalid'});}
+function config(){Object.assign(process.env,{ANALYTICS_POSTHOG_API_HOST:'https://eu.posthog.com',POSTHOG_PROJECT_ID:'145008',POSTHOG_API_KEY:'fixture',POSTHOG_OWNER_SQL_EXPORTS_VERIFIED:'true',POSTHOG_EXPORT_DOWNLOAD_HOSTS:'fixture-storage.invalid'});}
 test('billing choice rejects ownership/private overrides and malformed server responses',async()=>{
  const calls=[];const admin={rpc:async(n,a)=>{calls.push([n,a]);return {data:{owner,granted:false,revision:0,operationId:null,grantedAt:null}};}};
  await choice.billingConsentChoice(admin,owner);assert.equal(calls[0][1].p_owner,owner);
@@ -76,15 +76,15 @@ test('erasure discovers verified aliases across pages, survives restart and veri
  config();const p={},requests=[];let removed=false;
  const transport=async(url,init)=>{
   requests.push([url,init]);
-  if(url.includes('bulk_delete')){assert.deepEqual(JSON.parse(init.body).distinct_ids,[owner,'legacy']);removed=true;return Response.json({});}
+  if(url.includes('bulk_delete')){assert.deepEqual(JSON.parse(init.body).distinct_ids,url.includes('/162656/')?[owner,'legacy']:[owner]);if(url.includes('/162656/'))removed=true;return Response.json({});}
   if(url.includes('deletion_status'))return Response.json({results:[{status:'completed',delete_verified_at:new Date().toISOString()}]});
-  if(url.includes('/query/')){assert.match(JSON.parse(init.body).query.query,/'legacy'/);return Response.json({results:[[0]]});}
-  if(removed)return Response.json({results:[],next:null});
+  if(url.includes('/query/')){const body=JSON.parse(init.body);assert.equal(body.refresh,'force_blocking');if(url.includes('/162656/'))assert.match(body.query.query,/'legacy'/);else assert.ok(body.query.query.includes(owner));return Response.json({results:[[0]],is_cached:false});}
+  if(removed||url.includes('/145008/'))return Response.json({results:[],next:null});
   return Response.json({results:[{uuid:url.includes('cursor=2')?id(2):id(1),distinct_ids:[owner,'legacy']}],next:url.includes('cursor=2')?null:`https://eu.posthog.com/api/projects/162656/persons/?distinct_id=${owner}&cursor=2`});
  };
  const safe=async aliases=>aliases.includes(owner)&&!aliases.includes(other);
- let turns=0;while(!await erasure.erasePosthogOwner(owner,p,async()=>{},transport,safe))assert.ok(++turns<8);
- assert.equal(p.analyticsPersons.length,2);assert.equal(requests.filter(([u])=>u.includes('bulk_delete')).length,1);
+ let turns=0;while(!await erasure.erasePosthogOwner(owner,p,async()=>{},transport,safe))assert.ok(++turns<20);
+ assert.equal(p.analyticsPersons.length,2);assert.equal(p.analyticsProject145008.analyticsPersons.length,0);assert.equal(requests.filter(([u])=>u.includes('/162656/')&&u.includes('bulk_delete')).length,1);assert.ok(requests.some(([u])=>u.includes('/145008/')&&u.includes('/query/')));
  const bad={};await assert.rejects(erasure.erasePosthogOwner(owner,bad,async()=>{},async()=>Response.json({results:[{uuid:id(1),distinct_ids:[owner,other]}]}),safe),e=>e.code==='posthog_cleanup_identity_unverified');
 });
 test('erasure checkpoints status pagination and rejects a foreign-person next page',async()=>{

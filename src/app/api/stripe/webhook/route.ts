@@ -2,6 +2,7 @@ import { safeError } from '@/lib/safeError';
 import { stripePaidEvidence } from '@/lib/analytics/provider-evidence';
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import { subscriptionPeriodEnd, invoiceSubscriptionId } from "@/lib/stripe/verified-fields";
 import { getStripe } from "@/lib/stripe/server";
 import { syncUserProfile } from "@/lib/stripe/sync-user-profile";
 import { privacyOwnerRemoved, RemovedPrivacyOwnerError } from '@/lib/privacy/operations';
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
           stripe_customer_id: customerId,
           stripe_subscription_id: subId,
           subscription_status: sub.status,
-          current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+          current_period_end: subscriptionPeriodEnd(sub),
           auto_renews: !sub.cancel_at_period_end && sub.status !== "canceled",
           last_verified_at: verificationStartedAt,
           trial_end: sub.trial_end ? new Date(sub.trial_end*1000).toISOString() : null,
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
           stripe_customer_id: customerId,
           stripe_subscription_id: sub.id,
           subscription_status: sub.status,
-          current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+          current_period_end: subscriptionPeriodEnd(sub),
           auto_renews: !sub.cancel_at_period_end && sub.status !== "canceled",
           last_verified_at: verificationStartedAt,
           trial_end: sub.trial_end ? new Date(sub.trial_end*1000).toISOString() : null,
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
       }
       case "invoice.paid": {
         const invoice=event.data.object as Stripe.Invoice;
-        const subscriptionId=typeof invoice.subscription==='string'?invoice.subscription:invoice.subscription?.id;
+        const subscriptionId = invoiceSubscriptionId(invoice);
         if(!subscriptionId) break;
         const verificationStartedAt=new Date().toISOString();
         const sub=await getStripe().subscriptions.retrieve(subscriptionId);
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
         await syncUserProfile(userId,{
           stripe_customer_id:typeof sub.customer==='string'?sub.customer:sub.customer.id,
           stripe_subscription_id:sub.id,subscription_status:sub.status,
-          current_period_end:new Date(sub.current_period_end*1000).toISOString(),
+          current_period_end:subscriptionPeriodEnd(sub),
           auto_renews:!sub.cancel_at_period_end && sub.status!=='canceled',last_verified_at:verificationStartedAt,
           trial_end:sub.trial_end?new Date(sub.trial_end*1000).toISOString():null,
           verifiedPayment:payment,

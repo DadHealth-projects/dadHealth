@@ -37,12 +37,14 @@ test('explicit provisioning uses existing project and repeat run does not duplic
   else {const id=Number(path.split('/').filter(Boolean).at(-1));data=Object.assign(insights.find(i=>i.id===id),body);}
   return {ok:true,json:async()=>data};
  }
- const options={host:'https://eu.posthog.com',project:'123',token:'fixture',request};
+ const options={host:'https://eu.posthog.com',project:'145008',token:'fixture',request};
  await provision(definition,options);await provision(definition,options);
  assert.equal(dashboards.length,1);assert.equal(insights.length,definition.panels.length);
- assert.ok(calls.every(([p])=>p.startsWith('/api/projects/123/')));
+ assert.ok(calls.every(([p])=>p.startsWith('/api/projects/145008/')));
  assert.ok(calls.every(([p])=>!p.includes('retention')&&!p.includes('capture')));
  await assert.rejects(()=>provision(definition,{...options,host:'https://untrusted.invalid'}));
+ await assert.rejects(()=>provision(definition,{...options,project:'162656'}));
+ await assert.rejects(()=>provision(definition,{...options,host:'https://us.posthog.com'}));
 });
 test('backend youngest saved age mapping preserves missing and unknown values',()=>{
  const exports={};vm.runInNewContext(ts.transpileModule(readFileSync('src/lib/familyAges.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports});

@@ -36,6 +36,9 @@ export async function captureRemoteAnalytics(admin: PrivacyAdmin, op: Operation,
   if (!uuid(initial.owner) || initial.owner !== op.user_id || !Number.isSafeInteger(initial.revision))
     throw new PrivacyError('analytics_export_owner_mismatch');
   if (!readEvents && process.env.POSTHOG_OWNER_SQL_EXPORTS_VERIFIED !== 'true') throw new PrivacyError('analytics_export_capability_required');
+  // Both projects contain or may contain retained member data.
+  // Never certify a single-project export as complete.
+  if (!readEvents) throw new PrivacyError('analytics_export_legacy_project_required');
   let state = initial.state as State, revision: number = initial.revision;
   if (!state || !Number.isFinite(Date.parse(state.cutoff)) || !Number.isFinite(Date.parse(state.startedAt)))
     throw new PrivacyError('analytics_export_invalid');
@@ -43,7 +46,7 @@ export async function captureRemoteAnalytics(admin: PrivacyAdmin, op: Operation,
   const project = process.env.POSTHOG_PROJECT_ID;
   const key = process.env.POSTHOG_API_KEY;
   // Fixed approved project. A token for a different region/project must fail closed.
-  if (host !== 'https://eu.posthog.com' || project !== '162656' || !key)
+  if (host !== 'https://eu.posthog.com' || project !== '145008' || !key)
     throw new PrivacyError('analytics_export_configuration_required');
   const base = `${host}/api/projects/${project}`;
   async function request(path: string, body?: unknown) {

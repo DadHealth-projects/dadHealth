@@ -1,6 +1,7 @@
 import { safeError } from '@/lib/safeError';
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import { subscriptionPeriodEnd } from "@/lib/stripe/verified-fields";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { getStripe } from "@/lib/stripe/server";
 import { syncUserProfile } from "@/lib/stripe/sync-user-profile";
@@ -63,15 +64,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Subscription not ready yet" }, { status: 422 });
     }
 
-    if (subscription.current_period_end == null) {
-      return NextResponse.json({ error: "Subscription expiry is not available yet" }, { status: 503 });
+    let periodEnd: string;
+
+    try {
+      periodEnd = subscriptionPeriodEnd(subscription);
+    } catch {
+      return NextResponse.json(
+        { error: "Subscription expiry is not available yet" },
+        { status: 503 },
+      );
     }
 
     await syncUserProfile(user.id, {
       stripe_customer_id: customerId,
       stripe_subscription_id: subId,
       subscription_status: status,
-      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      current_period_end: periodEnd,
       auto_renews: !subscription.cancel_at_period_end && subscription.status !== "canceled",
       last_verified_at: verificationStartedAt,
     });

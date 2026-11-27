@@ -244,9 +244,10 @@ function parseChallengeId(body: unknown): { ok: true; id: string } | { ok: false
 async function fetchPosthogPageviews7d(): Promise<number | null> {
   const apiKey = process.env.POSTHOG_API_KEY;
   const projectId = process.env.POSTHOG_PROJECT_ID;
-  if (!apiKey || !projectId) return null;
+  if (!apiKey || projectId !== "145008") return null;
 
-  const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(/\/$/, "");
+  const host = (process.env.ANALYTICS_POSTHOG_API_HOST || process.env.POSTHOG_HOST || "https://eu.posthog.com").replace(/\/$/, "");
+  if (host !== "https://eu.posthog.com") return null;
 
   try {
     const res = await fetch(`${host}/api/projects/${projectId}/query`, {
@@ -446,7 +447,7 @@ export async function POST(
     switch (resource) {
       case "challenges": {
         const parsed = parseChallengeWrite(body, false);
-        if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+        if (parsed.ok === false) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
         const { data, error } = await supabase
           .from("weekly_challenges")
@@ -520,7 +521,7 @@ export async function POST(
 
       case "dad_dates": {
         const parsed = parseDadDateWrite(body);
-        if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+        if (parsed.ok === false) return NextResponse.json({ error: parsed.error }, { status: 400 });
         const { data, error } = await supabase
           .from("dad_dates")
           .insert({ ...parsed.value, source: "admin", user_id: null })
@@ -532,7 +533,7 @@ export async function POST(
 
       case "circles": {
         const parsed = parseCircleWrite(body, false);
-        if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+        if (parsed.ok === false) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
         const { data, error } = await supabase
           .from("circles")
@@ -590,7 +591,7 @@ export async function PATCH(
   if (resource === "challenges") {
     if (body && typeof body === "object" && !Array.isArray(body) && "active" in body) {
       const parsed = parseChallengeActive(body);
-      if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+      if (parsed.ok === false) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
       try {
         if (parsed.active) {
@@ -627,7 +628,7 @@ export async function PATCH(
     }
 
     const parsed = parseChallengeWrite(body, true);
-    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    if (parsed.ok === false) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const { id, ...updates } = parsed.value;
 
     try {
@@ -660,7 +661,7 @@ export async function PATCH(
 
   if (resource === "circles") {
     const parsed = parseCircleWrite(body, true);
-    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    if (parsed.ok === false) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const { id, ...updates } = parsed.value;
 
     try {
@@ -681,7 +682,7 @@ export async function PATCH(
 
   if (resource === "dad_dates") {
     const parsed = parseDadDateWrite(body);
-    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    if (parsed.ok === false) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const id = body?.id;
     if (typeof id !== "string" || !UUID_PATTERN.test(id)) {
       return NextResponse.json({ error: "A valid Dad Date idea ID is required." }, { status: 400 });
@@ -778,7 +779,7 @@ export async function DELETE(
 
   if (resource === "challenges") {
     const parsed = parseChallengeId(body);
-    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    if (parsed.ok === false) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     try {
       const { data, error } = await supabase
@@ -798,7 +799,7 @@ export async function DELETE(
 
   if (resource === "circles") {
     const parsed = parseCircleId(body);
-    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    if (parsed.ok === false) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     try {
       const { data, error } = await supabase

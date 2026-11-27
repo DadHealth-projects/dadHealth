@@ -110,9 +110,16 @@ export function journalFacts(row: BillingJournalRow): BillingFact[] {
 export async function drainBillingTransitions(admin: ReturnType<typeof createAdminSupabaseClient>, owner: string | null, limit = 20) {
   const result = { suppressed: false, processed: 0, collected: 0, failed: 0 };
   if (!billingCollectionEnabled()) return { ...result, suppressed: true };
+  const deadline = Date.now() + (owner === null ? 20000 : 5000);
+  const remaining = () => deadline - Date.now();
+  const rpcSignal = () => {
+    const ms = remaining();
+    if (ms <= 0) throw new Error('Billing recovery budget exhausted');
+    return AbortSignal.timeout(Math.min(3000, ms));
+  };
   let rows: BillingJournalRow[] = [];
   try {
-    const pending = await admin.rpc('pending_billing_analytics_transitions', { p_owner: owner, p_limit: limit });
+    const pending = await admin.rpc('pending_billing_analytics_transitions', { p_owner: owner, p_limit: limit }).abortSignal(rpcSignal());
     if (pending.error) throw pending.error;
     rows = (Array.isArray(pending.data) ? pending.data : []) as BillingJournalRow[];
   } catch {
@@ -120,18 +127,21 @@ export async function drainBillingTransitions(admin: ReturnType<typeof createAdm
     return { ...result, failed: 1 };
   }
   for (const row of rows) {
+    if (remaining() <= 0) break;
     try {
       for (const fact of journalFacts(row)) {
+        if (remaining() <= 0) return result;
         const recorded = await admin.rpc('record_account_billing_analytics', {
           p_owner: row.user_id, p_provider: row.provider, p_environment: row.environment, p_subscription: row.provider_subscription_id,
           p_verified_at: new Date(row.verified_at).toISOString(), p_event: fact.event, p_key: fact.key, p_at: fact.timestamp,
           p_properties: fact.properties,
           p_observed_after: fact.event.endsWith('_cancelled') ? row.previous?.last_verified_at ?? null : fact.timestamp,
-        }).abortSignal(AbortSignal.timeout(3000));
+        }).abortSignal(rpcSignal());
         if (recorded.error) throw recorded.error;
         if (recorded.data === true) result.collected++;
       }
-      const done = await admin.rpc('complete_billing_analytics_transition', { p_id: row.id });
+      if (remaining() <= 0) return result;
+      const done = await admin.rpc('complete_billing_analytics_transition', { p_id: row.id }).abortSignal(rpcSignal());
       if (done.error) throw done.error;
       result.processed++;
     } catch {
