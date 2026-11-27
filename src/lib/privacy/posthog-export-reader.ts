@@ -10,12 +10,12 @@ const quote = (v: string) => `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'
 export async function readPosthogExportPage(input: Input, saved: ExportRun | undefined,
   save: (run: ExportRun) => Promise<void>, transport: typeof fetch = fetch) {
   if (process.env.POSTHOG_OWNER_SQL_EXPORTS_VERIFIED !== 'true') throw new PrivacyError('analytics_export_capability_required');
-  if (process.env.ANALYTICS_POSTHOG_API_HOST !== 'https://eu.posthog.com' || process.env.POSTHOG_PROJECT_ID !== '162656'
+  if (process.env.ANALYTICS_POSTHOG_API_HOST !== 'https://eu.posthog.com' || process.env.POSTHOG_PROJECT_ID !== '145008'
     || !process.env.POSTHOG_API_KEY) throw new PrivacyError('analytics_export_configuration_required');
   if (!input.aliases.length || input.aliases.some(a => !a || a.length > 512) || input.limit !== 101
     || !Number.isFinite(Date.parse(input.cutoff)) || (input.cursor && !id(input.cursor))) throw new PrivacyError('analytics_export_invalid');
-  const base = 'https://eu.posthog.com/api/projects/162656/file_download_batch_exports/';
-  const key = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  const base = 'https://eu.posthog.com/api/projects/145008/file_download_batch_exports/';
+  const key = createHash('sha256').update(JSON.stringify({ project: '145008', input })).digest('hex');
   async function api(path: string, body?: unknown, redirect: RequestRedirect = 'error') {
     const response = await transport(base + path, { method: body ? 'POST' : 'GET', redirect,
       signal: AbortSignal.timeout(8000), headers: { Authorization: `Bearer ${process.env.POSTHOG_API_KEY}`, 'Content-Type': 'application/json' },
