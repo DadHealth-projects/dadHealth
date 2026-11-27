@@ -14,10 +14,11 @@ function harness(count = 205) {
   const state = { owner, ready: false, revision: 0, state: { phase: 'profiles', cutoff: '2026-11-21T00:00:00.123Z', startedAt: '2026-11-21T00:01:00Z' } };
   const rows = Array.from({length:count}, (_,i) => [eventId(i+1),'$pageview','2026-11-20T00:00:00.000Z', i%2 ? owner : 'legacy-browser-id', { text: 'é\nline', nullable: null }]);
   const h = { state, rows, stored: new Map(), requests: [], checkpoints: [], fail: false, lost: false, changed: false, profiles: [profile] };
+  h.env = {ANALYTICS_POSTHOG_API_HOST:'https://eu.posthog.com',POSTHOG_PROJECT_ID:'145008',POSTHOG_API_KEY:'fixture'};
   const exports = {};
   vm.runInNewContext(ts.transpileModule(readFileSync('src/lib/privacy/export-analytics.ts','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,
     {exports,require:id=>id==='node:crypto'?require(id):id==='./auth'?{PrivacyError}:{checkpoint:async(_a,_o,p)=>h.checkpoints.push(p)},Date,URL,AbortSignal,fetch,
-     process:{env:{ANALYTICS_POSTHOG_API_HOST:'https://eu.posthog.com',POSTHOG_PROJECT_ID:'162656',POSTHOG_API_KEY:'fixture'}}});
+     process:{env:h.env}});
   const admin = {rpc:async(name,args)=>{
     if (name==='begin_account_export_analytics') return {data:structuredClone(state)};
     if (name==='save_account_export_analytics') {
@@ -41,7 +42,7 @@ function harness(count = 205) {
     if(url.includes('/persons/')) {
       if(h.profilePages) {
         const second=url.includes('cursor=second');
-        return Response.json({results:h.profilePages[second?1:0],next:second?null:`https://eu.posthog.com/api/projects/162656/persons/?distinct_id=${owner}&cursor=second`});
+        return Response.json({results:h.profilePages[second?1:0],next:second?null:`https://eu.posthog.com/api/projects/145008/persons/?distinct_id=${owner}&cursor=second`});
       }
       return Response.json({results:h.profiles,next:h.next??null});
     }
@@ -121,4 +122,26 @@ test('continuously changing remote data exhausts bounded rebuilds without finali
 });
 test('wrong operation owner is rejected before any provider access',async()=>{
  const h=harness();h.state.owner=person;await assert.rejects(h.run(),e=>e.code==='analytics_export_owner_mismatch');assert.equal(h.requests.length,0);
+});
+
+test('verified primary capability cannot certify an export missing retained legacy data',async()=>{
+ const h=harness();h.env.POSTHOG_OWNER_SQL_EXPORTS_VERIFIED='true';
+ await assert.rejects(h.run(true),e=>e.code==='analytics_export_legacy_project_required');
+ assert.equal(h.requests.length,0);assert.equal(h.state.ready,false);
+});
+test('wrong configured project is rejected before profile access',async()=>{
+ const h=harness();h.env.POSTHOG_PROJECT_ID='162656';
+ await assert.rejects(h.run(),e=>e.code==='analytics_export_configuration_required');
+ assert.equal(h.requests.length,0);
+});
+test('file reader targets primary project and never reuses a legacy run key',async()=>{
+ const exports={};const input={aliases:[owner],cutoff:'2026-11-21T00:00:00Z',limit:101,pass:'events:0'};
+ const env={POSTHOG_OWNER_SQL_EXPORTS_VERIFIED:'true',ANALYTICS_POSTHOG_API_HOST:'https://eu.posthog.com',POSTHOG_PROJECT_ID:'145008',POSTHOG_API_KEY:'fixture'};
+ vm.runInNewContext(ts.transpileModule(readFileSync('src/lib/privacy/posthog-export-reader.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,
+ {exports,require:id=>id==='node:crypto'?require(id):{PrivacyError},process:{env},Date,URL,AbortSignal,fetch});
+ const oldKey=require('node:crypto').createHash('sha256').update(JSON.stringify(input)).digest('hex');let saved;const requests=[];
+ await exports.readPosthogExportPage(input,{key:oldKey,id:person},async r=>{saved=r;},async(url,init)=>{requests.push({url,init});return Response.json({id:person});});
+ assert.equal(requests[0].url,'https://eu.posthog.com/api/projects/145008/file_download_batch_exports/');
+ assert.equal(requests[0].init.method,'POST');assert.notEqual(saved.key,oldKey);
+ env.POSTHOG_PROJECT_ID='162656';await assert.rejects(exports.readPosthogExportPage(input,undefined,async()=>{},async()=>{throw Error('must not send');}),e=>e.code==='analytics_export_configuration_required');
 });
