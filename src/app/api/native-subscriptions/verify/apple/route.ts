@@ -5,7 +5,6 @@ import { authenticateNativeSubscriptionRequest } from "@/lib/native-subscription
 import { consumeSubscriptionVerificationAttempt } from "@/lib/native-subscriptions/rate-limit";
 import { nativeSubscriptionErrorResponse } from "@/lib/native-subscriptions/route-response";
 import { findSubscriptionEntitlement, getSubscriptionSummary, upsertSubscriptionEntitlement } from "@/lib/native-subscriptions/store";
-import { recordRetentionOfferRedemption, retentionOfferApplied, retentionOfferEvidence } from "@/lib/native-subscriptions/retention-offer";
 
 export const runtime = "nodejs";
 
@@ -51,24 +50,12 @@ export async function POST(request: Request) {
       const summary = await getSubscriptionSummary(auth.admin, auth.user.id);
       return NextResponse.json({ ok: true, summary });
     }
-    const offer = retentionOfferEvidence(verified.transaction);
     await upsertSubscriptionEntitlement(
       auth.admin,
-      { ...appleEntitlementInput(auth.user.id, verified, null, undefined, verificationStartedAt), ...(offer ? { retentionOffer: offer } : {}) },
+      appleEntitlementInput(auth.user.id, verified, null, undefined, verificationStartedAt),
     );
-    // Client audit A3: keep a durable record of an accepted retention offer. The purchase itself is
-    // already verified and saved, so a failure here is logged, not returned; Apple's server
-    // notification for the same transaction records it again (idempotent) and is retried until saved.
-    try {
-      await recordRetentionOfferRedemption(auth.admin, auth.user.id, verified, "verified_purchase");
-    } catch (error) {
-      console.error("[native-subscriptions/apple-verify] Retention offer record failed", {
-        code: error instanceof Error ? error.message : "unknown_error",
-      });
-    }
     const summary = await getSubscriptionSummary(auth.admin, auth.user.id);
-    // Brief 01: the retention offer counts as accepted only from Apple's verified transaction.
-    return NextResponse.json({ ok: true, summary, retentionOfferApplied: retentionOfferApplied(verified.transaction) });
+    return NextResponse.json({ ok: true, summary });
   } catch (error) {
     return nativeSubscriptionErrorResponse(error);
   }
