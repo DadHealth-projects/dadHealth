@@ -271,12 +271,13 @@ test('Stripe and Google snapshots preserve canonical payload through the atomic 
 async function appleHandlerHarness(){
  const {load,cancellation}=await cancellationModules();const h={writes:[],failed:0,completed:0,duplicate:false,writeError:null};
  h.verified={notification:{notificationUUID:'event',notificationType:'DID_CHANGE_RENEWAL_STATUS',subtype:'AUTO_RENEW_DISABLED',signedDate:2000,data:{}},transaction:{originalTransactionId:'original',transactionId:'tx',productId:'monthly',environment:'Sandbox',appAccountToken:'owner',expiresDate:Date.now()+86400000},renewal:{originalTransactionId:'original',productId:'monthly',environment:'Sandbox',autoRenewStatus:0},environment:'sandbox'};
+ h.existing={user_id:'owner',environment:'sandbox',provider_account_id:'owner'};
  h.route=await load('src/app/api/native-subscriptions/notifications/apple/route.ts',{
  'next/server':{NextResponse:{json:(body,options={})=>({body,status:options.status??200})}},
  '@/lib/native-subscriptions/cancellation':cancellation,
  '@/lib/native-subscriptions/apple':{verifyAppleNotification:async()=>h.verified,appleEntitlementInput:(owner,verified,renewal,status,lastVerifiedAt)=>({userId:owner,lastVerifiedAt,status:verified.transaction.revocationDate?'revoked':'active'})},
  '@/lib/native-subscriptions/provider-events':{claimProviderEvent:async()=>h.duplicate?null:'claim',completeProviderEvent:async()=>h.completed++,failProviderEvent:async()=>h.failed++},
- '@/lib/native-subscriptions/store':{findSubscriptionEntitlement:async()=>({user_id:'owner'}),upsertSubscriptionEntitlement:async(admin,input)=>{if(h.writeError)throw h.writeError;h.writes.push(input);}},
+ '@/lib/native-subscriptions/store':{findSubscriptionEntitlement:async()=>h.existing,upsertSubscriptionEntitlement:async(admin,input)=>{if(h.writeError)throw h.writeError;h.writes.push(input);}},
  '@/utils/supabase/admin':{createAdminSupabaseClient:()=>({})}});
  h.call=()=>h.route.POST({json:async()=>({signedPayload:'mock-signed-payload'})});return h;
 }
@@ -333,4 +334,149 @@ test('Apple notifications save canonical entitlement without retention offers an
  assert.equal((await d.call()).status,200);
  assert.equal(d.writes.length,0);
  assert.equal(d.completed,0);
+});
+
+
+// Apple subscription ownership regression coverage.
+async function appleVerificationHarness() {
+  const {load}=await cancellationModules();
+  const h={
+    owner:'owner',
+    existing:{
+      user_id:'owner',
+      environment:'sandbox',
+      provider_account_id:'owner'
+    },
+    token:'different-owner',
+    environment:'sandbox',
+    writes:[]
+  };
+
+  h.route=await load(
+    'src/app/api/native-subscriptions/verify/apple/route.ts',
+    {
+      'next/server':{
+        NextResponse:{
+          json:(body,options={})=>({
+            body,status:options.status??200
+          })
+        }
+      },
+      '@/lib/native-subscriptions/auth':{
+        authenticateNativeSubscriptionRequest:async()=>({
+          user:{id:h.owner},admin:{}
+        })
+      },
+      '@/lib/native-subscriptions/rate-limit':{
+        consumeSubscriptionVerificationAttempt:async()=>true
+      },
+      '@/lib/native-subscriptions/apple':{
+        verifyAppleTransaction:async()=>({
+          environment:h.environment,
+          transaction:{
+            originalTransactionId:'original',
+            appAccountToken:h.token,
+            expiresDate:Date.now()+86400000
+          }
+        }),
+        appleEntitlementInput:(owner,verified)=>({
+          userId:owner,
+          providerAccountId:verified.transaction.appAccountToken,
+          environment:verified.environment
+        })
+      },
+      '@/lib/native-subscriptions/store':{
+        findSubscriptionEntitlement:async()=>h.existing,
+        upsertSubscriptionEntitlement:async(admin,input)=>{
+          h.writes.push(input);
+        },
+        getSubscriptionSummary:async()=>({isPro:true})
+      },
+      '@/lib/native-subscriptions/route-response':{
+        nativeSubscriptionErrorResponse:()=>({status:500})
+      }
+    }
+  );
+
+  h.call=()=>h.route.POST({
+    json:async()=>({signedTransaction:'mock-signed-transaction'})
+  });
+
+  return h;
+}
+
+test('Apple original owner can restore despite changed account token',async()=>{
+  const h=await appleVerificationHarness();
+  assert.equal((await h.call()).status,200);
+  assert.equal(h.writes.length,1);
+  assert.equal(h.writes[0].userId,'owner');
+  assert.equal(h.writes[0].providerAccountId,'owner');
+});
+
+test('Apple different account cannot claim existing subscription even with matching token',async()=>{
+  const h=await appleVerificationHarness();
+  h.owner='different-owner';
+  const result=await h.call();
+  assert.equal(result.status,409);
+  assert.equal(result.body.code,'already_linked');
+  assert.equal(h.writes.length,0);
+});
+
+test('Apple new subscription requires matching account token',async()=>{
+  const h=await appleVerificationHarness();
+  h.existing=null;
+  h.token='owner';
+  assert.equal((await h.call()).status,200);
+  assert.equal(h.writes.length,1);
+});
+
+for(const token of [undefined,'different-owner']){
+  test('Apple rejects unlinked subscription with token '+token,async()=>{
+    const h=await appleVerificationHarness();
+    h.existing=null;
+    h.token=token;
+    assert.equal((await h.call()).status,409);
+    assert.equal(h.writes.length,0);
+  });
+}
+
+test('Apple verification rejects environment mismatch',async()=>{
+  const h=await appleVerificationHarness();
+  h.environment='production';
+  assert.equal((await h.call()).status,409);
+  assert.equal(h.writes.length,0);
+});
+
+test('Apple notification preserves established owner despite changed token',async()=>{
+  const h=await appleHandlerHarness();
+  h.verified.transaction.appAccountToken='different-owner';
+  assert.equal((await h.call()).status,200);
+  assert.equal(h.writes.length,1);
+  assert.equal(h.writes[0].userId,'owner');
+  assert.equal(h.writes[0].providerAccountId,'owner');
+  assert.equal(h.completed,1);
+});
+
+test('Apple notification rejects environment mismatch',async()=>{
+  const h=await appleHandlerHarness();
+  h.existing.environment='production';
+  assert.equal((await h.call()).status,500);
+  assert.equal(h.writes.length,0);
+  assert.equal(h.completed,0);
+  assert.equal(h.failed,1);
+});
+
+test('Apple notification can link a new subscription using verified token',async()=>{
+  const h=await appleHandlerHarness();
+  h.existing=null;
+  assert.equal((await h.call()).status,200);
+  assert.equal(h.writes[0].userId,'owner');
+});
+
+test('Apple notification rejects new subscription without account token',async()=>{
+  const h=await appleHandlerHarness();
+  h.existing=null;
+  delete h.verified.transaction.appAccountToken;
+  assert.equal((await h.call()).status,500);
+  assert.equal(h.writes.length,0);
 });

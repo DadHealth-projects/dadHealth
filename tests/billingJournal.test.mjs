@@ -171,7 +171,7 @@ test('Apple routes preserve canonical saves without generating new retention evi
   }
 
   assert.match(notify, /cancellationEvidence: appleCancellationEvidence\(verified\)/);
-  assert.match(verify, /appleEntitlementInput\(auth.user.id, verified, null, undefined, verificationStartedAt\)/);
+  assert.match(verify, /appleEntitlementInput\(\s*auth\.user\.id,\s*verified,\s*null,\s*undefined,\s*verificationStartedAt\s*,?\s*\)/);
 });
 
 for (const [owner, budget] of [['owner', 5000], [null, 20000]]) {
