@@ -161,12 +161,17 @@ test('offer acceptance: one fact per verified offer transaction, at purchase tim
   assert.equal('retentionOffer' in billingOn.journalObservation({ status: 'active' }), false);
 });
 
-test('both Apple routes pass verified offer evidence into the journalled save', () => {
-  const lf = t => t.replace(/\r\n/g, '\n');
-  const verify = lf(readFileSync(new URL('../src/app/api/native-subscriptions/verify/apple/route.ts', import.meta.url), 'utf8'));
-  assert.match(verify, /const offer = retentionOfferEvidence\(verified\.transaction\);\n\s+await upsertSubscriptionEntitlement\(\n\s+auth\.admin,\n\s+\{ \.\.\.appleEntitlementInput\([^)]*\), \.\.\.\(offer \? \{ retentionOffer: offer \} : \{\}\) \},/);
-  const notify = lf(readFileSync(new URL('../src/app/api/native-subscriptions/notifications/apple/route.ts', import.meta.url), 'utf8'));
-  assert.match(notify, /\.\.\.\(retentionOfferEvidence\(verified\.transaction\) \? \{ retentionOffer: retentionOfferEvidence\(verified\.transaction\)! \} : \{\}\) \},/);
+test('Apple routes preserve canonical saves without generating new retention evidence', () => {
+  const verify = readFileSync(new URL('../src/app/api/native-subscriptions/verify/apple/route.ts', import.meta.url), 'utf8');
+  const notify = readFileSync(new URL('../src/app/api/native-subscriptions/notifications/apple/route.ts', import.meta.url), 'utf8');
+
+  for (const source of [verify, notify]) {
+    assert.match(source, /await upsertSubscriptionEntitlement\(/);
+    assert.doesNotMatch(source, /retentionOfferEvidence|recordRetentionOfferRedemption|retentionOfferApplied|retention-offer/);
+  }
+
+  assert.match(notify, /cancellationEvidence: appleCancellationEvidence\(verified\)/);
+  assert.match(verify, /appleEntitlementInput\(auth.user.id, verified, null, undefined, verificationStartedAt\)/);
 });
 
 for (const [owner, budget] of [['owner', 5000], [null, 20000]]) {
