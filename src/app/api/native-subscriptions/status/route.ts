@@ -12,6 +12,11 @@ export async function GET(request: Request) {
   if (!auth) return NextResponse.json({ error: "Sign in required", code: "unauthorized" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
   try {
     const summary = await getSubscriptionSummary(auth.admin, auth.user.id);
+    if (new URL(request.url).searchParams.get("includeFreeze") === "false") {
+      return NextResponse.json(summary, {
+        headers: { "Cache-Control": "private, no-store" },
+      });
+    }
     const freezeState = summary.isPro
       ? await getCurrentWeekFreezeState(auth.admin, auth.user.id)
       : { freezeUsedThisWeek: false, freezesRemaining: 0 };
