@@ -39,12 +39,17 @@ export async function POST(request: Request) {
       "apple",
       verified.transaction.originalTransactionId,
     );
-    const userId = verified.transaction.appAccountToken ?? existing?.user_id;
+    // Established subscription ownership takes precedence over incoming tokens.
+    if (existing && existing.environment !== verified.environment) {
+      throw new Error("Apple subscription environment mismatch");
+    }
+    const userId = existing?.user_id
+      ?? verified.transaction.appAccountToken?.toLowerCase();
     if (await privacyOwnerRemoved(admin, userId ?? null, 'apple', verified.transaction.originalTransactionId)) {
       await completeProviderEvent(admin, claimId);
       return NextResponse.json({ ok: true });
     }
-    if (!userId || (existing && existing.user_id !== userId)) throw new Error("Apple subscription owner not found");
+    if (!userId) throw new Error("Apple subscription owner not found");
     const signedAt = (verified.notification as typeof verified.notification & { signedDate?: number }).signedDate;
     if (typeof signedAt !== 'number' || !Number.isFinite(signedAt) || signedAt <= 0) throw new Error('Apple signing date missing');
     const providerUpdatedAt = new Date(signedAt).toISOString();
@@ -56,7 +61,12 @@ export async function POST(request: Request) {
         verified.renewal,
         verified.notification.data?.status,
         providerUpdatedAt,
-      ), cancellationEvidence: appleCancellationEvidence(verified) },
+      ),
+        ...(existing ? {
+          providerAccountId: existing.provider_account_id ?? userId,
+        } : {}),
+        cancellationEvidence: appleCancellationEvidence(verified),
+      },
     );
     await completeProviderEvent(admin, claimId);
     return NextResponse.json({ ok: true });
