@@ -29,7 +29,19 @@ export async function POST(request: Request) {
     const existingOwnerMismatch = Boolean(existing) && existing!.user_id !== auth.user.id;
     if (tokenMismatch || existingOwnerMismatch) {
       return NextResponse.json(
-        { error: "This subscription belongs to another Dad Health account", code: "already_linked" },
+        {
+          error: "This subscription belongs to another Dad Health account",
+          code: "already_linked",
+          ...(verified.environment === "sandbox" ? {
+            diagnostic: {
+              stage: "ownership_check",
+              tokenMismatch,
+              existingOwnerMismatch,
+              existingSubscriptionFound: Boolean(existing),
+              accountTokenPresent: Boolean(accountToken),
+            },
+          } : {}),
+        },
         { status: 409 },
       );
     }
@@ -50,10 +62,25 @@ export async function POST(request: Request) {
       const summary = await getSubscriptionSummary(auth.admin, auth.user.id);
       return NextResponse.json({ ok: true, summary });
     }
-    await upsertSubscriptionEntitlement(
-      auth.admin,
-      appleEntitlementInput(auth.user.id, verified, null, undefined, verificationStartedAt),
-    );
+    try {
+      await upsertSubscriptionEntitlement(
+        auth.admin,
+        appleEntitlementInput(auth.user.id, verified, null, undefined, verificationStartedAt),
+      );
+    } catch (error) {
+      if (
+        verified.environment === "sandbox"
+        && error instanceof Error
+        && error.name === "SubscriptionOwnershipError"
+      ) {
+        return NextResponse.json({
+          error: "This subscription belongs to another Dad Health account",
+          code: "already_linked",
+          diagnostic: { stage: "database_ownership_conflict" },
+        }, { status: 409 });
+      }
+      throw error;
+    }
     const summary = await getSubscriptionSummary(auth.admin, auth.user.id);
     return NextResponse.json({ ok: true, summary });
   } catch (error) {
