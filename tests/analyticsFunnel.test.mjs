@@ -71,18 +71,20 @@ test('Apple adapter carries signed positive transaction evidence without equatin
 });
 
 test('Google and Stripe payment adapters require verified positive matched orders; partial/manual invoices do not qualify',()=>{
- const evidence=load('src/lib/analytics/provider-evidence.ts');
+ const evidence = load('src/lib/analytics/provider-evidence.ts', {
+  '../stripe/verified-fields': load('src/lib/stripe/verified-fields.ts'),
+});
  const order={orderId:'order',purchaseToken:'token',state:'PROCESSED',total:{units:'5',nanos:990000000},orderHistory:{processedEvent:{eventTime:at}},lineItems:[{subscriptionDetails:{servicePeriodStartTime:at}}]};
  assert.equal(evidence.googlePaidEvidence(order,'token','order').amount,5.99);
  assert.equal(evidence.googlePaidEvidence(order,'other','order'),undefined);
  assert.equal(evidence.googlePaidEvidence({...order,state:'CANCELLED'},'token','order'),undefined);
  assert.equal(evidence.googlePaidEvidence({...order,total:{units:'0'}},'token','order'),undefined);
- const invoice={id:'invoice',subscription:'subscription',status:'paid',amount_paid:599,status_transitions:{paid_at:Date.parse(at)/1000},lines:{has_more:false,data:[{type:'subscription',proration:false,period:{start:Date.parse(at)/1000}}]}};
- assert.equal(evidence.stripePaidEvidence(invoice,'subscription').servicePeriodStart,at);
- assert.equal(evidence.stripePaidEvidence({...invoice,paid_out_of_band:true},'subscription'),undefined);
+ const invoice={id:'invoice',subscription:'sub_fixture',status:'paid',amount_paid:599,status_transitions:{paid_at:Date.parse(at)/1000},lines:{has_more:false,data:[{type:'subscription',proration:false,period:{start:Date.parse(at)/1000}}]}};
+ assert.equal(evidence.stripePaidEvidence(invoice,'sub_fixture').servicePeriodStart,at);
+ assert.equal(evidence.stripePaidEvidence({...invoice,paid_out_of_band:true},'sub_fixture'),undefined);
  assert.equal(evidence.stripePaidEvidence(invoice,'other'),undefined);
- assert.equal(evidence.stripePaidEvidence({...invoice,amount_paid:0},'subscription'),undefined);
- assert.equal(evidence.stripePaidEvidence({...invoice,lines:{...invoice.lines,has_more:true}},'subscription').servicePeriodStart,undefined);
+ assert.equal(evidence.stripePaidEvidence({...invoice,amount_paid:0},'sub_fixture'),undefined);
+ assert.equal(evidence.stripePaidEvidence({...invoice,lines:{...invoice.lines,has_more:true}},'sub_fixture').servicePeriodStart,undefined);
 });
 
 test('paid-period evidence recovers conversion after an active snapshot arrives first, without counting a later renewal',()=>{
