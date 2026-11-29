@@ -18,8 +18,10 @@ function normalizeDocumentMarkup(content: string) {
   return content
     .replace(/<h1(\b[^>]*)>/i, '<h2 class="legal-document-title"$1>')
     .replace(/<\/h1>/i, "</h2>")
-    .replaceAll(
+    .split(
       '<a href="<a href="https://dadhealth.co.uk">https://dadhealth.co.uk</a>/privacy"><a href="https://dadhealth.co.uk">https://dadhealth.co.uk</a>/privacy</a>',
+    )
+    .join(
       '<a href="https://dadhealth.co.uk/privacy">https://dadhealth.co.uk/privacy</a>',
     );
 }
