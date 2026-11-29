@@ -108,7 +108,7 @@ Rollback means forward repair and turning off **new** collection/export selectio
 - Verify project autocapture, IP discard, GeoIP transformation and profile lifecycle. User reports vitals/dead clicks/replay disabled; no owner settings were changed or independently verified here. A one-year event window does not expire person profiles. Decide/document profile retention separately if a time-based policy is required.
 - Live erasure must prove linked/personless events and any legacy recordings are removed. If the provider needs additional privileges or cannot erase personless records through this flow, keep cleanup pending; do not create a fake person or claim success.
 - Full identifiable legacy coverage depends on actual provider links to the account UUID. Unlinked anonymous history cannot safely be guessed. Two matching reads are not a global provider snapshot.
-- Review the documented optional billing-loss limitation above before enabling collection. No new durable billing journal was introduced into Haseeb's parallel subscription work.
+- Review the documented optional billing-loss limitation above before enabling collection. Durable billing journal implementation is now present, but live acceptance remains pending.
 
 ## Device/provider checklist (not performed)
 
