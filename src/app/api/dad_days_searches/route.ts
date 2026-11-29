@@ -262,7 +262,12 @@ export async function POST(req: NextRequest) {
     const childAge = body.childAge as ChildAge | undefined
     const quickFilters = Array.isArray(body.quickFilters) ? body.quickFilters.filter((filter): filter is string => typeof filter === 'string').slice(0, 6) : []
 
-    if (!budget || !childAge || !Object.hasOwn(ageMap, childAge) || !Object.hasOwn(budgetMap, budget)) {
+    if (
+      !budget ||
+      !childAge ||
+      !Object.prototype.hasOwnProperty.call(ageMap, childAge) ||
+      !Object.prototype.hasOwnProperty.call(budgetMap, budget)
+    ) {
       return diagnostic.fail('invalid_request', 400)
     }
 
